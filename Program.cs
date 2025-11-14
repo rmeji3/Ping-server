@@ -99,7 +99,7 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty; // Swagger UI at "/"
 });
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 
 app.UseRouting();
 app.UseAuthentication();
