@@ -41,7 +41,14 @@
         Task<AuthResponse> CreateAuthResponseAsync(AppUser user);
     }
 
-    public record UserDto(string Id, string Email, string? DisplayName, string FirstName, string LastName);
+    public record UserDto(
+        string Id, 
+        string Email, 
+        string? DisplayName, 
+        string FirstName, 
+        string LastName,
+        string? ProfileImageUrl
+    );
 
     public record AuthResponse(string AccessToken, DateTime ExpiresUtc, UserDto User);
 }
