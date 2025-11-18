@@ -33,7 +33,8 @@ public class ProfilesController : Controller
         var user = await _userManager.FindByIdAsync(userId);
         if (user is null) return Unauthorized();
 
-        return new ProfileDto(user.Id, user.UserName, user.FirstName, user.LastName, user.ProfileImageUrl);
+        var profile = new PersonalProfileDto(user.Id, user.UserName, user.FirstName, user.LastName, user.ProfileImageUrl, user.Email);
+        return Ok(profile);
     }
     
     // GET /api/profiles/search?username=someusername
