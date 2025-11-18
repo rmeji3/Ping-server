@@ -1,4 +1,5 @@
 ﻿using Conquest.Models.Activities;
+using Conquest.Models.Events;
 using Conquest.Models.Places;
 using Microsoft.EntityFrameworkCore;
 using Conquest.Models.Reviews;
@@ -11,6 +12,8 @@ namespace Conquest.Data.App
         public DbSet<Place> Places => Set<Place>();
         public DbSet<Activity> Activities => Set<Activity>();
         public DbSet<Review> Reviews => Set<Review>();
+        public DbSet<Event> Events { get; set; } = null!;
+        public DbSet<EventAttendee> EventAttendees { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -44,6 +47,16 @@ namespace Conquest.Data.App
             builder.Entity<Review>()
                 .Property(r => r.CreatedAt)
                 .HasDefaultValueSql("GETUTCDATE()");
+            
+            // EventAttendee
+            builder.Entity<EventAttendee>()
+                .HasKey(ea => new { ea.EventId, ea.UserId });
+
+            builder.Entity<EventAttendee>()
+                .HasOne(ea => ea.Event)
+                .WithMany(e => e.Attendees)
+                .HasForeignKey(ea => ea.EventId);
+            
         }
 
     }
