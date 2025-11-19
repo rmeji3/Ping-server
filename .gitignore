@@ -14,6 +14,10 @@
 Migrations/
 Data/App.db
 Data/Auth.db
+App.db-shm
+App.db-wal
+Auth.db-shm
+Auth.db-wal
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
