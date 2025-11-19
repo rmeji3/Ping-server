@@ -13,6 +13,9 @@ namespace Conquest.Models.Places
         public string? Address { get; init; }
         public double Latitude { get; init; }
         public double Longitude { get; init; }
+        [MaxLength(100)]
+        public string OwnerUserId { get; set; } = null!;
+        public bool IsPublic { get; set; } = false;
         public ICollection<PlaceActivity> PlaceActivities { get; set; } = [];
         public DateTime CreatedUtc { get; init; } = DateTime.UtcNow;
     }

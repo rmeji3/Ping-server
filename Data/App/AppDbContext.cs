@@ -53,8 +53,7 @@ namespace Conquest.Data.App
 
             // Review: one review per user per activity
             builder.Entity<Review>()
-                .HasIndex(r => new { r.PlaceActivityId, r.UserId })
-                .IsUnique();
+                .HasIndex(r => new { r.PlaceActivityId, r.UserId });
 
             // Tag: unique normalized name
             builder.Entity<Tag>()

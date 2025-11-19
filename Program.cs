@@ -4,6 +4,7 @@ using Conquest.Data.App;
 using Conquest.Dtos.Auth;
 using Conquest.Features.Auth;
 using Conquest.Models.AppUsers;
+using Conquest.Services.Friends;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +39,9 @@ var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()
 
 // --- Token service ---
 builder.Services.AddScoped<ITokenService, TokenService>();
+
+// --- Friends Service ---
+builder.Services.AddScoped<IFriendService, FriendService>();
 
 // --- JWT Auth ---
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

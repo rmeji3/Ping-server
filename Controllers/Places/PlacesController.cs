@@ -1,5 +1,9 @@
-﻿namespace Conquest.Controllers.Places
+﻿using Conquest.Dtos.Activities;
+using Microsoft.AspNetCore.Authorization;
+
+namespace Conquest.Controllers.Places
 {
+    using System.Security.Claims;
     using Data.App;
     using Conquest.Dtos.Places;
     using Conquest.Models.Places;
@@ -8,18 +12,43 @@
 
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class PlacesController(AppDbContext db) : ControllerBase
     {
         // POST /api/places
         [HttpPost]
         public async Task<ActionResult<PlaceDetailsDto>> Create([FromBody] UpsertPlaceDto dto)
         {
+            if (string.IsNullOrWhiteSpace(dto.Name))
+                return BadRequest("Place name is required.");
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+                return Unauthorized("You must be logged in to create a place.");
+
+            // Daily rate limit per user (e.g. 10 per day)
+            var today = DateTime.UtcNow.Date;
+
+            var createdToday = await db.Places
+                .CountAsync(p => p.OwnerUserId == userId && p.CreatedUtc >= today);
+
+            if (createdToday >= 10)
+            {
+                return BadRequest(new
+                {
+                    error = "You’ve reached the daily limit for adding places."
+                });
+            }
+
             var place = new Place
             {
                 Name = dto.Name.Trim(),
                 Address = dto.Address.Trim(),
                 Latitude = dto.Latitude,
-                Longitude = dto.Longitude
+                Longitude = dto.Longitude,
+                OwnerUserId = userId,
+                IsPublic = dto.IsPublic,
+                CreatedUtc = DateTime.UtcNow
             };
 
             db.Places.Add(place);
@@ -28,11 +57,13 @@
             var result = new PlaceDetailsDto(
                 place.Id,
                 place.Name,
-                place.Address,
+                place.Address ?? string.Empty,
                 place.Latitude,
                 place.Longitude,
-                Array.Empty<string>(), // no activities yet
-                Array.Empty<string>()  // no activity kinds yet
+                place.IsPublic,
+                IsOwner: true,
+                Activities: Array.Empty<ActivitySummaryDto>(),
+                ActivityKinds: Array.Empty<string>()
             );
 
             return CreatedAtAction(nameof(GetById), new { id = place.Id }, result);
@@ -42,6 +73,8 @@
         [HttpGet("{id:int}")]
         public async Task<ActionResult<PlaceDetailsDto>> GetById(int id)
         {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
             var p = await db.Places
                 .Include(x => x.PlaceActivities)
                     .ThenInclude(pa => pa.ActivityKind)
@@ -49,9 +82,19 @@
 
             if (p is null) return NotFound();
 
-            var activityNames = p.PlaceActivities
-                .Select(a => a.Name)
-                .Distinct()
+            var isOwner = userId != null && p.OwnerUserId == userId;
+
+            // Hide private places from non-owners
+            if (!p.IsPublic && !isOwner)
+                return NotFound();
+
+            var activities = p.PlaceActivities
+                .Select(a => new ActivitySummaryDto(
+                    a.Id,
+                    a.Name,
+                    a.ActivityKindId,
+                    a.ActivityKind?.Name
+                ))
                 .ToArray();
 
             var activityKindNames = p.PlaceActivities
@@ -63,10 +106,12 @@
             return Ok(new PlaceDetailsDto(
                 p.Id,
                 p.Name,
-                p.Address!,
+                p.Address ?? string.Empty,
                 p.Latitude,
                 p.Longitude,
-                activityNames,
+                p.IsPublic,
+                isOwner,
+                activities,
                 activityKindNames
             ));
         }
@@ -80,6 +125,8 @@
             [FromQuery] string? activityName = null,
             [FromQuery] string? activityKind = null)
         {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
             var latDelta = radiusKm / 111.0;
             var lngDelta = radiusKm / (111.0 * Math.Cos(lat * Math.PI / 180.0));
             var minLat = lat - latDelta;
@@ -90,6 +137,8 @@
             var q = db.Places
                 .Where(p => p.Latitude >= minLat && p.Latitude <= maxLat &&
                             p.Longitude >= minLng && p.Longitude <= maxLng)
+                // show public places + my private ones
+                .Where(p => p.IsPublic || (userId != null && p.OwnerUserId == userId))
                 .Include(p => p.PlaceActivities)
                     .ThenInclude(pa => pa.ActivityKind)
                 .AsQueryable();
@@ -132,24 +181,32 @@
 
             var result = list.Select(x =>
             {
-                var activityNames = x.p.PlaceActivities
-                    .Select(a => a.Name)
-                    .Distinct()
-                    .ToArray();
-
                 var activityKindNames = x.p.PlaceActivities
                     .Where(a => a.ActivityKind != null)
                     .Select(a => a.ActivityKind!.Name)
                     .Distinct()
                     .ToArray();
 
+                var isOwner = userId != null && x.p.OwnerUserId == userId;
+
+                var activities = x.p.PlaceActivities
+                    .Select(a => new ActivitySummaryDto(
+                        a.Id,
+                        a.Name,
+                        a.ActivityKindId,
+                        a.ActivityKind?.Name
+                    ))
+                    .ToArray();
+                
                 return new PlaceDetailsDto(
                     x.p.Id,
                     x.p.Name,
-                    x.p.Address!,
+                    x.p.Address ?? string.Empty,
                     x.p.Latitude,
                     x.p.Longitude,
-                    activityNames,
+                    x.p.IsPublic,
+                    isOwner,
+                    activities,
                     activityKindNames
                 );
             }).ToList();

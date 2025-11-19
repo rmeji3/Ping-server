@@ -2,6 +2,12 @@
 
 namespace Conquest.Dtos.Activities
 {
+    public record ActivitySummaryDto(
+        int Id,
+        string Name,
+        int? ActivityKindId,
+        string? ActivityKindName
+    );
     public record CreateActivityDto(
         int PlaceId,
         [MaxLength(100)] string Name,

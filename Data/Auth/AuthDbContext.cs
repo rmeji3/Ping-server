@@ -7,8 +7,7 @@
 
     public class AuthDbContext(DbContextOptions<AuthDbContext> options) : IdentityDbContext<AppUser>(options)
     {
-        public DbSet<Friendship> Friendships { get; init; } = null!;
-
+        public DbSet<Friendship> Friendships => Set<Friendship>();
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
