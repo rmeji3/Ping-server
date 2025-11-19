@@ -21,6 +21,7 @@ Comprehensive internal documentation of the current server codebase. This guide 
 ## 1. Overview
 Conquest is an ASP.NET Core API (targeting .NET 9) that manages users, places, activities at places, events, friendships, and reviews. It uses:
 - ASP.NET Core MVC + minimal hosting model
+- **Service Layer Architecture** ("Thin Controller, Fat Service" pattern)
 - Identity (custom `AppUser`) stored in `AuthDbContext` (SQLite)
 - Application domain stored in `AppDbContext` (SQLite)
 - JWT-based authentication
@@ -34,8 +35,8 @@ Conquest is an ASP.NET Core API (targeting .NET 9) that manages users, places, a
 - `Data/App/AppDbContext.cs` – Places, Activities, Reviews, Tags, CheckIns, Events.
 - `Models/*` – EF Core entity classes.
 - `Dtos/*` – Records/classes exposed via API boundary.
-- `Controllers/*` – API endpoints grouped by domain.
-- `Services/*` – Domain logic helpers (Events status, Friends aggregation, Token creation).
+- `Controllers/*` – Thin orchestrators handling HTTP concerns only.
+- `Services/*` – Business logic, database queries, and domain operations.
 
 ---
 ## 3. Configuration & Startup (`Program.cs`)
@@ -43,7 +44,7 @@ Registered services:
 - Two DbContexts (`AuthDbContext`, `AppDbContext`) using separate SQLite connection strings: `AuthConnection`, `AppConnection`.
 - IdentityCore for `AppUser` + Roles + SignInManager + TokenProviders.
 - JWT options bound from `configuration["Jwt"]` (Key, Issuer, Audience, AccessTokenMinutes).
-- Scoped services: `ITokenService` (`TokenService`), `IFriendService` (`FriendService`).
+- **Service Layer** (all scoped): `ITokenService`, `IPlaceService`, `IEventService`, `IReviewService`, `IActivityService`, `IFriendService`, `IProfileService`, `IAuthService`.
 - Authentication: JWT Bearer with validation (issuer, audience, lifetime, signing key).
 - Swagger with Bearer security scheme.
 - Auto migration is performed for both contexts at startup inside a scope.
@@ -175,15 +176,87 @@ Property Configuration:
 - `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, Latitude, Longitude, Rating, Content?, UserName, CreatedAt)`
 
 ---
-## 8. Services
-### TokenService (`ITokenService`)
-Generates JWT using configured options; includes roles and identity claims.
+## 8. Services (Service Layer Architecture)
 
-### FriendService (`IFriendService`)
-Returns all accepted friend IDs (both directions) for a user.
+**Architecture Pattern**: The application follows the "Thin Controller, Fat Service" pattern. Controllers handle only HTTP concerns (request/response, status codes), while all business logic, database queries, and domain operations are encapsulated in service classes.
 
-### EventsService
-Static `ComputeStatus(Event)` returns: `Upcoming`, `Ongoing`, or `Ended` based on current UTC time vs. Start/End.
+### Service Interfaces & Implementations
+
+#### TokenService (`ITokenService`)
+- **Purpose**: JWT token generation
+- **Methods**: `CreateAuthResponseAsync(AppUser)`
+- **Logic**: Generates JWT with configured options, includes roles and identity claims
+
+#### PlaceService (`IPlaceService`)
+- **Purpose**: Place management and geo-spatial operations
+- **Methods**:
+  - `CreatePlaceAsync(UpsertPlaceDto, userId)` - Creates place with rate limiting (max 10 per user)
+  - `GetPlaceByIdAsync(id, userId)` - Retrieves place with privacy checks
+  - `SearchNearbyAsync(lat, lng, radiusKm, userId)` - Geo-spatial search with bounding box calculation
+- **Logic**: Rate limiting, privacy enforcement, geo calculations (111.32 km per degree)
+
+#### EventService (`IEventService`)
+- **Purpose**: Event lifecycle and attendance management
+- **Methods**:
+  - `CreateEventAsync(CreateEventDto, userId)` - Creates event and auto-joins creator
+  - `GetEventByIdAsync(id)` - Retrieves single event with attendees
+  - `GetMyEventsAsync(userId)` - Events owned by user
+  - `GetEventsAttendingAsync(userId)` - Events user is attending
+  - `GetPublicEventsAsync(minLat, maxLat, minLng, maxLng)` - Public events in bounding box
+  - `DeleteEventAsync(id, userId)` - Deletes event (owner only)
+  - `JoinEventAsync(id, userId)` - Join event
+  - `LeaveEventAsync(id, userId)` - Leave event
+- **Logic**: N+1 query optimization (batch user loading), status calculation (mine/attending/not-attending), ownership validation
+- **Helper**: `EventMapper.MapToDto` - Converts Event entities to EventDto with user summaries
+
+#### ReviewService (`IReviewService`)
+- **Purpose**: Review creation and retrieval with scope filtering
+- **Methods**:
+  - `CreateReviewAsync(placeActivityId, CreateReviewDto, userId, userName)` - Creates review for activity
+  - `GetReviewsAsync(placeActivityId, scope, userId)` - Retrieves reviews by scope (mine/friends/global)
+- **Logic**: Activity validation, friend-based filtering via `IFriendService`
+
+#### ActivityService (`IActivityService`)
+- **Purpose**: Activity creation and validation
+- **Methods**:
+  - `CreateActivityAsync(CreateActivityDto)` - Creates place activity
+- **Logic**: Place validation, name normalization, uniqueness enforcement (per place), optional ActivityKind validation
+
+#### FriendService (`IFriendService`)
+- **Purpose**: Friendship management and relationship queries
+- **Methods**:
+  - `GetFriendIdsAsync(userId)` - Returns all accepted friend IDs (bidirectional)
+  - `GetMyFriendsAsync(userId)` - Returns friend summaries
+  - `AddFriendAsync(userId, friendUsername)` - Sends friend request
+  - `AcceptFriendAsync(userId, friendUsername)` - Accepts pending request, creates bidirectional relationship
+  - `GetIncomingRequestsAsync(userId)` - Returns pending requests
+  - `RemoveFriendAsync(userId, friendUsername)` - Removes friendship (both directions)
+- **Logic**: Bidirectional relationship management, blocking checks, duplicate prevention, self-friendship prevention
+
+#### ProfileService (`IProfileService`)
+- **Purpose**: User profile operations
+- **Methods**:
+  - `GetMyProfileAsync(userId)` - Returns personal profile with email
+  - `SearchProfilesAsync(query, currentUsername)` - Searches users by username (excludes self)
+- **Logic**: Username normalization, self-exclusion from search results
+
+#### AuthService (`IAuthService`)
+- **Purpose**: Authentication and password management
+- **Methods**:
+  - `RegisterAsync(RegisterDto)` - User registration
+  - `LoginAsync(LoginDto)` - User login with lockout
+  - `GetCurrentUserAsync(userId)` - Returns current user info
+  - `ForgotPasswordAsync(ForgotPasswordDto, scheme, host)` - Generates password reset token
+  - `ResetPasswordAsync(ResetPasswordDto)` - Resets password with token
+  - `ChangePasswordAsync(userId, ChangePasswordDto)` - Changes password (authenticated)
+- **Logic**: Username uniqueness validation, password validation, token generation, account enumeration prevention
+
+### Service Layer Benefits
+- **Separation of Concerns**: Controllers handle HTTP, services handle business logic
+- **Testability**: Services can be unit tested independently
+- **Reusability**: Business logic can be shared across controllers or other contexts
+- **Maintainability**: Easier to locate and modify business rules
+- **Dependency Injection**: Promotes loose coupling through interfaces
 
 ---
 ## 9. Controllers & Endpoints
