@@ -11,6 +11,7 @@
 *.sln.docstates
 
 # database files
+app.db
 Migrations/
 Data/App.db
 Data/Auth.db
