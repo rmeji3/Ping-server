@@ -11,11 +11,13 @@ using Conquest.Services.Reviews;
 using Conquest.Services.Activities;
 using Conquest.Services.Profiles;
 using Conquest.Services.Auth;
+using Conquest.Services.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,6 +47,31 @@ var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()
 
 // --- Token service ---
 builder.Services.AddScoped<ITokenService, TokenService>();
+
+// --- Redis ---
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("RedisConnection");
+    options.InstanceName = "Conquest:";
+});
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    var config = builder.Configuration.GetConnectionString("RedisConnection")
+        ?? throw new InvalidOperationException("Missing RedisConnection in configuration.");
+    return ConnectionMultiplexer.Connect(config);
+});
+
+builder.Services.AddScoped<IRedisService, RedisService>();
+
+// --- Session with Redis ---
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+});
 
 // --- Services ---
 builder.Services.AddScoped<IFriendService, FriendService>();
@@ -77,6 +104,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddTransient<Conquest.Middleware.GlobalExceptionHandler>();
+builder.Services.AddScoped<Conquest.Middleware.RateLimitMiddleware>();
 builder.Services.AddSwaggerGen(o =>
 {
     o.SwaggerDoc("v1", new OpenApiInfo { Title = "Conquest API", Version = "v1" });
@@ -118,9 +146,27 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty; // Swagger UI at "/"
 });
 
+// Log Redis connection status
+using (var scope = app.Services.CreateScope())
+{
+    var redis = scope.ServiceProvider.GetRequiredService<IConnectionMultiplexer>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    if (redis.IsConnected)
+    {
+        logger.LogInformation("✓ Redis connected successfully");
+    }
+    else
+    {
+        logger.LogError("✗ Redis connection failed - rate limiting and caching will not work");
+    }
+}
+
 // app.UseHttpsRedirection();
 
 app.UseRouting();
+app.UseMiddleware<Conquest.Middleware.RateLimitMiddleware>();
+app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();

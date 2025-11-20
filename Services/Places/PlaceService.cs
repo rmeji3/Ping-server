@@ -2,25 +2,32 @@ using Conquest.Data.App;
 using Conquest.Dtos.Activities;
 using Conquest.Dtos.Places;
 using Conquest.Models.Places;
+using Conquest.Services.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Conquest.Services.Places;
 
-public class PlaceService(AppDbContext db, ILogger<PlaceService> logger) : IPlaceService
+public class PlaceService(
+    AppDbContext db, 
+    IRedisService redis,
+    IConfiguration configuration,
+    ILogger<PlaceService> logger) : IPlaceService
 {
     public async Task<PlaceDetailsDto> CreatePlaceAsync(UpsertPlaceDto dto, string userId)
     {
-        // Daily rate limit per user (e.g. 10 per day)
-        var today = DateTime.UtcNow.Date;
+        // Redis-based daily rate limit per user
+        var today = DateTime.UtcNow.Date.ToString("yyyy-MM-dd");
+        var rateLimitKey = $"ratelimit:place:create:{userId}:{today}";
+        var limit = configuration.GetValue<int>("RateLimiting:PlaceCreationLimitPerDay", 10);
 
-        var createdToday = await db.Places
-            .CountAsync(p => p.OwnerUserId == userId && p.CreatedUtc >= today);
+        // Increment counter with 24-hour expiry
+        var createdToday = await redis.IncrementAsync(rateLimitKey, TimeSpan.FromHours(24));
 
-        if (createdToday >= 10)
+        if (createdToday > limit)
         {
-            logger.LogWarning("Place creation rate limit reached for user {UserId}", userId);
-            throw new InvalidOperationException("You’ve reached the daily limit for adding places.");
+            logger.LogWarning("Place creation rate limit reached for user {UserId}. Count: {Count}", userId, createdToday);
+            throw new InvalidOperationException("You've reached the daily limit for adding places.");
         }
 
         var place = new Place
@@ -37,7 +44,8 @@ public class PlaceService(AppDbContext db, ILogger<PlaceService> logger) : IPlac
         db.Places.Add(place);
         await db.SaveChangesAsync();
 
-        logger.LogInformation("Place created: {PlaceId} by {UserId}", place.Id, userId);
+        logger.LogInformation("Place created: {PlaceId} by {UserId}. Daily count: {Count}/{Limit}", 
+            place.Id, userId, createdToday, limit);
 
         return new PlaceDetailsDto(
             place.Id,
