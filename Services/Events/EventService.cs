@@ -11,7 +11,6 @@ namespace Conquest.Services.Events;
 
 public class EventService(
     AppDbContext appDb,
-    AuthDbContext authDb,
     UserManager<AppUser> userManager,
     ILogger<EventService> logger) : IEventService
 {

@@ -17,6 +17,7 @@ namespace Conquest.Data.App
         public DbSet<ReviewTag> ReviewTags => Set<ReviewTag>();
         public DbSet<Event> Events => Set<Event>();
         public DbSet<EventAttendee> EventAttendees => Set<EventAttendee>();
+        public DbSet<Favorited> Favorited => Set<Favorited>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -39,6 +40,11 @@ namespace Conquest.Data.App
             // Place: coords index for nearby searches
             builder.Entity<Place>()
                 .HasIndex(p => new { p.Latitude, p.Longitude });
+
+            // Favorited: unique per user per place
+            builder.Entity<Favorited>()
+                .HasIndex(f => new { f.UserId, f.PlaceId })
+                .IsUnique();
 
             // ActivityKind: unique name (e.g. "Soccer", "Rock climbing")
             builder.Entity<ActivityKind>()
@@ -111,6 +117,13 @@ namespace Conquest.Data.App
                 .HasOne(rt => rt.Tag)
                 .WithMany(t => t.ReviewTags)
                 .HasForeignKey(rt => rt.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Favorited * - 1 Place
+            builder.Entity<Favorited>()
+                .HasOne(f => f.Place)
+                .WithMany()
+                .HasForeignKey(f => f.PlaceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
 

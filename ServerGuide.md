@@ -16,6 +16,8 @@ Comprehensive internal documentation of the current server codebase. This guide 
 11. Indexes, Seed Data, and Performance Notes
 12. Migration & EF Core Operations (Legacy Notes Included)
 13. Conventions & Extension Points
+14. Redis & Caching
+15. Rate Limiting
 
 ---
 ## 1. Overview
@@ -25,18 +27,22 @@ Conquest is an ASP.NET Core API (targeting .NET 9) that manages users, places, a
 - Identity (custom `AppUser`) stored in `AuthDbContext` (SQLite)
 - Application domain stored in `AppDbContext` (SQLite)
 - JWT-based authentication
+- **Redis** for distributed caching, rate limiting, and session management
+- **Rate Limiting Middleware** for API protection
 - Global Exception Handling (standardized JSON responses)
 - Swagger/OpenAPI (exposed at root path `/`)
 
 ---
 ## 2. Project Structure (Key Folders)
-- `Program.cs` – service registration, middleware pipeline, auto-migrations.
+- `Program.cs` – service registration, middleware pipeline, auto-migrations, Redis setup.
 - `Data/Auth/AuthDbContext.cs` – Identity + Friendships.
 - `Data/App/AppDbContext.cs` – Places, Activities, Reviews, Tags, CheckIns, Events.
 - `Models/*` – EF Core entity classes.
 - `Dtos/*` – Records/classes exposed via API boundary.
 - `Controllers/*` – Thin orchestrators handling HTTP concerns only.
 - `Services/*` – Business logic, database queries, and domain operations.
+- `Services/Redis/*` – Redis service for caching and rate limiting.
+- `Middleware/*` – Global exception handling and rate limiting middleware.
 
 ---
 ## 3. Configuration & Startup (`Program.cs`)
@@ -44,19 +50,25 @@ Registered services:
 - Two DbContexts (`AuthDbContext`, `AppDbContext`) using separate SQLite connection strings: `AuthConnection`, `AppConnection`.
 - IdentityCore for `AppUser` + Roles + SignInManager + TokenProviders.
 - JWT options bound from `configuration["Jwt"]` (Key, Issuer, Audience, AccessTokenMinutes).
-- **Service Layer** (all scoped): `ITokenService`, `IPlaceService`, `IEventService`, `IReviewService`, `IActivityService`, `IFriendService`, `IProfileService`, `IAuthService`.
+- **Redis**: `IConnectionMultiplexer` (singleton), distributed cache, `IRedisService` (scoped).
+- **Session**: Distributed session state with Redis backend (30-minute timeout).
+- **Service Layer** (all scoped): `ITokenService`, `IPlaceService`, `IEventService`, `IReviewService`, `IActivityService`, `IFriendService`, `IProfileService`, `IAuthService`, `IRedisService`.
+- **Middleware**: `GlobalExceptionHandler` (transient), `RateLimitMiddleware` (scoped).
 - Authentication: JWT Bearer with validation (issuer, audience, lifetime, signing key).
 - Swagger with Bearer security scheme.
 - Auto migration is performed for both contexts at startup inside a scope.
+- Redis connection health check logged at startup.
 
 Pipeline order:
-1. Swagger + UI at root
-2. (Optional HTTPS redirection disabled)
+1. Global Exception Handler
+2. Swagger + UI at root
 3. Routing
-4. Authentication
-5. Authorization
-6. Static files
-7. Controller endpoints via `app.MapControllers()`
+4. **Rate Limiting Middleware**
+5. **Session Middleware**
+6. Authentication
+7. Authorization
+8. Static files
+9. Controller endpoints via `app.MapControllers()`
 
 ---
 ## 4. Authentication & Authorization
@@ -91,13 +103,14 @@ Indexes:
 
 ### AppDbContext
 DbSets:
-- `Places`, `ActivityKinds`, `PlaceActivities`, `Reviews`, `CheckIns`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`
+- `Places`, `ActivityKinds`, `PlaceActivities`, `Reviews`, `CheckIns`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`
 
 Seed Data:
 - `ActivityKind` seeded with ids 1–8 (Soccer, Climbing, Tennis, Hiking, Running, Photography, Coffee, Gym).
 
 Indexes:
 - `Place (Latitude, Longitude)` for geo bounding.
+- Unique composite `Favorited (UserId, PlaceId)` prevents duplicate favorites.
 - Unique `ActivityKind.Name`.
 - Unique composite `PlaceActivity (PlaceId, Name)`.
 - Review uniqueness: index on `(PlaceActivityId, UserId)` (permits multiple reviews currently if not constrained by uniqueness—index can be used to enforce business rule externally).
@@ -107,6 +120,7 @@ Indexes:
 - Composite PK `EventAttendee (EventId, UserId)`.
 
 Relationships & Cascades:
+- `Favorited` → `Place` cascade delete.
 - `PlaceActivity` → `Place` cascade delete.
 - `PlaceActivity` → `ActivityKind` restrict delete.
 - `Review` → `PlaceActivity` cascade.
@@ -126,6 +140,7 @@ Property Configuration:
 | AppUser | `IdentityUser` | FirstName, LastName, ProfileImageUrl | (Friends) | Stored in Auth DB |
 | Friendship | (UserId, FriendId) | Status (Pending/Accepted/Blocked), CreatedAt | User, Friend | Symmetric friendship stored as two Accepted rows after accept |
 | Place | Id | Name, Address, Latitude, Longitude, OwnerUserId, IsPublic, CreatedUtc | PlaceActivities | OwnerUserId is string (Identity FK) |
+| Favorited | Id | UserId, PlaceId | Place | Unique per user per place; cascade deletes with Place |
 | ActivityKind | Id | Name | PlaceActivities | Seeded |
 | PlaceActivity | Id | PlaceId, ActivityKindId?, Name, Description, CreatedUtc | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name |
 | Review | Id | UserId, UserName, PlaceActivityId, Rating, Content, CreatedAt | PlaceActivity, ReviewTags | Rating int (range rules enforced externally) |
@@ -192,8 +207,11 @@ Property Configuration:
 - **Methods**:
   - `CreatePlaceAsync(UpsertPlaceDto, userId)` - Creates place with rate limiting (max 10 per user)
   - `GetPlaceByIdAsync(id, userId)` - Retrieves place with privacy checks
-  - `SearchNearbyAsync(lat, lng, radiusKm, userId)` - Geo-spatial search with bounding box calculation
-- **Logic**: Rate limiting, privacy enforcement, geo calculations (111.32 km per degree)
+  - `SearchNearbyAsync(lat, lng, radiusKm, activityName, activityKind, userId)` - Geo-spatial search with bounding box calculation
+  - `AddFavoriteAsync(id, userId)` - Adds place to user's favorites with duplicate prevention
+  - `UnfavoriteAsync(id, userId)` - Removes place from user's favorites
+  - `GetFavoritedPlacesAsync(userId)` - Retrieves all favorited places with full details
+- **Logic**: Rate limiting, privacy enforcement, geo calculations (111.32 km per degree), duplicate favorite prevention, place existence validation
 
 #### EventService (`IEventService`)
 - **Purpose**: Event lifecycle and attendance management
@@ -312,6 +330,9 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST | /api/places | A | `UpsertPlaceDto` | `PlaceDetailsDto` | Daily per-user creation limit (10) |
 | GET | /api/places/{id} | A | — | `PlaceDetailsDto` | Hides private non-owned places |
 | GET | /api/places/nearby (Q: lat,lng,radiusKm,activityName,activityKind) | A | — | `PlaceDetailsDto[]` | Bounding box + optional activity filters |
+| POST | /api/places/favorited/{id} | A | — | 200 OK | Adds place to favorites; prevents duplicates, validates place exists |
+| DELETE | /api/places/favorited/{id} | A | — | 204 NoContent | Removes place from favorites; idempotent |
+| GET | /api/places/favorited | A | — | `PlaceDetailsDto[]` | Returns all favorited places with activities |
 
 ### ProfilesController (`/api/profiles`)
 | Method | Route | Auth | Body | Returns | Notes |
@@ -368,7 +389,125 @@ Pending model changes warning indicates migrations not generated. Resolve by add
 - Status computation for Events kept in service; consider background job to denormalize if queries scale.
 
 ---
-## 14. Quick Reference Summary
+## 14. Redis & Caching
+
+### Architecture
+Redis is used for:
+- **Distributed Caching**: Session state, temporary data storage
+- **Rate Limiting**: Request counters with automatic expiration
+- **Scalability**: Enables horizontal scaling across multiple server instances
+
+### Configuration
+Connection strings in `appsettings.json`:
+```json
+"ConnectionStrings": {
+  "RedisConnection": "localhost:6379"
+}
+```
+
+Development settings (`appsettings.Development.json`):
+```json
+"RedisConnection": "localhost:6379,abortConnect=false"
+```
+
+### RedisService (`IRedisService`)
+**Purpose**: Abstraction layer for Redis operations
+
+**Methods**:
+- `SetAsync<T>(key, value, expiry?)` - Store value with optional TTL
+- `GetAsync<T>(key)` - Retrieve value
+- `DeleteAsync(key)` - Remove key
+- `IncrementAsync(key, expiry?)` - Atomic counter increment
+- `ExistsAsync(key)` - Check key existence
+- `GetTtlAsync(key)` - Get time-to-live
+
+**Implementation Details**:
+- Uses `StackExchange.Redis` (v2.9.32)
+- JSON serialization for complex objects
+- Automatic key prefixing: `Conquest:{key}`
+- Connection multiplexing (singleton `IConnectionMultiplexer`)
+- Error logging with graceful degradation
+
+### Key Naming Conventions
+- Rate limiting: `ratelimit:{clientId}:{timeWindow}`
+- Place creation: `ratelimit:place:create:{userId}:{date}`
+- Session data: `Conquest:{sessionId}`
+
+### Health Check
+On startup, `Program.cs` logs Redis connection status:
+- ✓ Success: "Redis connected successfully"
+- ✗ Failure: "Redis connection failed - rate limiting and caching will not work"
+
+### Deployment Notes
+- **Local Development**: Docker container (`docker run -d --name conquest-redis -p 6379:6379 redis:alpine`)
+- **Production**: AWS ElastiCache for Redis or Azure Cache for Redis recommended
+- **Fail-Fast**: Application requires Redis to be available for security-critical rate limiting
+
+---
+## 15. Rate Limiting
+
+### Overview
+Multi-layered rate limiting protects API from abuse and ensures fair resource allocation.
+
+### Global Rate Limiting (`RateLimitMiddleware`)
+**Algorithm**: Sliding window (per-minute buckets)
+
+**Limits** (configurable in `appsettings.json`):
+| Client Type | Limit | Scope |
+|-------------|-------|-------|
+| Anonymous (IP-based) | 100 req/min | All endpoints except auth |
+| Authenticated (User-based) | 200 req/min | All endpoints except auth |
+| Auth endpoints (IP-based) | 5 req/min | `/api/auth/*` |
+
+**Configuration**:
+```json
+"RateLimiting": {
+  "GlobalLimitPerMinute": 100,
+  "AuthenticatedLimitPerMinute": 200,
+  "AuthEndpointsLimitPerMinute": 5,
+  "PlaceCreationLimitPerDay": 10
+}
+```
+
+**Response Headers**:
+- `X-RateLimit-Limit`: Maximum requests allowed
+- `X-RateLimit-Remaining`: Requests remaining in current window
+- `X-RateLimit-Reset`: Unix timestamp when limit resets
+
+**429 Response** (Rate Limit Exceeded):
+```json
+{
+  "error": "Rate limit exceeded",
+  "message": "Too many requests. Please try again in 60 seconds.",
+  "retryAfter": 60
+}
+```
+
+### Domain-Specific Rate Limiting
+**Place Creation** (`PlaceService.CreatePlaceAsync`):
+- Limit: 10 places per user per day
+- Storage: Redis key `ratelimit:place:create:{userId}:{yyyy-MM-dd}`
+- Expiry: 24 hours
+- Error: `InvalidOperationException` with message "You've reached the daily limit for adding places."
+
+### Implementation Details
+**Client Identification**:
+- Authenticated requests: User ID from JWT claims (`ClaimTypes.NameIdentifier`)
+- Anonymous requests: IP address from `X-Forwarded-For` header or `RemoteIpAddress`
+
+**Graceful Degradation**:
+- If Redis fails, middleware logs error and **allows request** (fail-open)
+- Prevents Redis outages from taking down entire API
+- Logged as warning for monitoring
+
+### Monitoring Recommendations
+- Track rate limit violations per client
+- Alert on high 429 response rates
+- Monitor Redis memory usage for counter keys
+- Set up Redis key expiration monitoring
+
+---
+## 16. Quick Reference Summary
 | Layer | Items |
 |-------|-------|
 | Auth | Register, Login, Me, Password flows |

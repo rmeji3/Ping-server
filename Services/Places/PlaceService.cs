@@ -2,25 +2,32 @@ using Conquest.Data.App;
 using Conquest.Dtos.Activities;
 using Conquest.Dtos.Places;
 using Conquest.Models.Places;
+using Conquest.Services.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Conquest.Services.Places;
 
-public class PlaceService(AppDbContext db, ILogger<PlaceService> logger) : IPlaceService
+public class PlaceService(
+    AppDbContext db, 
+    IRedisService redis,
+    IConfiguration configuration,
+    ILogger<PlaceService> logger) : IPlaceService
 {
     public async Task<PlaceDetailsDto> CreatePlaceAsync(UpsertPlaceDto dto, string userId)
     {
-        // Daily rate limit per user (e.g. 10 per day)
-        var today = DateTime.UtcNow.Date;
+        // Redis-based daily rate limit per user
+        var today = DateTime.UtcNow.Date.ToString("yyyy-MM-dd");
+        var rateLimitKey = $"ratelimit:place:create:{userId}:{today}";
+        var limit = configuration.GetValue<int>("RateLimiting:PlaceCreationLimitPerDay", 10);
 
-        var createdToday = await db.Places
-            .CountAsync(p => p.OwnerUserId == userId && p.CreatedUtc >= today);
+        // Increment counter with 24-hour expiry
+        var createdToday = await redis.IncrementAsync(rateLimitKey, TimeSpan.FromHours(24));
 
-        if (createdToday >= 10)
+        if (createdToday > limit)
         {
-            logger.LogWarning("Place creation rate limit reached for user {UserId}", userId);
-            throw new InvalidOperationException("You’ve reached the daily limit for adding places.");
+            logger.LogWarning("Place creation rate limit reached for user {UserId}. Count: {Count}", userId, createdToday);
+            throw new InvalidOperationException("You've reached the daily limit for adding places.");
         }
 
         var place = new Place
@@ -37,7 +44,8 @@ public class PlaceService(AppDbContext db, ILogger<PlaceService> logger) : IPlac
         db.Places.Add(place);
         await db.SaveChangesAsync();
 
-        logger.LogInformation("Place created: {PlaceId} by {UserId}", place.Id, userId);
+        logger.LogInformation("Place created: {PlaceId} by {UserId}. Daily count: {Count}/{Limit}", 
+            place.Id, userId, createdToday, limit);
 
         return new PlaceDetailsDto(
             place.Id,
@@ -183,5 +191,95 @@ public class PlaceService(AppDbContext db, ILogger<PlaceService> logger) : IPlac
                 activityKindNames
             );
         }).ToList();
+    }
+
+    public async Task AddFavoriteAsync(int id, string userId)
+    {
+        // Check if already favorited
+        var exists = await db.Favorited
+            .AnyAsync(f => f.UserId == userId && f.PlaceId == id);
+        
+        if (exists)
+        {
+            logger.LogInformation("Place {PlaceId} already favorited by {UserId}", id, userId);
+            return;
+        }
+        
+        // Check if place exists
+        var placeExists = await db.Places.AnyAsync(p => p.Id == id);
+        if (!placeExists)
+        {
+            throw new InvalidOperationException("Place not found.");
+        }
+        
+        var favorited = new Favorited
+        {
+            UserId = userId,
+            PlaceId = id
+        };
+        await db.Favorited.AddAsync(favorited);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Place {PlaceId} favorited by {UserId}", id, userId);
+    }
+
+    public async Task UnfavoriteAsync(int id, string userId)
+    {
+        var favorited = await db.Favorited
+            .FirstOrDefaultAsync(f => f.UserId == userId && f.PlaceId == id);
+        
+        if (favorited != null)
+        {
+            db.Favorited.Remove(favorited);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Place {PlaceId} unfavorited by {UserId}", id, userId);
+        }
+    }
+
+    public async Task<IEnumerable<PlaceDetailsDto>> GetFavoritedPlacesAsync(string userId)
+    {
+        var favorites = await db.Favorited
+            .Where(f => f.UserId == userId)
+            .Include(f => f.Place)
+                .ThenInclude(p => p.PlaceActivities)
+                    .ThenInclude(pa => pa.ActivityKind)
+            .AsNoTracking()
+            .ToListAsync();
+
+        var list = favorites.Select(f =>
+        {
+            var activities = f.Place.PlaceActivities
+                .Select(a => new ActivitySummaryDto(
+                    a.Id,
+                    a.Name,
+                    a.ActivityKindId,
+                    a.ActivityKind?.Name
+                ))
+                .ToArray();
+
+            var activityKindNames = f.Place.PlaceActivities
+                .Where(a => a.ActivityKind != null)
+                .Select(a => a.ActivityKind!.Name)
+                .Distinct()
+                .ToArray();
+
+            var isOwner = f.Place.OwnerUserId == userId;
+
+            return new PlaceDetailsDto(
+                f.Place.Id,
+                f.Place.Name,
+                f.Place.Address ?? string.Empty,
+                f.Place.Latitude,
+                f.Place.Longitude,
+                f.Place.IsPublic,
+                isOwner,
+                activities,
+                activityKindNames
+            );
+        }).ToList();
+
+        logger.LogInformation("Favorited places for {UserId} retrieved: {Count} places", userId, list.Count);
+
+        return list;
     }
 }
