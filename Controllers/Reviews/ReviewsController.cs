@@ -41,17 +41,95 @@ public class ReviewsController(IReviewService reviewService, ILogger<ReviewsCont
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userId is null)
         {
+            logger.LogWarning("GetReviews: User is not authenticated or missing id.");
             return Unauthorized();
         }
         
         try
         {
             var result = await reviewService.GetReviewsAsync(placeActivityId, scope, userId);
+            logger.LogInformation("GetReviews: Reviews fetched for Activity {PlaceActivityId} by {UserName}. Scope: {Scope}", placeActivityId, userId, scope);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
         {
+            logger.LogWarning("GetReviews: Activity {PlaceActivityId} not found.", placeActivityId);
             return NotFound(ex.Message);
         }
+    }
+
+    // GET /api/reviews/explore?pageSize=20&pageNumber=1
+    [HttpGet("/api/reviews/explore")]
+    public async Task<ActionResult<IEnumerable<ExploreReviewDto>>> GetExploreReviews(
+        [FromQuery] int pageSize = 20,
+        [FromQuery] int pageNumber = 1)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var reviews = await reviewService.GetExploreReviewsAsync(pageSize, pageNumber, userId);
+        return Ok(reviews);
+    }
+
+    // POST /api/reviews/{reviewId}/like
+    [HttpPost("{reviewId:int}/like")]
+    public async Task<IActionResult> LikeReview(int reviewId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+        {
+            logger.LogWarning("LikeReview: User is not authenticated or missing id.");
+            return Unauthorized();
+        }
+        
+        try
+        {
+            await reviewService.LikeReviewAsync(reviewId, userId);
+            logger.LogInformation("LikeReview: Review {ReviewId} liked by {UserName}", reviewId, userId);
+            return Ok();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            logger.LogWarning("LikeReview: Review {ReviewId} not found.", reviewId);
+            return NotFound(ex.Message);
+        }
+    }
+
+    // POST /api/reviews/{reviewId}/unlike
+    [HttpPost("{reviewId:int}/unlike")]
+    public async Task<IActionResult> UnlikeReview(int reviewId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+        {
+            logger.LogWarning("UnlikeReview: User is not authenticated or missing id.");
+            return Unauthorized();
+        }
+        
+        try
+        {
+            await reviewService.UnlikeReviewAsync(reviewId, userId);
+            logger.LogInformation("UnlikeReview: Review {ReviewId} unliked by {UserName}", reviewId, userId);
+            return Ok();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            logger.LogWarning("UnlikeReview: Review {ReviewId} not found.", reviewId);
+            return NotFound(ex.Message);
+        }
+    }
+
+    // GET /api/reviews/liked
+    [HttpGet("/api/reviews/liked")]
+    public async Task<ActionResult<IEnumerable<ExploreReviewDto>>> GetLikedReviews()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+        {
+            logger.LogWarning("GetLikedReviews: User is not authenticated or missing id.");
+            return Unauthorized();
+        }
+
+        var reviews = await reviewService.GetLikedReviewsAsync(userId);
+        logger.LogInformation("GetLikedReviews: Liked reviews fetched for {UserId}", userId);
+        return Ok(reviews);
     }
 }

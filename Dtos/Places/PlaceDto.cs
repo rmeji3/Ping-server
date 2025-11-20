@@ -11,6 +11,7 @@ namespace Conquest.Dtos.Places
         double Longitude, 
         bool IsPublic,
         bool IsOwner,
+        bool IsFavorited,
         ActivitySummaryDto[] Activities,
         string[] ActivityKinds
         );

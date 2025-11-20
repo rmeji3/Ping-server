@@ -55,6 +55,7 @@ public class PlaceService(
             place.Longitude,
             place.IsPublic,
             IsOwner: true,
+            IsFavorited: false,
             Activities: Array.Empty<ActivitySummaryDto>(),
             ActivityKinds: Array.Empty<string>()
         );
@@ -75,6 +76,10 @@ public class PlaceService(
         // Hide private places from non-owners
         if (!p.IsPublic && !isOwner)
             return null;
+
+        // Check if favorited by current user
+        var isFavorited = userId != null && await db.Favorited
+            .AnyAsync(f => f.UserId == userId && f.PlaceId == id);
 
         var activities = p.PlaceActivities
             .Select(a => new ActivitySummaryDto(
@@ -99,6 +104,7 @@ public class PlaceService(
             p.Longitude,
             p.IsPublic,
             isOwner,
+            isFavorited,
             activities,
             activityKindNames
         );
@@ -160,6 +166,18 @@ public class PlaceService(
             .Take(100)
             .ToListAsync();
 
+        // Batch check which places are favorited by the current user
+        var placeIds = list.Select(x => x.p.Id).ToList();
+        var favoritedPlaceIds = new HashSet<int>();
+        
+        if (userId != null)
+        {
+            favoritedPlaceIds = await db.Favorited
+                .Where(f => f.UserId == userId && placeIds.Contains(f.PlaceId))
+                .Select(f => f.PlaceId)
+                .ToHashSetAsync();
+        }
+
         return list.Select(x =>
         {
             var activityKindNames = x.p.PlaceActivities
@@ -169,6 +187,7 @@ public class PlaceService(
                 .ToArray();
 
             var isOwner = userId != null && x.p.OwnerUserId == userId;
+            var isFavorited = favoritedPlaceIds.Contains(x.p.Id);
 
             var activities = x.p.PlaceActivities
                 .Select(a => new ActivitySummaryDto(
@@ -187,6 +206,7 @@ public class PlaceService(
                 x.p.Longitude,
                 x.p.IsPublic,
                 isOwner,
+                isFavorited,
                 activities,
                 activityKindNames
             );
@@ -273,6 +293,7 @@ public class PlaceService(
                 f.Place.Longitude,
                 f.Place.IsPublic,
                 isOwner,
+                IsFavorited: true,
                 activities,
                 activityKindNames
             );

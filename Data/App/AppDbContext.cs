@@ -18,6 +18,7 @@ namespace Conquest.Data.App
         public DbSet<Event> Events => Set<Event>();
         public DbSet<EventAttendee> EventAttendees => Set<EventAttendee>();
         public DbSet<Favorited> Favorited => Set<Favorited>();
+        public DbSet<ReviewLike> ReviewLikes => Set<ReviewLike>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -125,6 +126,18 @@ namespace Conquest.Data.App
                 .WithMany()
                 .HasForeignKey(f => f.PlaceId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // ReviewLike * - 1 Review
+            builder.Entity<ReviewLike>()
+                .HasOne(rl => rl.Review)
+                .WithMany(r => r.LikesList)
+                .HasForeignKey(rl => rl.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // ReviewLike: unique per user per review
+            builder.Entity<ReviewLike>()
+                .HasIndex(rl => new { rl.ReviewId, rl.UserId })
+                .IsUnique();
 
 
             // ---------- Property config ----------

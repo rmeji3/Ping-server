@@ -1,6 +1,14 @@
 namespace Conquest.Dtos.Reviews;
 
-public record ReviewDto(int Id, int Rating, string? Content, string UserName, DateTime CreatedAt);
+public record ReviewDto(
+    int Id,
+    int Rating,
+    string? Content,
+    string UserName,
+    DateTime CreatedAt,
+    int Likes,
+    bool IsLiked
+);
 public record CreateReviewDto(int Rating, string? Content);
 public record ExploreReviewDto(
     int ReviewId,
@@ -13,5 +21,7 @@ public record ExploreReviewDto(
     int Rating,
     string? Content,
     string UserName,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    int Likes,
+    bool IsLiked
 );

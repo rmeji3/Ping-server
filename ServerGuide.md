@@ -143,9 +143,10 @@ Property Configuration:
 | Favorited | Id | UserId, PlaceId | Place | Unique per user per place; cascade deletes with Place |
 | ActivityKind | Id | Name | PlaceActivities | Seeded |
 | PlaceActivity | Id | PlaceId, ActivityKindId?, Name, Description, CreatedUtc | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name |
-| Review | Id | UserId, UserName, PlaceActivityId, Rating, Content, CreatedAt | PlaceActivity, ReviewTags | Rating int (range rules enforced externally) |
+| Review | Id | UserId, UserName, PlaceActivityId, Rating, Content, CreatedAt, Likes | PlaceActivity, ReviewTags | Rating int (range rules enforced externally); Likes initialized to 0 |
 | Tag | Id | Name (normalized), CanonicalTagId?, IsBanned, IsApproved | ReviewTags | Tag moderation flags |
 | ReviewTag | (ReviewId, TagId) | — | Review, Tag | Join table |
+| ReviewLike | Id | ReviewId, UserId, CreatedAt | Review | Unique per user per review; cascade deletes with Review |
 | CheckIn | Id | UserId, PlaceActivityId, Note, CreatedAt | PlaceActivity | Timestamp default |
 | Event | Id | Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedById, CreatedAt, Latitude, Longitude | Attendees (EventAttendee) | Status computed dynamically |
 | EventAttendee | (EventId, UserId) | JoinedAt | Event | Many-to-many join |
@@ -179,16 +180,16 @@ Property Configuration:
 
 ### Places
 - `UpsertPlaceDto(Name, Address, Latitude, Longitude, IsPublic)`
-- `PlaceDetailsDto(Id, Name, Address, Latitude, Longitude, IsPublic, IsOwner, Activities[ActivitySummaryDto], ActivityKinds[string])`
+- `PlaceDetailsDto(Id, Name, Address, Latitude, Longitude, IsPublic, IsOwner, IsFavorited, Activities[ActivitySummaryDto], ActivityKinds[string])`
 
 ### Profiles
 - `ProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?)`
 - `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?, Email)`
 
 ### Reviews
-- `ReviewDto(Id, Rating, Content?, UserName, CreatedAt)`
+- `ReviewDto(Id, Rating, Content?, UserName, CreatedAt, Likes, IsLiked)`
 - `CreateReviewDto(Rating, Content?)`
-- `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, Latitude, Longitude, Rating, Content?, UserName, CreatedAt)`
+- `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, Latitude, Longitude, Rating, Content?, UserName, CreatedAt, Likes, IsLiked)`
 
 ---
 ## 8. Services (Service Layer Architecture)
@@ -206,12 +207,12 @@ Property Configuration:
 - **Purpose**: Place management and geo-spatial operations
 - **Methods**:
   - `CreatePlaceAsync(UpsertPlaceDto, userId)` - Creates place with rate limiting (max 10 per user)
-  - `GetPlaceByIdAsync(id, userId)` - Retrieves place with privacy checks
-  - `SearchNearbyAsync(lat, lng, radiusKm, activityName, activityKind, userId)` - Geo-spatial search with bounding box calculation
+  - `GetPlaceByIdAsync(id, userId)` - Retrieves place with privacy checks and favorite status
+  - `SearchNearbyAsync(lat, lng, radiusKm, activityName, activityKind, userId)` - Geo-spatial search with bounding box calculation, includes favorite status
   - `AddFavoriteAsync(id, userId)` - Adds place to user's favorites with duplicate prevention
   - `UnfavoriteAsync(id, userId)` - Removes place from user's favorites
   - `GetFavoritedPlacesAsync(userId)` - Retrieves all favorited places with full details
-- **Logic**: Rate limiting, privacy enforcement, geo calculations (111.32 km per degree), duplicate favorite prevention, place existence validation
+- **Logic**: Rate limiting, privacy enforcement, geo calculations (111.32 km per degree), duplicate favorite prevention, place existence validation, batch favorite checking (SearchNearbyAsync) to avoid N+1 queries
 
 #### EventService (`IEventService`)
 - **Purpose**: Event lifecycle and attendance management
@@ -230,9 +231,13 @@ Property Configuration:
 #### ReviewService (`IReviewService`)
 - **Purpose**: Review creation and retrieval with scope filtering
 - **Methods**:
-  - `CreateReviewAsync(placeActivityId, CreateReviewDto, userId, userName)` - Creates review for activity
-  - `GetReviewsAsync(placeActivityId, scope, userId)` - Retrieves reviews by scope (mine/friends/global)
-- **Logic**: Activity validation, friend-based filtering via `IFriendService`
+  - `CreateReviewAsync(placeActivityId, CreateReviewDto, userId, userName)` - Creates review for activity with initial likes count of 0
+  - `GetReviewsAsync(placeActivityId, scope, userId)` - Retrieves reviews by scope (mine/friends/global) with `IsLiked` status
+  - `GetExploreReviewsAsync(pageSize, pageNumber, userId)` - Retrieves paginated feed of all reviews with place details and `IsLiked` status
+  - `LikeReviewAsync(reviewId, userId)` - Adds like to review (idempotent)
+  - `UnlikeReviewAsync(reviewId, userId)` - Removes like from review (idempotent)
+  - `GetLikedReviewsAsync(userId)` - Retrieves all reviews liked by user
+- **Logic**: Activity validation, friend-based filtering via `IFriendService`, pagination with max 100 items per page (default 20), newest reviews first, batch `IsLiked` checking to avoid N+1 queries
 
 #### ActivityService (`IActivityService`)
 - **Purpose**: Activity creation and validation
@@ -339,20 +344,9 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 |--------|-------|------|------|---------|-------|
 | GET | /api/profiles/me | A | — | `PersonalProfileDto` | Current user profile |
 | GET | /api/profiles/search?username= | A | — | `ProfileDto[]` | Prefix search on normalized username; excludes self |
-
-### ReviewsController (`/api/activities/{placeActivityId}/reviews`)
-| Method | Route | Auth | Body | Returns | Notes |
-|--------|-------|------|------|---------|-------|
-| POST | /api/activities/{placeActivityId}/reviews | A | `CreateReviewDto` | `ReviewDto` | Multiple reviews allowed (no uniqueness constraint enforced) |
-| GET | /api/activities/{placeActivityId}/reviews?scope=mine|friends|global | A | — | `ReviewDto[]` | Filters by ownership/friends via FriendService |
-
----
-## 10. Validation & Business Rules (Highlights)
-- Activity creation enforces unique (PlaceId, Name) and optional kind existence.
-- Place creation daily rate limit (10 per user per UTC day).
-- Event creation rules: future start (±5 min grace), end after start, minimum 15 minutes duration, non-empty Title/Location.
 - Friend requests prevent duplicates, self-addition, blocked status, and existing outgoing/incoming collisions.
 - Review scopes: `friends` uses accepted friendships from `FriendService`.
+- Review likes: Idempotent operations (liking an already liked review does nothing), batch `IsLiked` checking used for performance.
 - Password flows do not leak account existence (uniform responses for missing users).
 - **Global Exception Handling**: Unhandled exceptions return a standardized `500 Internal Server Error` JSON response (`ProblemDetails`).
 
@@ -516,7 +510,7 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 | Events | Create, View, Manage attendance, Public search |
 | Friends | Add, Accept, List, Incoming, Remove |
 | Profiles | Me, Search |
-| Reviews | Create, List by scope |
+| Reviews | Create, List by scope, Like/Unlike, Explore Feed |
 
 ---
 ## 15. Suggested Future Enhancements

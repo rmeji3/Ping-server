@@ -32,6 +32,7 @@ public class ReviewService(
             Rating = dto.Rating,
             Content = dto.Content,
             CreatedAt = DateTime.UtcNow,
+            Likes = 0,
         };
 
         appDb.Reviews.Add(review);
@@ -44,7 +45,9 @@ public class ReviewService(
             review.Rating,
             review.Content,
             review.UserName,
-            review.CreatedAt
+            review.CreatedAt,
+            review.Likes,
+            false // IsLiked - newly created review not liked yet
         );
     }
 
@@ -85,14 +88,177 @@ public class ReviewService(
                 break;
         }
 
-        return await query
-            .Select(r => new ReviewDto(
-                r.Id,
-                r.Rating,
-                r.Content,
-                r.UserName,
-                r.CreatedAt
+        var reviews = await query.ToListAsync();
+
+        // Batch check which reviews are liked by the current user
+        var reviewIds = reviews.Select(r => r.Id).ToList();
+        var likedReviewIds = new HashSet<int>();
+        
+        if (!string.IsNullOrEmpty(userId))
+        {
+            likedReviewIds = await appDb.ReviewLikes
+                .Where(rl => rl.UserId == userId && reviewIds.Contains(rl.ReviewId))
+                .Select(rl => rl.ReviewId)
+                .ToHashSetAsync();
+        }
+
+        return reviews.Select(r => new ReviewDto(
+            r.Id,
+            r.Rating,
+            r.Content,
+            r.UserName,
+            r.CreatedAt,
+            r.Likes,
+            likedReviewIds.Contains(r.Id) // IsLiked
+        )).ToList();
+    }
+
+    public async Task<IEnumerable<ExploreReviewDto>> GetExploreReviewsAsync(int pageSize, int pageNumber, string? userId)
+    {
+        // Validate pagination parameters
+        if (pageSize <= 0 || pageSize > 100)
+            pageSize = 20; // Default page size
+        
+        if (pageNumber < 1)
+            pageNumber = 1;
+
+        var skip = (pageNumber - 1) * pageSize;
+
+        var reviews = await appDb.Reviews
+            .AsNoTracking()
+            .Include(r => r.PlaceActivity)
+                .ThenInclude(pa => pa.Place)
+            .OrderByDescending(r => r.CreatedAt)
+            .Skip(skip)
+            .Take(pageSize)
+            .ToListAsync();
+
+        // Batch check which reviews are liked by the current user
+        var reviewIds = reviews.Select(r => r.Id).ToList();
+        var likedReviewIds = new HashSet<int>();
+        
+        if (userId != null)
+        {
+            likedReviewIds = await appDb.ReviewLikes
+                .Where(rl => rl.UserId == userId && reviewIds.Contains(rl.ReviewId))
+                .Select(rl => rl.ReviewId)
+                .ToHashSetAsync();
+        }
+
+        var result = reviews.Select(r => new ExploreReviewDto(
+            r.Id,
+            r.PlaceActivityId,
+            r.PlaceActivity.PlaceId,
+            r.PlaceActivity.Place.Name,
+            r.PlaceActivity.Place.Address ?? string.Empty,
+            r.PlaceActivity.Place.Latitude,
+            r.PlaceActivity.Place.Longitude,
+            r.Rating,
+            r.Content,
+            r.UserName,
+            r.CreatedAt,
+            r.Likes,
+            likedReviewIds.Contains(r.Id) // IsLiked
+        )).ToList();
+
+        logger.LogInformation("Explore reviews fetched: Page {PageNumber}, Size {PageSize}, Count {Count}", 
+            pageNumber, pageSize, result.Count);
+
+        return result;
+    }
+
+    public async Task LikeReviewAsync(int reviewId, string userId)
+    {
+        // Check if review exists
+        var reviewExists = await appDb.Reviews.AnyAsync(r => r.Id == reviewId);
+        if (!reviewExists)
+        {
+            throw new KeyNotFoundException("Review not found.");
+        }
+
+        // Check if already liked
+        var existingLike = await appDb.ReviewLikes
+            .FirstOrDefaultAsync(rl => rl.ReviewId == reviewId && rl.UserId == userId);
+
+        if (existingLike != null)
+        {
+            logger.LogInformation("Review {ReviewId} already liked by {UserId}", reviewId, userId);
+            return; // Idempotent
+        }
+
+        // Add like
+        var like = new ReviewLike
+        {
+            ReviewId = reviewId,
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        appDb.ReviewLikes.Add(like);
+
+        // Increment like count
+        var review = await appDb.Reviews.FindAsync(reviewId);
+        if (review != null)
+        {
+            review.Likes++;
+        }
+
+        await appDb.SaveChangesAsync();
+        logger.LogInformation("Review {ReviewId} liked by {UserId}", reviewId, userId);
+    }
+
+    public async Task UnlikeReviewAsync(int reviewId, string userId)
+    {
+        var like = await appDb.ReviewLikes
+            .FirstOrDefaultAsync(rl => rl.ReviewId == reviewId && rl.UserId == userId);
+
+        if (like == null)
+        {
+            logger.LogInformation("Review {ReviewId} not liked by {UserId}, nothing to unlike", reviewId, userId);
+            return; // Idempotent
+        }
+
+        appDb.ReviewLikes.Remove(like);
+
+        // Decrement like count
+        var review = await appDb.Reviews.FindAsync(reviewId);
+        if (review != null && review.Likes > 0)
+        {
+            review.Likes--;
+        }
+
+        await appDb.SaveChangesAsync();
+        logger.LogInformation("Review {ReviewId} unliked by {UserId}", reviewId, userId);
+    }
+
+    public async Task<IEnumerable<ExploreReviewDto>> GetLikedReviewsAsync(string userId)
+    {
+        var likedReviews = await appDb.ReviewLikes
+            .Where(rl => rl.UserId == userId)
+            .Include(rl => rl.Review)
+                .ThenInclude(r => r.PlaceActivity)
+                    .ThenInclude(pa => pa.Place)
+            .AsNoTracking()
+            .OrderByDescending(rl => rl.CreatedAt)
+            .Select(rl => new ExploreReviewDto(
+                rl.Review.Id,
+                rl.Review.PlaceActivityId,
+                rl.Review.PlaceActivity.PlaceId,
+                rl.Review.PlaceActivity.Place.Name,
+                rl.Review.PlaceActivity.Place.Address ?? string.Empty,
+                rl.Review.PlaceActivity.Place.Latitude,
+                rl.Review.PlaceActivity.Place.Longitude,
+                rl.Review.Rating,
+                rl.Review.Content,
+                rl.Review.UserName,
+                rl.Review.CreatedAt,
+                rl.Review.Likes,
+                true // IsLiked - always true for liked reviews
             ))
             .ToListAsync();
+
+        logger.LogInformation("Liked reviews for {UserId} retrieved: {Count} reviews", userId, likedReviews.Count);
+
+        return likedReviews;
     }
 }

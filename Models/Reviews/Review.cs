@@ -17,4 +17,6 @@ public class Review
     public string? Content { get; init; }
     public DateTime CreatedAt { get; init; }
     public List<ReviewTag> ReviewTags { get; set; } = new();
+    public int Likes { get; set; }
+    public List<ReviewLike> LikesList { get; set; } = new();
 }
