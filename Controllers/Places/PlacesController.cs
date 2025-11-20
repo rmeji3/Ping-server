@@ -60,5 +60,48 @@ namespace Conquest.Controllers.Places
             var result = await placeService.SearchNearbyAsync(lat, lng, radiusKm, activityName, activityKind, userId);
             return Ok(result);
         }
+
+        // POST /api/places/favorited/{id}
+        [HttpPost("favorited/{id:int}")]
+        public async Task<ActionResult> AddFavorite(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+                return Unauthorized("You must be logged in to favorite a place.");
+
+            try
+            {
+                await placeService.AddFavoriteAsync(id, userId);
+                return Ok();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        // DELETE /api/places/favorited/{id}
+        [HttpDelete("favorited/{id:int}")]
+        public async Task<ActionResult> Unfavorite(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+                return Unauthorized("You must be logged in to unfavorite a place.");
+
+            await placeService.UnfavoriteAsync(id, userId);
+            return NoContent();
+        }
+
+        // GET /api/places/favorited
+        [HttpGet("favorited")]
+        public async Task<ActionResult<IEnumerable<PlaceDetailsDto>>> GetFavorited()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+                return Unauthorized("You must be logged in to view favorited places.");
+
+            var result = await placeService.GetFavoritedPlacesAsync(userId);
+            return Ok(result);
+        }
     }
 }

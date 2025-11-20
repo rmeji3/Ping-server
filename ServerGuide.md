@@ -103,13 +103,14 @@ Indexes:
 
 ### AppDbContext
 DbSets:
-- `Places`, `ActivityKinds`, `PlaceActivities`, `Reviews`, `CheckIns`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`
+- `Places`, `ActivityKinds`, `PlaceActivities`, `Reviews`, `CheckIns`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`
 
 Seed Data:
 - `ActivityKind` seeded with ids 1–8 (Soccer, Climbing, Tennis, Hiking, Running, Photography, Coffee, Gym).
 
 Indexes:
 - `Place (Latitude, Longitude)` for geo bounding.
+- Unique composite `Favorited (UserId, PlaceId)` prevents duplicate favorites.
 - Unique `ActivityKind.Name`.
 - Unique composite `PlaceActivity (PlaceId, Name)`.
 - Review uniqueness: index on `(PlaceActivityId, UserId)` (permits multiple reviews currently if not constrained by uniqueness—index can be used to enforce business rule externally).
@@ -119,6 +120,7 @@ Indexes:
 - Composite PK `EventAttendee (EventId, UserId)`.
 
 Relationships & Cascades:
+- `Favorited` → `Place` cascade delete.
 - `PlaceActivity` → `Place` cascade delete.
 - `PlaceActivity` → `ActivityKind` restrict delete.
 - `Review` → `PlaceActivity` cascade.
@@ -138,6 +140,7 @@ Property Configuration:
 | AppUser | `IdentityUser` | FirstName, LastName, ProfileImageUrl | (Friends) | Stored in Auth DB |
 | Friendship | (UserId, FriendId) | Status (Pending/Accepted/Blocked), CreatedAt | User, Friend | Symmetric friendship stored as two Accepted rows after accept |
 | Place | Id | Name, Address, Latitude, Longitude, OwnerUserId, IsPublic, CreatedUtc | PlaceActivities | OwnerUserId is string (Identity FK) |
+| Favorited | Id | UserId, PlaceId | Place | Unique per user per place; cascade deletes with Place |
 | ActivityKind | Id | Name | PlaceActivities | Seeded |
 | PlaceActivity | Id | PlaceId, ActivityKindId?, Name, Description, CreatedUtc | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name |
 | Review | Id | UserId, UserName, PlaceActivityId, Rating, Content, CreatedAt | PlaceActivity, ReviewTags | Rating int (range rules enforced externally) |
@@ -204,8 +207,11 @@ Property Configuration:
 - **Methods**:
   - `CreatePlaceAsync(UpsertPlaceDto, userId)` - Creates place with rate limiting (max 10 per user)
   - `GetPlaceByIdAsync(id, userId)` - Retrieves place with privacy checks
-  - `SearchNearbyAsync(lat, lng, radiusKm, userId)` - Geo-spatial search with bounding box calculation
-- **Logic**: Rate limiting, privacy enforcement, geo calculations (111.32 km per degree)
+  - `SearchNearbyAsync(lat, lng, radiusKm, activityName, activityKind, userId)` - Geo-spatial search with bounding box calculation
+  - `AddFavoriteAsync(id, userId)` - Adds place to user's favorites with duplicate prevention
+  - `UnfavoriteAsync(id, userId)` - Removes place from user's favorites
+  - `GetFavoritedPlacesAsync(userId)` - Retrieves all favorited places with full details
+- **Logic**: Rate limiting, privacy enforcement, geo calculations (111.32 km per degree), duplicate favorite prevention, place existence validation
 
 #### EventService (`IEventService`)
 - **Purpose**: Event lifecycle and attendance management
@@ -324,6 +330,9 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST | /api/places | A | `UpsertPlaceDto` | `PlaceDetailsDto` | Daily per-user creation limit (10) |
 | GET | /api/places/{id} | A | — | `PlaceDetailsDto` | Hides private non-owned places |
 | GET | /api/places/nearby (Q: lat,lng,radiusKm,activityName,activityKind) | A | — | `PlaceDetailsDto[]` | Bounding box + optional activity filters |
+| POST | /api/places/favorited/{id} | A | — | 200 OK | Adds place to favorites; prevents duplicates, validates place exists |
+| DELETE | /api/places/favorited/{id} | A | — | 204 NoContent | Removes place from favorites; idempotent |
+| GET | /api/places/favorited | A | — | `PlaceDetailsDto[]` | Returns all favorited places with activities |
 
 ### ProfilesController (`/api/profiles`)
 | Method | Route | Auth | Body | Returns | Notes |

@@ -192,4 +192,94 @@ public class PlaceService(
             );
         }).ToList();
     }
+
+    public async Task AddFavoriteAsync(int id, string userId)
+    {
+        // Check if already favorited
+        var exists = await db.Favorited
+            .AnyAsync(f => f.UserId == userId && f.PlaceId == id);
+        
+        if (exists)
+        {
+            logger.LogInformation("Place {PlaceId} already favorited by {UserId}", id, userId);
+            return;
+        }
+        
+        // Check if place exists
+        var placeExists = await db.Places.AnyAsync(p => p.Id == id);
+        if (!placeExists)
+        {
+            throw new InvalidOperationException("Place not found.");
+        }
+        
+        var favorited = new Favorited
+        {
+            UserId = userId,
+            PlaceId = id
+        };
+        await db.Favorited.AddAsync(favorited);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Place {PlaceId} favorited by {UserId}", id, userId);
+    }
+
+    public async Task UnfavoriteAsync(int id, string userId)
+    {
+        var favorited = await db.Favorited
+            .FirstOrDefaultAsync(f => f.UserId == userId && f.PlaceId == id);
+        
+        if (favorited != null)
+        {
+            db.Favorited.Remove(favorited);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Place {PlaceId} unfavorited by {UserId}", id, userId);
+        }
+    }
+
+    public async Task<IEnumerable<PlaceDetailsDto>> GetFavoritedPlacesAsync(string userId)
+    {
+        var favorites = await db.Favorited
+            .Where(f => f.UserId == userId)
+            .Include(f => f.Place)
+                .ThenInclude(p => p.PlaceActivities)
+                    .ThenInclude(pa => pa.ActivityKind)
+            .AsNoTracking()
+            .ToListAsync();
+
+        var list = favorites.Select(f =>
+        {
+            var activities = f.Place.PlaceActivities
+                .Select(a => new ActivitySummaryDto(
+                    a.Id,
+                    a.Name,
+                    a.ActivityKindId,
+                    a.ActivityKind?.Name
+                ))
+                .ToArray();
+
+            var activityKindNames = f.Place.PlaceActivities
+                .Where(a => a.ActivityKind != null)
+                .Select(a => a.ActivityKind!.Name)
+                .Distinct()
+                .ToArray();
+
+            var isOwner = f.Place.OwnerUserId == userId;
+
+            return new PlaceDetailsDto(
+                f.Place.Id,
+                f.Place.Name,
+                f.Place.Address ?? string.Empty,
+                f.Place.Latitude,
+                f.Place.Longitude,
+                f.Place.IsPublic,
+                isOwner,
+                activities,
+                activityKindNames
+            );
+        }).ToList();
+
+        logger.LogInformation("Favorited places for {UserId} retrieved: {Count} places", userId, list.Count);
+
+        return list;
+    }
 }
