@@ -35,6 +35,31 @@ public class ReviewService(
             Likes = 0,
         };
 
+        // Handle Tags
+        if (dto.Tags != null && dto.Tags.Count > 0)
+        {
+            var distinctTags = dto.Tags
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Select(t => t.Trim().ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            foreach (var tagName in distinctTags)
+            {
+                // Find or create tag
+                var tag = await appDb.Tags.FirstOrDefaultAsync(t => t.Name == tagName);
+                if (tag == null)
+                {
+                    tag = new Tag { Name = tagName };
+                    appDb.Tags.Add(tag);
+                    // Save immediately to get Id? Or just rely on EF tracking?
+                    // EF tracking handles it if we add to context.
+                }
+
+                review.ReviewTags.Add(new ReviewTag { Tag = tag });
+            }
+        }
+
         appDb.Reviews.Add(review);
         await appDb.SaveChangesAsync();
 
@@ -47,7 +72,8 @@ public class ReviewService(
             review.UserName,
             review.CreatedAt,
             review.Likes,
-            false // IsLiked - newly created review not liked yet
+            false, // IsLiked
+            dto.Tags ?? new List<string>() // Return tags
         );
     }
 
@@ -60,6 +86,8 @@ public class ReviewService(
 
         var query = appDb.Reviews
             .AsNoTracking()
+            .Include(r => r.ReviewTags)
+                .ThenInclude(rt => rt.Tag)
             .Where(r => r.PlaceActivityId == placeActivityId)
             .OrderByDescending(r => r.CreatedAt)
             .AsQueryable();
@@ -109,28 +137,75 @@ public class ReviewService(
             r.UserName,
             r.CreatedAt,
             r.Likes,
-            likedReviewIds.Contains(r.Id) // IsLiked
+            likedReviewIds.Contains(r.Id), // IsLiked
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList() // Tags
         )).ToList();
     }
 
-    public async Task<IEnumerable<ExploreReviewDto>> GetExploreReviewsAsync(int pageSize, int pageNumber, string? userId)
+    public async Task<IEnumerable<ExploreReviewDto>> GetExploreReviewsAsync(ExploreReviewsFilterDto filter, string? userId)
     {
         // Validate pagination parameters
-        if (pageSize <= 0 || pageSize > 100)
-            pageSize = 20; // Default page size
+        if (filter.PageSize <= 0 || filter.PageSize > 100)
+            filter.PageSize = 20;
         
-        if (pageNumber < 1)
-            pageNumber = 1;
+        if (filter.PageNumber < 1)
+            filter.PageNumber = 1;
 
-        var skip = (pageNumber - 1) * pageSize;
-
-        var reviews = await appDb.Reviews
+        var query = appDb.Reviews
             .AsNoTracking()
             .Include(r => r.PlaceActivity)
                 .ThenInclude(pa => pa.Place)
-            .OrderByDescending(r => r.CreatedAt)
+            .Include(r => r.PlaceActivity)
+                .ThenInclude(pa => pa.ActivityKind)
+            .Include(r => r.ReviewTags)
+                .ThenInclude(rt => rt.Tag)
+            .AsQueryable();
+
+        // Filter by Category
+        if (filter.ActivityKindIds != null && filter.ActivityKindIds.Any())
+        {
+            query = query.Where(r => r.PlaceActivity.ActivityKindId.HasValue &&
+                                     filter.ActivityKindIds.Contains(r.PlaceActivity.ActivityKindId.Value));
+        }
+
+        // Filter by Search Query
+        if (!string.IsNullOrWhiteSpace(filter.SearchQuery))
+        {
+            var q = filter.SearchQuery.ToLower();
+            query = query.Where(r => r.PlaceActivity.Place.Name.ToLower().Contains(q) ||
+                                     (r.PlaceActivity.Place.Address != null && r.PlaceActivity.Place.Address.ToLower().Contains(q)));
+        }
+
+        // Filter by Location (Bounding Box)
+        if (filter.Latitude.HasValue && filter.Longitude.HasValue && filter.RadiusKm.HasValue)
+        {
+            var lat = filter.Latitude.Value;
+            var lon = filter.Longitude.Value;
+            var radius = filter.RadiusKm.Value;
+            
+            // 1 deg lat ~= 111 km
+            var latDelta = radius / 111.0;
+            // 1 deg lon ~= 111 km * cos(lat)
+            var cosLat = Math.Cos(lat * (Math.PI / 180.0));
+            var lonDelta = radius / (111.0 * (Math.Abs(cosLat) < 0.0001 ? 1 : cosLat));
+
+            var minLat = lat - latDelta;
+            var maxLat = lat + latDelta;
+            var minLon = lon - lonDelta;
+            var maxLon = lon + lonDelta;
+
+            query = query.Where(r => r.PlaceActivity.Place.Latitude >= minLat && r.PlaceActivity.Place.Latitude <= maxLat &&
+                                     r.PlaceActivity.Place.Longitude >= minLon && r.PlaceActivity.Place.Longitude <= maxLon);
+        }
+
+        // Sort by Likes (Default)
+        query = query.OrderByDescending(r => r.Likes);
+
+        var skip = (filter.PageNumber - 1) * filter.PageSize;
+
+        var reviews = await query
             .Skip(skip)
-            .Take(pageSize)
+            .Take(filter.PageSize)
             .ToListAsync();
 
         // Batch check which reviews are liked by the current user
@@ -151,6 +226,8 @@ public class ReviewService(
             r.PlaceActivity.PlaceId,
             r.PlaceActivity.Place.Name,
             r.PlaceActivity.Place.Address ?? string.Empty,
+            r.PlaceActivity.Name,
+            r.PlaceActivity.ActivityKind?.Name,
             r.PlaceActivity.Place.Latitude,
             r.PlaceActivity.Place.Longitude,
             r.Rating,
@@ -158,11 +235,12 @@ public class ReviewService(
             r.UserName,
             r.CreatedAt,
             r.Likes,
-            likedReviewIds.Contains(r.Id) // IsLiked
+            likedReviewIds.Contains(r.Id), // IsLiked
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList() // Tags
         )).ToList();
 
         logger.LogInformation("Explore reviews fetched: Page {PageNumber}, Size {PageSize}, Count {Count}", 
-            pageNumber, pageSize, result.Count);
+            filter.PageNumber, filter.PageSize, result.Count);
 
         return result;
     }
@@ -238,6 +316,12 @@ public class ReviewService(
             .Include(rl => rl.Review)
                 .ThenInclude(r => r.PlaceActivity)
                     .ThenInclude(pa => pa.Place)
+            .Include(rl => rl.Review)
+                .ThenInclude(r => r.PlaceActivity)
+                    .ThenInclude(pa => pa.ActivityKind)
+            .Include(rl => rl.Review)
+                .ThenInclude(r => r.ReviewTags)
+                    .ThenInclude(rt => rt.Tag)
             .AsNoTracking()
             .OrderByDescending(rl => rl.CreatedAt)
             .Select(rl => new ExploreReviewDto(
@@ -246,6 +330,8 @@ public class ReviewService(
                 rl.Review.PlaceActivity.PlaceId,
                 rl.Review.PlaceActivity.Place.Name,
                 rl.Review.PlaceActivity.Place.Address ?? string.Empty,
+                rl.Review.PlaceActivity.Name,
+                rl.Review.PlaceActivity.ActivityKind != null ? rl.Review.PlaceActivity.ActivityKind.Name : null,
                 rl.Review.PlaceActivity.Place.Latitude,
                 rl.Review.PlaceActivity.Place.Longitude,
                 rl.Review.Rating,
@@ -253,7 +339,8 @@ public class ReviewService(
                 rl.Review.UserName,
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
-                true // IsLiked - always true for liked reviews
+                true, // IsLiked - always true for liked reviews
+                rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList() // Tags
             ))
             .ToListAsync();
 

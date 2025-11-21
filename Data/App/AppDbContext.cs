@@ -26,14 +26,26 @@ namespace Conquest.Data.App
             
             // ---------- Seed data ----------
             builder.Entity<ActivityKind>().HasData(
-                new ActivityKind { Id = 1, Name = "Soccer" },
-                new ActivityKind { Id = 2, Name = "Climbing" },
-                new ActivityKind { Id = 3, Name = "Tennis" },
-                new ActivityKind { Id = 4, Name = "Hiking" },
-                new ActivityKind { Id = 5, Name = "Running" },
-                new ActivityKind { Id = 6, Name = "Photography" },
-                new ActivityKind { Id = 7, Name = "Coffee" },
-                new ActivityKind { Id = 8, Name = "Gym" }
+                new ActivityKind { Id = 1, Name = "Sports" },
+                new ActivityKind { Id = 2, Name = "Food" },
+                new ActivityKind { Id = 3, Name = "Outdoors" },
+                new ActivityKind { Id = 4, Name = "Art" },
+                new ActivityKind { Id = 5, Name = "Entertainment" },
+                new ActivityKind { Id = 6, Name = "Shopping" },
+                new ActivityKind { Id = 7, Name = "Wellness" },
+                new ActivityKind { Id = 8, Name = "Nightlife" },
+                new ActivityKind { Id = 9, Name = "Education" },
+                new ActivityKind { Id = 10, Name = "Work" },
+                new ActivityKind { Id = 11, Name = "Travel" },
+                new ActivityKind { Id = 12, Name = "Music" },
+                new ActivityKind { Id = 13, Name = "Tech" },
+                new ActivityKind { Id = 14, Name = "Gaming" },
+                new ActivityKind { Id = 15, Name = "Pets" },
+                new ActivityKind { Id = 16, Name = "Family" },
+                new ActivityKind { Id = 17, Name = "Dating" },
+                new ActivityKind { Id = 18, Name = "Fashion" },
+                new ActivityKind { Id = 19, Name = "Automotive" },
+                new ActivityKind { Id = 20, Name = "Home" }
             );
 
             // ---------- Indexes ----------

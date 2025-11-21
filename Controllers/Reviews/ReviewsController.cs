@@ -58,14 +58,13 @@ public class ReviewsController(IReviewService reviewService, ILogger<ReviewsCont
         }
     }
 
-    // GET /api/reviews/explore?pageSize=20&pageNumber=1
+    // GET /api/reviews/explore
     [HttpGet("/api/reviews/explore")]
     public async Task<ActionResult<IEnumerable<ExploreReviewDto>>> GetExploreReviews(
-        [FromQuery] int pageSize = 20,
-        [FromQuery] int pageNumber = 1)
+        [FromQuery] ExploreReviewsFilterDto filter)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var reviews = await reviewService.GetExploreReviewsAsync(pageSize, pageNumber, userId);
+        var reviews = await reviewService.GetExploreReviewsAsync(filter, userId);
         return Ok(reviews);
     }
 

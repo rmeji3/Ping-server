@@ -11,8 +11,7 @@ namespace Conquest.Dtos.Activities
     public record CreateActivityDto(
         int PlaceId,
         [MaxLength(100)] string Name,
-        int? ActivityKindId,
-        [MaxLength(2000)] string? Description
+        int? ActivityKindId
     );
 
     public record ActivityDetailsDto(
@@ -21,7 +20,6 @@ namespace Conquest.Dtos.Activities
         string Name,
         int? ActivityKindId,
         string? ActivityKindName,
-        string? Description,
         DateTime CreatedUtc
     );
     

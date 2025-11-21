@@ -16,8 +16,6 @@ public class PlaceActivity
 
     [MaxLength(200)]
     public required string Name { get; init; }  // user-facing label
-    [MaxLength(500)]
-    public string? Description { get; init; }
 
     // nav
     public List<Review> Reviews { get; init; } = [];

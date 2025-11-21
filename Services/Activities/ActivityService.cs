@@ -52,7 +52,6 @@ public class ActivityService(AppDbContext db, ILogger<ActivityService> logger) :
             PlaceId = dto.PlaceId,
             ActivityKindId = dto.ActivityKindId,
             Name = name,
-            Description = dto.Description,
             CreatedUtc = DateTime.UtcNow
         };
 
@@ -66,7 +65,6 @@ public class ActivityService(AppDbContext db, ILogger<ActivityService> logger) :
             pa.Name,
             pa.ActivityKindId,
             kind?.Name,
-            pa.Description,
             pa.CreatedUtc
         );
 

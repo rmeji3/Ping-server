@@ -106,7 +106,7 @@ DbSets:
 - `Places`, `ActivityKinds`, `PlaceActivities`, `Reviews`, `CheckIns`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`
 
 Seed Data:
-- `ActivityKind` seeded with ids 1–8 (Soccer, Climbing, Tennis, Hiking, Running, Photography, Coffee, Gym).
+- `ActivityKind` seeded with ids 1–20 (Sports, Food, Outdoors, Art, etc.).
 
 Indexes:
 - `Place (Latitude, Longitude)` for geo bounding.
@@ -142,7 +142,7 @@ Property Configuration:
 | Place | Id | Name, Address, Latitude, Longitude, OwnerUserId, IsPublic, CreatedUtc | PlaceActivities | OwnerUserId is string (Identity FK) |
 | Favorited | Id | UserId, PlaceId | Place | Unique per user per place; cascade deletes with Place |
 | ActivityKind | Id | Name | PlaceActivities | Seeded |
-| PlaceActivity | Id | PlaceId, ActivityKindId?, Name, Description, CreatedUtc | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name |
+| PlaceActivity | Id | PlaceId, ActivityKindId?, Name, CreatedUtc | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name |
 | Review | Id | UserId, UserName, PlaceActivityId, Rating, Content, CreatedAt, Likes | PlaceActivity, ReviewTags | Rating int (range rules enforced externally); Likes initialized to 0 |
 | Tag | Id | Name (normalized), CanonicalTagId?, IsBanned, IsApproved | ReviewTags | Tag moderation flags |
 | ReviewTag | (ReviewId, TagId) | — | Review, Tag | Join table |
@@ -155,8 +155,8 @@ Property Configuration:
 ## 7. DTO Contracts
 ### Activities
 - `ActivitySummaryDto(Id, Name, ActivityKindId?, ActivityKindName?)`
-- `CreateActivityDto(PlaceId, Name, ActivityKindId?, Description?)`
-- `ActivityDetailsDto(Id, PlaceId, Name, ActivityKindId?, ActivityKindName?, Description?, CreatedUtc)`
+- `CreateActivityDto(PlaceId, Name, ActivityKindId?)`
+- `ActivityDetailsDto(Id, PlaceId, Name, ActivityKindId?, ActivityKindName?, CreatedUtc)`
 - `ActivityKindDto(Id, Name)` / `CreateActivityKindDto(Name)`
 
 ### Auth
@@ -189,7 +189,8 @@ Property Configuration:
 ### Reviews
 - `ReviewDto(Id, Rating, Content?, UserName, CreatedAt, Likes, IsLiked)`
 - `CreateReviewDto(Rating, Content?)`
-- `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, Latitude, Longitude, Rating, Content?, UserName, CreatedAt, Likes, IsLiked)`
+- `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, ActivityName, ActivityKindName?, Latitude, Longitude, Rating, Content?, UserName, CreatedAt, Likes, IsLiked, Tags[])`
+- `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, ActivityKindIds?[], PageSize, PageNumber)`
 
 ---
 ## 8. Services (Service Layer Architecture)
@@ -233,7 +234,7 @@ Property Configuration:
 - **Methods**:
   - `CreateReviewAsync(placeActivityId, CreateReviewDto, userId, userName)` - Creates review for activity with initial likes count of 0
   - `GetReviewsAsync(placeActivityId, scope, userId)` - Retrieves reviews by scope (mine/friends/global) with `IsLiked` status
-  - `GetExploreReviewsAsync(pageSize, pageNumber, userId)` - Retrieves paginated feed of all reviews with place details and `IsLiked` status
+  - `GetExploreReviewsAsync(ExploreReviewsFilterDto, userId)` - Retrieves paginated feed of reviews with filters (location, category, search) and `IsLiked` status
   - `LikeReviewAsync(reviewId, userId)` - Adds like to review (idempotent)
   - `UnlikeReviewAsync(reviewId, userId)` - Removes like from review (idempotent)
   - `GetLikedReviewsAsync(userId)` - Retrieves all reviews liked by user
@@ -510,7 +511,7 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 | Events | Create, View, Manage attendance, Public search |
 | Friends | Add, Accept, List, Incoming, Remove |
 | Profiles | Me, Search |
-| Reviews | Create, List by scope, Like/Unlike, Explore Feed |
+| Reviews | Create, List by scope, Like/Unlike, Explore Feed (with filters) |
 
 ---
 ## 15. Suggested Future Enhancements
