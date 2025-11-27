@@ -4,6 +4,7 @@ public record ReviewDto(
     int Id,
     int Rating,
     string? Content,
+    string UserId,
     string UserName,
     DateTime CreatedAt,
     int Likes,

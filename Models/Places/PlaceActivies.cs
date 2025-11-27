@@ -19,7 +19,6 @@ public class PlaceActivity
 
     // nav
     public List<Review> Reviews { get; init; } = [];
-    public List<CheckIn> CheckIns { get; init; } = [];
     
     public DateTime CreatedUtc { get; init; } = DateTime.UtcNow;
 }

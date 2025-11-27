@@ -35,7 +35,7 @@ public class ReviewsController(IReviewService reviewService, ILogger<ReviewsCont
 
     // GET /api/activities/{placeActivityId}/reviews?scope=mine|global|friends
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ReviewDto>>> GetReviews(int placeActivityId,
+    public async Task<ActionResult<IEnumerable<UserReviewsDto>>> GetReviews(int placeActivityId,
         [FromQuery] string scope = "global")
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

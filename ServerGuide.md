@@ -145,7 +145,7 @@ Indexes:
 
 ### AppDbContext
 DbSets:
-- `Places`, `ActivityKinds`, `PlaceActivities`, `Reviews`, `CheckIns`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`
+- `Places`, `ActivityKinds`, `PlaceActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`
 
 Seed Data:
 - `ActivityKind` seeded with ids 1–20 (Sports, Food, Outdoors, Art, etc.).
@@ -155,10 +155,9 @@ Indexes:
 - Unique composite `Favorited (UserId, PlaceId)` prevents duplicate favorites.
 - Unique `ActivityKind.Name`.
 - Unique composite `PlaceActivity (PlaceId, Name)`.
-- Review uniqueness: index on `(PlaceActivityId, UserId)` (permits multiple reviews currently if not constrained by uniqueness—index can be used to enforce business rule externally).
+- Review uniqueness: No unique constraint (allows multiple reviews/checkins per user).
 - Unique `Tag.Name`.
 - Composite PK `ReviewTag (ReviewId, TagId)`.
-- CheckIn index `(PlaceActivityId, CreatedAt)`.
 - Composite PK `EventAttendee (EventId, UserId)`.
 
 Relationships & Cascades:
@@ -166,13 +165,12 @@ Relationships & Cascades:
 - `PlaceActivity` → `Place` cascade delete.
 - `PlaceActivity` → `ActivityKind` restrict delete.
 - `Review` → `PlaceActivity` cascade.
-- `CheckIn` → `PlaceActivity` cascade.
 - `ReviewTag` → `Review` cascade, `ReviewTag` → `Tag` cascade.
 - `EventAttendee` → `Event` cascade.
 
 Property Configuration:
 - `Review.Content` max length 2000 (model class shows 1000 – guide notes difference; EF config wins at runtime).
-- Timestamp defaults via `CURRENT_TIMESTAMP` for `Review.CreatedAt`, `CheckIn.CreatedAt`.
+- Timestamp defaults via `CURRENT_TIMESTAMP` for `Review.CreatedAt`.
 - `Tag.Name` max 30.
 
 ---
@@ -185,11 +183,7 @@ Property Configuration:
 | Favorited     | Id                 | UserId, PlaceId                                                                                                          | Place                                  | Unique per user per place; cascade deletes with Place                                                                 |
 | ActivityKind  | Id                 | Name                                                                                                                     | PlaceActivities                        | Seeded                                                                                                                |
 | PlaceActivity | Id                 | PlaceId, ActivityKindId?, Name, CreatedUtc                                                                               | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name                                                                                              |
-| Review        | Id                 | UserId, UserName, PlaceActivityId, Rating, Content, CreatedAt, Likes                                                     | PlaceActivity, ReviewTags              | Rating int (range rules enforced externally); Likes initialized to 0                                                  |
-| Tag           | Id                 | Name (normalized), CanonicalTagId?, IsBanned, IsApproved                                                                 | ReviewTags                             | Tag moderation flags                                                                                                  |
-| ReviewTag     | (ReviewId, TagId)  | —                                                                                                                        | Review, Tag                            | Join table                                                                                                            |
-| ReviewLike    | Id                 | ReviewId, UserId, CreatedAt                                                                                              | Review                                 | Unique per user per review; cascade deletes with Review                                                               |
-| CheckIn       | Id                 | UserId, PlaceActivityId, Note, CreatedAt                                                                                 | PlaceActivity                          | Timestamp default                                                                                                     |
+| Review        | Id                 | UserId, UserName, PlaceActivityId, Rating, Type, Content, CreatedAt, Likes                                               | PlaceActivity, ReviewTags              | Rating required; Type (Review/CheckIn); First post is Review, subsequent are CheckIns                                 |
 | Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee)              | Status computed dynamically                                                                                           |
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
 
@@ -231,7 +225,8 @@ Property Configuration:
 - `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?, Email)`
 
 ### Reviews
-- `ReviewDto(Id, Rating, Content?, UserName, CreatedAt, Likes, IsLiked)`
+- `UserReviewsDto(Review, History[])` - Grouped response
+- `ReviewDto(Id, Rating, Content?, UserId, UserName, CreatedAt, Likes, IsLiked)`
 - `CreateReviewDto(Rating, Content?)`
 - `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, ActivityName, ActivityKindName?, Latitude, Longitude, Rating, Content?, UserName, CreatedAt, Likes, IsLiked, Tags[])`
 - `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, ActivityKindIds?[], PageSize, PageNumber)`
@@ -316,8 +311,8 @@ Property Configuration:
 #### ReviewService (`IReviewService`)
 - **Purpose**: Review creation and retrieval with scope filtering
 - **Methods**:
-  - `CreateReviewAsync(placeActivityId, CreateReviewDto, userId, userName)` - Creates review for activity with initial likes count of 0
-  - `GetReviewsAsync(placeActivityId, scope, userId)` - Retrieves reviews by scope (mine/friends/global) with `IsLiked` status
+  - `CreateReviewAsync(placeActivityId, CreateReviewDto, userId, userName)` - Creates review or checkin (based on history)
+  - `GetReviewsAsync(placeActivityId, scope, userId)` - Retrieves reviews grouped by user (`UserReviewsDto`)
   - `GetExploreReviewsAsync(ExploreReviewsFilterDto, userId)` - Retrieves paginated feed of reviews with filters (location, category, search) and `IsLiked` status
   - `LikeReviewAsync(reviewId, userId)` - Adds like to review (idempotent)
   - `UnlikeReviewAsync(reviewId, userId)` - Removes like from review (idempotent)
@@ -431,14 +426,14 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | GET    | /api/profiles/search?username= | A    | —    | `ProfileDto[]`       | Prefix search on normalized username; excludes self |
 
 ### ReviewsController (`/api/reviews`)
-| Method | Route                                                      | Auth | Body                      | Returns              | Notes                                 |
-| ------ | ---------------------------------------------------------- | ---- | ------------------------- | -------------------- | ------------------------------------- |
-| POST   | /api/reviews/{placeActivityId}                             | A    | `CreateReviewDto`         | `ReviewDto`          | Creates review for activity           |
-| GET    | /api/reviews/{placeActivityId}?scope={mine/friends/global} | A    | —                         | `ReviewDto[]`        | Returns reviews with `IsLiked` status |
-| GET    | /api/reviews/explore                                       | A    | `ExploreReviewsFilterDto` | `ExploreReviewDto[]` | Paginated review feed with filters    |
-| POST   | /api/reviews/{reviewId}/like                               | A    | —                         | 200 OK               | Like a review (idempotent)            |
-| DELETE | /api/reviews/{reviewId}/like                               | A    | —                         | 204 NoContent        | Unlike a review (idempotent)          |
-| GET    | /api/reviews/liked                                         | A    | —                         | `ExploreReviewDto[]` | User's liked reviews                  |
+| Method | Route                                                      | Auth | Body                      | Returns              | Notes                                              |
+| ------ | ---------------------------------------------------------- | ---- | ------------------------- | -------------------- | -------------------------------------------------- |
+| POST   | /api/reviews/{placeActivityId}                             | A    | `CreateReviewDto`         | `ReviewDto`          | Creates review for activity                        |
+| GET    | /api/reviews/{placeActivityId}?scope={mine/friends/global} | A    | —                         | `UserReviewsDto[]`   | Returns reviews grouped by user (Review + History) |
+| GET    | /api/reviews/explore                                       | A    | `ExploreReviewsFilterDto` | `ExploreReviewDto[]` | Paginated review feed with filters                 |
+| POST   | /api/reviews/{reviewId}/like                               | A    | —                         | 200 OK               | Like a review (idempotent)                         |
+| DELETE | /api/reviews/{reviewId}/like                               | A    | —                         | 204 NoContent        | Unlike a review (idempotent)                       |
+| GET    | /api/reviews/liked                                         | A    | —                         | `ExploreReviewDto[]` | User's liked reviews                               |
 
 ### RecommendationController (`/api/recommendations`)
 | Method | Route                                            | Auth | Body | Returns               | Notes                                   |
@@ -484,10 +479,12 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 
 ### Reviews
 - Scope filtering: mine/friends/global
+- **Review vs CheckIn**: First post by user is `Review`, subsequent posts are `CheckIn`.
+- **Grouping**: API returns reviews grouped by user to show history.
 - Likes are idempotent (re-liking/re-unliking does nothing)
 - Batch `IsLiked` checking prevents N+1 queries
 - Pagination: max 100 items per page (default 20)
-- Rating range: [validation needed - see future enhancements]
+- Rating required for both Reviews and CheckIns
 
 ### Events
 - Start time must be in future
@@ -511,10 +508,9 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - Canonical tag relationship via `CanonicalTagId`
 - **Status**: Models and database schema exist, but no controller endpoints or moderation workflow implemented yet
 
-### CheckIns (Pending Full Implementation)
-- Models exist with relationship to PlaceActivity
-- Includes optional Note field and CreatedAt timestamp
-- **Status**: Database schema exists, but no controller endpoints implemented yet
+### CheckIns
+- Merged into `Review` model via `ReviewType` enum.
+- **Status**: Fully implemented.
 
 ---
 ## 11. Indexes, Seed Data, Performance Notes
@@ -623,7 +619,7 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 **Configuration**:
 ```json
 "RateLimiting": {
-  "GlobalLimitPerMinute": 100,
+  "GlobalLimitPerMinute": 1000,
   "AuthenticatedLimitPerMinute": 200,
   "AuthEndpointsLimitPerMinute": 5,
   "PlaceCreationLimitPerDay": 10
@@ -730,7 +726,7 @@ All errors follow the ProblemDetails format:
 - ✅ ~~Redis integration for rate limiting~~ - COMPLETED
 - ✅ ~~AI Recommendations (Semantic Kernel + Google Fallback)~~ - COMPLETED
 - Implement tag moderation system (approval/banning workflow, endpoints)
-- CheckIns feature implementation (models exist, need controller endpoints)
+- ✅ ~~CheckIns feature implementation~~ - COMPLETED (Merged into Reviews)
 - Normalize and validate rating range (1–5) at DTO/model layer
 
 **Medium Priority:**

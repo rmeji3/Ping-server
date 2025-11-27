@@ -24,12 +24,17 @@ public class ReviewService(
             throw new KeyNotFoundException("Activity not found.");
         }
 
+        // Check if user already has a review for this activity
+        var hasReview = await appDb.Reviews
+            .AnyAsync(r => r.PlaceActivityId == placeActivityId && r.UserId == userId);
+
         var review = new Review
         {
             PlaceActivityId = placeActivityId,
             UserId = userId,
             UserName = userName,
             Rating = dto.Rating,
+            Type = hasReview ? ReviewType.CheckIn : ReviewType.Review,
             Content = dto.Content,
             CreatedAt = DateTime.UtcNow,
             Likes = 0,
@@ -69,6 +74,7 @@ public class ReviewService(
             review.Id,
             review.Rating,
             review.Content,
+            review.UserId,
             review.UserName,
             review.CreatedAt,
             review.Likes,
@@ -77,7 +83,7 @@ public class ReviewService(
         );
     }
 
-    public async Task<IEnumerable<ReviewDto>> GetReviewsAsync(int placeActivityId, string scope, string userId)
+    public async Task<IEnumerable<UserReviewsDto>> GetReviewsAsync(int placeActivityId, string scope, string userId)
     {
         var activityExists = await appDb.PlaceActivities
             .AnyAsync(pa => pa.Id == placeActivityId);
@@ -105,7 +111,7 @@ public class ReviewService(
                     if (friendIds.Count == 0)
                     {
                         // no friends → no reviews in this scope
-                        return Array.Empty<ReviewDto>();
+                        return Array.Empty<UserReviewsDto>();
                     }
                     query = query.Where(r => friendIds.Contains(r.UserId));
                     break;
@@ -130,16 +136,31 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
-        return reviews.Select(r => new ReviewDto(
+        var reviewDtos = reviews.Select(r => new ReviewDto(
             r.Id,
             r.Rating,
             r.Content,
+            r.UserId,
             r.UserName,
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), // IsLiked
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList() // Tags
         )).ToList();
+
+        // Group by UserId
+        var groupedReviews = reviewDtos
+            .GroupBy(r => r.UserId)
+            .Select(g =>
+            {
+                var userReviews = g.OrderByDescending(r => r.CreatedAt).ToList();
+                var latest = userReviews.First();
+                var history = userReviews.Skip(1).ToList();
+                return new UserReviewsDto(latest, history);
+            })
+            .ToList();
+
+        return groupedReviews;
     }
 
     public async Task<IEnumerable<ExploreReviewDto>> GetExploreReviewsAsync(ExploreReviewsFilterDto filter, string? userId)

@@ -12,7 +12,6 @@ namespace Conquest.Data.App
         public DbSet<ActivityKind> ActivityKinds => Set<ActivityKind>();
         public DbSet<PlaceActivity> PlaceActivities => Set<PlaceActivity>();
         public DbSet<Review> Reviews => Set<Review>();
-        public DbSet<CheckIn> CheckIns => Set<CheckIn>();
         public DbSet<Tag> Tags => Set<Tag>();
         public DbSet<ReviewTag> ReviewTags => Set<ReviewTag>();
         public DbSet<Event> Events => Set<Event>();
@@ -83,10 +82,6 @@ namespace Conquest.Data.App
             builder.Entity<ReviewTag>()
                 .HasKey(rt => new { rt.ReviewId, rt.TagId });
 
-            // Optional: index for check-ins by activity and time
-            builder.Entity<CheckIn>()
-                .HasIndex(ci => new { ci.PlaceActivityId, ci.CreatedAt });
-
 
             // ---------- Relationships ----------
 
@@ -109,13 +104,6 @@ namespace Conquest.Data.App
                 .HasOne(r => r.PlaceActivity)
                 .WithMany(pa => pa.Reviews)
                 .HasForeignKey(r => r.PlaceActivityId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // PlaceActivity 1 - * CheckIns
-            builder.Entity<CheckIn>()
-                .HasOne(ci => ci.PlaceActivity)
-                .WithMany(pa => pa.CheckIns)
-                .HasForeignKey(ci => ci.PlaceActivityId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Review 1 - * ReviewTags
@@ -161,11 +149,6 @@ namespace Conquest.Data.App
 
             builder.Entity<Review>()
                 .Property(r => r.CreatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-            // CheckIn timestamps
-            builder.Entity<CheckIn>()
-                .Property(ci => ci.CreatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             // Tag name length

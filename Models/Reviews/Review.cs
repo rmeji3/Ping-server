@@ -13,6 +13,7 @@ public class Review
     public int PlaceActivityId { get; set; }
     public PlaceActivity PlaceActivity { get; set; } = null!;
     public int Rating { get; init; }
+    public ReviewType Type { get; set; }
     [MaxLength(1000)]
     public string? Content { get; init; }
     public DateTime CreatedAt { get; init; }
