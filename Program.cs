@@ -146,10 +146,12 @@ builder.Services.AddHttpClient<IPlaceNameService, GooglePlacesService>();
 builder.Services.AddScoped<RecommendationService>();
 
 // --- Semantic Kernel ---
+// --- Semantic Kernel ---
+builder.Services.AddKernel(); // Always register Kernel
+
 var openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (!string.IsNullOrEmpty(openAiKey))
 {
-    builder.Services.AddKernel();
     builder.Services.AddOpenAIChatCompletion("gpt-3.5-turbo", openAiKey);
 }
 else
