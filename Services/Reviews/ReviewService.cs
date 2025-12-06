@@ -28,6 +28,12 @@ public class ReviewService(
         var hasReview = await appDb.Reviews
             .AnyAsync(r => r.PlaceActivityId == placeActivityId && r.UserId == userId);
 
+        if (dto.Rating < 1 || dto.Rating > 5)
+        {
+            logger.LogWarning("CreateReview: Invalid rating {Rating} for activity {PlaceActivityId} by {UserName}", dto.Rating, placeActivityId, userName);
+            throw new ArgumentException("Rating must be between 1 and 5.");
+        }
+
         var review = new Review
         {
             PlaceActivityId = placeActivityId,

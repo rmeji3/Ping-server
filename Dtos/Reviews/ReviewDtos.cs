@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Conquest.Dtos.Reviews;
 
 public record ReviewDto(
@@ -12,7 +14,12 @@ public record ReviewDto(
     List<string> Tags
 );
 
-public record CreateReviewDto(int Rating, string? Content, List<string>? Tags = null);
+public record CreateReviewDto(
+    [Range(1, 5, ErrorMessage = "Rating must be between 1 and 5.")]
+    int Rating,
+    string? Content,
+    List<string>? Tags = null
+);
 
 public record ExploreReviewDto(
     int ReviewId,

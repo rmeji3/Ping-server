@@ -12,6 +12,7 @@ public class Review
     public string UserName { get; init; } = null!;
     public int PlaceActivityId { get; set; }
     public PlaceActivity PlaceActivity { get; set; } = null!;
+    [Range(1, 5, ErrorMessage = "Rating must be between 1 and 5.")]
     public int Rating { get; init; }
     public ReviewType Type { get; set; }
     [MaxLength(1000)]
