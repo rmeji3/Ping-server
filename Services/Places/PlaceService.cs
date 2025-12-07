@@ -141,6 +141,7 @@ public class PlaceService(
     {
         var p = await db.Places
             .AsNoTracking()
+            .Where(x => !x.IsDeleted)
             .Include(x => x.PlaceActivities)
                 .ThenInclude(pa => pa.ActivityKind)
             .FirstOrDefaultAsync(x => x.Id == id);
@@ -170,25 +171,54 @@ public class PlaceService(
 
         return await ToPlaceDetailsDto(p, userId);
     }
+    private static double DistanceKm(double lat1, double lng1, double lat2, double lng2)
+    {
+        var dLat = (lat2 - lat1) * Math.PI / 180.0;
+        var dLng = (lng2 - lng1) * Math.PI / 180.0;
 
-    public async Task<IEnumerable<PlaceDetailsDto>> SearchNearbyAsync(double lat, double lng, double radiusKm, string? activityName, string? activityKind, PlaceVisibility? visibility, PlaceType? type, string? userId)
+        lat1 *= Math.PI / 180.0;
+        lat2 *= Math.PI / 180.0;
+
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Sin(dLng / 2) * Math.Sin(dLng / 2) * Math.Cos(lat1) * Math.Cos(lat2);
+
+        var c = 2 * Math.Asin(Math.Sqrt(a));
+        return 6371.0 * c;
+    }
+    private static bool IsVisibleToUser(Place p, string? userId, HashSet<string> friendIds)
+    {
+        var isOwner = userId != null && p.OwnerUserId == userId;
+
+        if (isOwner) return true;
+
+        return p.Visibility switch
+        {
+            PlaceVisibility.Public  => true,
+            PlaceVisibility.Private => false,
+            PlaceVisibility.Friends => userId != null && friendIds.Contains(p.OwnerUserId),
+            _ => false
+        };
+    }
+
+
+    public async Task<IEnumerable<PlaceDetailsDto>> SearchNearbyAsync(
+        double lat,
+        double lng,
+        double radiusKm,
+        string? activityName,
+        string? activityKind,
+        PlaceVisibility? visibility,
+        PlaceType? type,
+        string? userId
+    )
     {
         logger.LogDebug("Nearby search: lat={Lat}, lng={Lng}, radius={Radius}, vis={Vis}, type={Type}", lat, lng, radiusKm, visibility, type);
 
-        var latDelta = radiusKm / 111.0;
-        var lngDelta = radiusKm / (111.0 * Math.Cos(lat * Math.PI / 180.0));
-        var minLat = lat - latDelta;
-        var maxLat = lat + latDelta;
-        var minLng = lng - lngDelta;
-        var maxLng = lng + lngDelta;
-
         var q = db.Places
-            .Where(p => p.Latitude >= minLat && p.Latitude <= maxLat &&
-                        p.Longitude >= minLng && p.Longitude <= maxLng)
-            .AsNoTracking()
-            .Include(p => p.PlaceActivities)
-                .ThenInclude(pa => pa.ActivityKind)
-            .AsQueryable();
+        .Where(p => !p.IsDeleted)
+        .Include(p => p.PlaceActivities)
+            .ThenInclude(pa => pa.ActivityKind)
+        .AsNoTracking();
 
         // Filter by Visibility
         if (visibility.HasValue)
@@ -206,14 +236,18 @@ public class PlaceService(
         if (!string.IsNullOrWhiteSpace(activityName))
         {
             var an = activityName.Trim().ToLowerInvariant();
-            q = q.Where(p => p.PlaceActivities.Any(a => a.Name.ToLower() == an));
+            q = q.Where(p => p.PlaceActivities.Any(a => a.Name != null && a.Name.ToLower() == an));
         }
 
         // Filter by ACTIVITY KIND
         if (!string.IsNullOrWhiteSpace(activityKind))
         {
             var ak = activityKind.Trim().ToLowerInvariant();
-            q = q.Where(p => p.PlaceActivities.Any(a => a.ActivityKind != null && a.ActivityKind.Name.ToLower() == ak));
+            q = q.Where(p => p.PlaceActivities.Any(a => 
+                a.ActivityKind != null &&  
+                a.ActivityKind.Name != null && 
+                a.ActivityKind.Name.ToLower() == ak
+            ));
         }
 
         var candidates = await q.ToListAsync();
@@ -226,59 +260,30 @@ public class PlaceService(
             friendIds = ids.ToHashSet();
         }
 
-        var results = new List<PlaceDetailsDto>();
+        var withDistance = new List<(PlaceDetailsDto Dto, double Distance)>();
 
         foreach (var p in candidates)
         {
-            var isOwner = userId != null && p.OwnerUserId == userId;
-            
-            // Visibility Check
-            bool isVisible = false;
+            if (!IsVisibleToUser(p, userId, friendIds)) continue;
 
-            if (isOwner)
-            {
-                isVisible = true;
-            }
-            else
-            {
-                switch (p.Visibility)
-                {
-                    case PlaceVisibility.Public:
-                        isVisible = true;
-                        break;
-                    case PlaceVisibility.Private:
-                        isVisible = false;
-                        break;
-                    case PlaceVisibility.Friends:
-                        isVisible = userId != null && friendIds.Contains(p.OwnerUserId);
-                        break;
-                }
-            }
+            var dist = DistanceKm(lat, lng, p.Latitude, p.Longitude);
+            if (dist > radiusKm) continue;
 
-            if (!isVisible) continue;
-
-            // Distance Calc
-            var dist = 6371.0 * 2.0 * Math.Asin(
-                Math.Sqrt(
-                    Math.Pow(Math.Sin((p.Latitude - lat) * Math.PI / 180.0 / 2.0), 2) +
-                    Math.Cos(lat * Math.PI / 180.0) * Math.Cos(p.Latitude * Math.PI / 180.0) *
-                    Math.Pow(Math.Sin((p.Longitude - lng) * Math.PI / 180.0 / 2.0), 2)
-                )
-            );
-
-            if (dist <= radiusKm)
-            {
-                results.Add(await ToPlaceDetailsDto(p, userId));
-            }
+            var dto = await ToPlaceDetailsDto(p, userId);
+            withDistance.Add((dto, dist));
         }
 
-        return results.OrderBy(x => x.Name).ToList();
+        return withDistance
+            .OrderBy(x => x.Distance)
+            .Select(x => x.Dto)
+            .ToList();
     }
 
     public async Task<IEnumerable<PlaceDetailsDto>> GetFavoritedPlacesAsync(string userId)
     {
         var favorites = await db.Favorited
             .Where(f => f.UserId == userId)
+            // .Where(f => !f.Place.IsDeleted) // ALLOW DELETED PLACES
             .Include(f => f.Place)
                 .ThenInclude(p => p.PlaceActivities)
                     .ThenInclude(pa => pa.ActivityKind)
@@ -312,6 +317,24 @@ public class PlaceService(
         return list;
     }
 
+    // this will soft delete the place by setting IsDeleted to true
+    public async Task DeletePlaceAsync(int id, string userId)
+    {
+       var place = await db.Places.FindAsync(id);
+       if (place == null)
+       {
+           throw new InvalidOperationException("Place not found.");
+       }
+       
+       if (place.OwnerUserId != userId)
+       {
+           throw new InvalidOperationException("You do not have permission to delete this place.");
+       }
+       
+       place.IsDeleted = true;
+       await db.SaveChangesAsync();
+    }
+    
     public async Task AddFavoriteAsync(int id, string userId)
     {
         var exists = await db.Favorited
@@ -335,6 +358,14 @@ public class PlaceService(
             PlaceId = id
         };
         await db.Favorited.AddAsync(favorited);
+
+        // Increment counter
+        var place = await db.Places.FindAsync(id);
+        if (place != null)
+        {
+            place.Favorites++;
+        }
+
         await db.SaveChangesAsync();
 
         logger.LogInformation("Place {PlaceId} favorited by {UserId}", id, userId);
@@ -348,10 +379,20 @@ public class PlaceService(
         if (favorited != null)
         {
             db.Favorited.Remove(favorited);
+
+            // Decrement counter
+            var place = await db.Places.FindAsync(id);
+            if (place != null && place.Favorites > 0)
+            {
+                place.Favorites--;
+            }
+
             await db.SaveChangesAsync();
             logger.LogInformation("Place {PlaceId} unfavorited by {UserId}", id, userId);
         }
     }
+
+
 
     private async Task<PlaceDetailsDto> ToPlaceDetailsDto(Place p, string? userId)
     {
@@ -359,6 +400,8 @@ public class PlaceService(
         
         var isFavorited = userId != null && await db.Favorited
             .AnyAsync(f => f.UserId == userId && f.PlaceId == p.Id);
+
+
 
         var activities = p.PlaceActivities
             .Select(a => new ActivitySummaryDto(
@@ -385,6 +428,7 @@ public class PlaceService(
             p.Type,
             isOwner,
             isFavorited,
+            p.Favorites,
             activities,
             activityKindNames
         );

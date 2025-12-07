@@ -123,7 +123,7 @@ namespace Conquest.Data.App
             // Favorited * - 1 Place
             builder.Entity<Favorited>()
                 .HasOne(f => f.Place)
-                .WithMany()
+                .WithMany(p => p.FavoritedList)
                 .HasForeignKey(f => f.PlaceId)
                 .OnDelete(DeleteBehavior.Cascade);
 

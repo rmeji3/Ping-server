@@ -10,4 +10,5 @@ public interface IReviewService
     Task LikeReviewAsync(int reviewId, string userId);
     Task UnlikeReviewAsync(int reviewId, string userId);
     Task<IEnumerable<ExploreReviewDto>> GetLikedReviewsAsync(string userId);
+    Task<IEnumerable<ExploreReviewDto>> GetMyReviewsAsync(string userId);
 }

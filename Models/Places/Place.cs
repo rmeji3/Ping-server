@@ -19,5 +19,8 @@ namespace Conquest.Models.Places
         public PlaceType Type { get; set; } = PlaceType.Custom;
         public ICollection<PlaceActivity> PlaceActivities { get; set; } = [];
         public DateTime CreatedUtc { get; init; } = DateTime.UtcNow;
+        public bool IsDeleted { get; set; } = false;
+        public int Favorites { get; set; } = 0;
+        public ICollection<Favorited> FavoritedList { get; set; } = [];
     }
 }

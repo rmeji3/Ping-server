@@ -218,7 +218,7 @@ Property Configuration:
 - `PlaceVisibility` enum: `Private = 0`, `Friends = 1`, `Public = 2`
 - `PlaceType` enum: `Custom = 0`, `Verified = 1`
 - `UpsertPlaceDto(Name, Address?, Latitude, Longitude, Visibility, Type)`
-- `PlaceDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Activities[ActivitySummaryDto], ActivityKinds[string])`
+- `PlaceDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Favorites, Activities[ActivitySummaryDto], ActivityKinds[string])`
 
 ### Profiles
 - `ProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?)`
@@ -253,9 +253,9 @@ Property Configuration:
   - `CreatePlaceAsync(UpsertPlaceDto, userId)` - Creates place with type-specific duplicate detection and rate limiting
   - `GetPlaceByIdAsync(id, userId)` - Retrieves place with privacy checks (Private/Friends/Public visibility)
   - `SearchNearbyAsync(lat, lng, radiusKm, activityName, activityKind, visibility, type, userId)` - Geo-spatial search with filters
-  - `AddFavoriteAsync(id, userId)` - Adds place to user's favorites
-  - `UnfavoriteAsync(id, userId)` - Removes place from favorites
-  - `GetFavoritedPlacesAsync(userId)` - Retrieves all favorited places
+  - `AddFavoriteAsync(id, userId)` - Adds place to user's favorites, increments `Favorites` counter
+  - `UnfavoriteAsync(id, userId)` - Removes place from favorites, decrements `Favorites` counter
+  - `GetFavoritedPlacesAsync(userId)` - Retrieves all favorited places (includes deleted places for history)
 - **PlaceType Logic**:
   - **Verified Places** (Public only): Require address, check duplicates by address only, auto-fetch name from Google Places API
   - **Custom Places**: Address optional, check duplicates by coordinates (~50m), use user-provided name
@@ -722,15 +722,15 @@ All errors follow the ProblemDetails format:
 **High Priority:**
 - ✅ ~~PlaceType feature (Verified vs Custom)~~ - COMPLETED
 - ✅ ~~Review likes with `IsLiked` flag~~ - COMPLETED
-- ✅ ~~Review likes with `IsLiked` flag~~ - COMPLETED
 - ✅ ~~Redis integration for rate limiting~~ - COMPLETED
 - ✅ ~~AI Recommendations (Semantic Kernel + Google Fallback)~~ - COMPLETED
-- Implement tag moderation system (approval/banning workflow, endpoints)
 - ✅ ~~CheckIns feature implementation~~ - COMPLETED (Merged into Reviews)
+- ✅ ~~Soft delete for Places with historical review preservation~~ - COMPLETED
+- ✅ ~~Enhanced Favorites (Counter + History)~~ - COMPLETED
+- Implement tag moderation system (approval/banning workflow, endpoints)
 - Normalize and validate rating range (1–5) at DTO/model layer
 
 **Medium Priority:**
-- Add soft delete for Places and Activities to preserve historical reviews
 - Email service for password reset (production)
 - Pagination improvements for large list endpoints
 - WebSocket support for real-time event updates

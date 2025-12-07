@@ -131,4 +131,20 @@ public class ReviewsController(IReviewService reviewService, ILogger<ReviewsCont
         logger.LogInformation("GetLikedReviews: Liked reviews fetched for {UserId}", userId);
         return Ok(reviews);
     }
+
+    // GET /api/reviews/me
+    [HttpGet("/api/reviews/me")]
+    public async Task<ActionResult<IEnumerable<ExploreReviewDto>>> GetMyReviews()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+        {
+            logger.LogWarning("GetMyReviews: User is not authenticated or missing id.");
+            return Unauthorized();
+        }
+
+        var reviews = await reviewService.GetMyReviewsAsync(userId);
+        logger.LogInformation("GetMyReviews: Reviews fetched for {UserId}", userId);
+        return Ok(reviews);
+    }
 }

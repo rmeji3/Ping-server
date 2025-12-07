@@ -14,6 +14,7 @@ namespace Conquest.Dtos.Places
         PlaceType Type,
         bool IsOwner,
         bool IsFavorited,
+        int Favorites,
         ActivitySummaryDto[] Activities,
         string[] ActivityKinds
         );

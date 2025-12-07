@@ -9,6 +9,7 @@ public interface IPlaceService
     Task<PlaceDetailsDto?> GetPlaceByIdAsync(int id, string? userId);
     Task<IEnumerable<PlaceDetailsDto>> SearchNearbyAsync(double lat, double lng, double radiusKm, string? activityName, string? activityKind, PlaceVisibility? visibility, PlaceType? type, string? userId);
     Task<IEnumerable<PlaceDetailsDto>> GetFavoritedPlacesAsync(string userId);
+    Task DeletePlaceAsync(int id, string userId);
     Task AddFavoriteAsync(int id, string userId);
     Task UnfavoriteAsync(int id, string userId);
 }

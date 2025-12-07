@@ -180,6 +180,7 @@ public class ReviewService(
                 .ThenInclude(pa => pa.ActivityKind)
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
+            .Where(r => !r.PlaceActivity.Place.IsDeleted)
             .AsQueryable();
 
         // Filter by Category
@@ -257,7 +258,8 @@ public class ReviewService(
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), // IsLiked
-            r.ReviewTags.Select(rt => rt.Tag.Name).ToList() // Tags
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), // Tags
+            r.PlaceActivity.Place.IsDeleted
         )).ToList();
 
         logger.LogInformation("Explore reviews fetched: Page {PageNumber}, Size {PageSize}, Count {Count}", 
@@ -361,12 +363,63 @@ public class ReviewService(
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
                 true, // IsLiked - always true for liked reviews
-                rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList() // Tags
+                rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(), // Tags
+                rl.Review.PlaceActivity.Place.IsDeleted
             ))
             .ToListAsync();
 
         logger.LogInformation("Liked reviews for {UserId} retrieved: {Count} reviews", userId, likedReviews.Count);
 
         return likedReviews;
+    }
+    public async Task<IEnumerable<ExploreReviewDto>> GetMyReviewsAsync(string userId)
+    {
+        var myReviews = await appDb.Reviews
+            .Where(r => r.UserId == userId)
+            .Include(r => r.PlaceActivity)
+                .ThenInclude(pa => pa.Place)
+            .Include(r => r.PlaceActivity)
+                .ThenInclude(pa => pa.ActivityKind)
+            .Include(r => r.ReviewTags)
+                .ThenInclude(rt => rt.Tag)
+            .AsNoTracking()
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        // Batch check which reviews are liked by the current user (my own reviews can also be liked by me)
+        var reviewIds = myReviews.Select(r => r.Id).ToList();
+        var likedReviewIds = new HashSet<int>();
+        
+        if (reviewIds.Count > 0)
+        {
+            likedReviewIds = await appDb.ReviewLikes
+                .Where(rl => rl.UserId == userId && reviewIds.Contains(rl.ReviewId))
+                .Select(rl => rl.ReviewId)
+                .ToHashSetAsync();
+        }
+
+        var result = myReviews.Select(r => new ExploreReviewDto(
+            r.Id,
+            r.PlaceActivityId,
+            r.PlaceActivity.PlaceId,
+            r.PlaceActivity.Place.Name,
+            r.PlaceActivity.Place.Address ?? string.Empty,
+            r.PlaceActivity.Name,
+            r.PlaceActivity.ActivityKind?.Name,
+            r.PlaceActivity.Place.Latitude,
+            r.PlaceActivity.Place.Longitude,
+            r.Rating,
+            r.Content,
+            r.UserName,
+            r.CreatedAt,
+            r.Likes,
+            likedReviewIds.Contains(r.Id), // IsLiked
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), // Tags
+            r.PlaceActivity.Place.IsDeleted
+        )).ToList();
+
+        logger.LogInformation("My reviews fetched for {UserId}: {Count} reviews", userId, result.Count);
+
+        return result;
     }
 }

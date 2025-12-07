@@ -106,5 +106,17 @@ namespace Conquest.Controllers.Places
             var result = await placeService.GetFavoritedPlacesAsync(userId);
             return Ok(result);
         }
+
+        // POST /api/places/{id}/delete
+        [HttpPost("{id:int}/delete")]
+        public async Task<ActionResult> Delete(int id)
+        {
+           var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+           if (userId is null)
+               return Unauthorized("You must be logged in to delete a place.");
+
+       await placeService.DeletePlaceAsync(id, userId);
+           return NoContent();
+        }
     }
 }
