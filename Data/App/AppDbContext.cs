@@ -80,7 +80,7 @@ namespace Conquest.Data.App
                 .ToTable(t => t.HasCheckConstraint("CK_Review_Rating", "Rating >= 1 AND Rating <= 5"));
 
             builder.Entity<Review>()
-                .ToTable(t => t.HasCheckConstraint("CK_Review_Content", "Content <= 1000"));
+                .ToTable(t => t.HasCheckConstraint("CK_Review_Content", "length(\"Content\") <= 1000"));
 
             // Tag: unique normalized name
             builder.Entity<Tag>()
@@ -154,7 +154,7 @@ namespace Conquest.Data.App
             // Review content + timestamps
             builder.Entity<Review>()
                 .Property(r => r.Content)
-                .HasMaxLength(2000);
+                .HasMaxLength(1000);
 
             builder.Entity<Review>()
                 .Property(r => r.CreatedAt)

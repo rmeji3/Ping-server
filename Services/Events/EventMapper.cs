@@ -54,7 +54,8 @@ public static class EventMapper
             attendeeSummaries,
             status,
             ev.Latitude,
-            ev.Longitude
+            ev.Longitude,
+            ev.PlaceId
         );
     }
 }

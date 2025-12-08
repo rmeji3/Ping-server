@@ -36,6 +36,15 @@ public class EventService(
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(dto.Location))
+        {
+            var locCheck = await moderationService.CheckContentAsync(dto.Location);
+            if (locCheck.IsFlagged)
+            {
+                throw new ArgumentException($"Location violates content policy: {locCheck.Reason}");
+            }
+        }
+
         var ev = new Event
         {
             Title = dto.Title,
@@ -47,8 +56,22 @@ public class EventService(
             Latitude = dto.Latitude,
             Longitude = dto.Longitude,
             CreatedById = userId,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            PlaceId = dto.PlaceId
         };
+        
+        if (dto.PlaceId.HasValue)
+        {
+            var place = await appDb.Places.FindAsync(dto.PlaceId.Value);
+            if (place == null)
+            {
+                throw new ArgumentException($"Place with ID {dto.PlaceId} not found.");
+            }
+            // Enforce location data from Place
+            ev.Location = place.Name; // Or place.Address? Using Name as "Place Name" seems appropriate for Event.Location
+            ev.Latitude = place.Latitude;
+            ev.Longitude = place.Longitude;
+        }
 
         appDb.Events.Add(ev);
         await appDb.SaveChangesAsync();
@@ -83,7 +106,8 @@ public class EventService(
             new List<UserSummaryDto> { creatorSummary },
             "attending",
             ev.Latitude,
-            ev.Longitude
+            ev.Longitude,
+            ev.PlaceId
         );
     }
 

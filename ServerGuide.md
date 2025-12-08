@@ -177,7 +177,7 @@ Relationships & Cascades:
 - `EventAttendee` → `Event` cascade.
 
 Property Configuration:
-- `Review.Content` max length 2000.
+- `Review.Content` max length 1000.
 - Timestamp defaults via `CURRENT_TIMESTAMP` for `Review.CreatedAt`.
 - `Tag.Name` max 30.
 
@@ -192,7 +192,7 @@ Property Configuration:
 | ActivityKind  | Id                 | Name                                                                                                                     | PlaceActivities                        | Seeded                                                                                                                |
 | PlaceActivity | Id                 | PlaceId, ActivityKindId?, Name, CreatedUtc                                                                               | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name                                                                                              |
 | Review        | Id                 | UserId, UserName, PlaceActivityId, Rating, Type, Content, CreatedAt, Likes                                               | PlaceActivity, ReviewTags              | Rating required; Type (Review/CheckIn); First post is Review, subsequent are CheckIns                                 |
-| Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee)              | Status computed dynamically                                                                                           |
+| Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, PlaceId?, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee), Place?      | Status computed dynamically; PlaceId links to Place entity (optional)                                                                 |
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
 | Tag           | Id                 | Name, IsApproved, IsBanned, CanonicalTagId                                                                               | ReviewTags                             | Used for categorizing reviews                                                                                         |
 
@@ -215,9 +215,9 @@ Property Configuration:
 - `JwtOptions(Key, Issuer, Audience, AccessTokenMinutes)`
 
 ### Events
-- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude)`
+- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PlaceId?)`
 - `UserSummaryDto(Id, UserName, FirstName, LastName)`
-- `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude)`
+- `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PlaceId?)`
 - `UpdateEventDto` (all optional patch fields)
 
 ### Friends
@@ -450,6 +450,11 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - Creators auto-join their events
 - Only creator can delete event
 - Cannot attend own event (creator is already an attendee)
+- **Place Linking**: Events can be optionally linked to a `Place` via `PlaceId`.
+  - If `PlaceId` is provided, the Event inherits `Location`, `Latitude`, and `Longitude` from the Place.
+  - Useful for "Quick Add" workflows where users select an existing place.
+- **Moderation**: `Title`, `Description`, and `Location` (Place Name) are moderated.
+  - Violations result in `400 Bad Request` with `ArgumentException`.
 
 ### Activities
 - Name must be unique per place (case-insensitive)

@@ -13,7 +13,8 @@ public record EventDto(
     List<UserSummaryDto> Attendees,
     string Status,
     double latitude,
-    double longitude
+    double longitude,
+    int? PlaceId
 );
 
 public record UserSummaryDto(
@@ -31,7 +32,8 @@ public record CreateEventDto(
     DateTime EndTime,
     string Location,
     double Latitude,
-    double Longitude
+    double Longitude,
+    int? PlaceId
 );
 
 public class UpdateEventDto
@@ -44,4 +46,5 @@ public class UpdateEventDto
     public string? Location { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public int? PlaceId { get; set; }
 }
