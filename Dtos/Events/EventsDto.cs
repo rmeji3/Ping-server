@@ -15,7 +15,10 @@ public record EventDto(
     double latitude,
     double longitude,
     int? PlaceId
-);
+)
+{
+    public bool IsAdHoc => PlaceId == null;
+}
 
 public record UserSummaryDto(
     string Id,

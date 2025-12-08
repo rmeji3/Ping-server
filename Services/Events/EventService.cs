@@ -111,7 +111,111 @@ public class EventService(
         );
     }
 
-    public async Task<EventDto?> GetEventByIdAsync(int id)
+    public async Task<EventDto> UpdateEventAsync(int id, UpdateEventDto dto, string userId)
+    {
+        var ev = await appDb.Events
+            .Include(e => e.Attendees)
+            .FirstOrDefaultAsync(e => e.Id == id);
+            
+        if (ev == null)
+        {
+            throw new KeyNotFoundException("Event not found");
+        }
+        
+        if (ev.CreatedById != userId)
+        {
+            throw new UnauthorizedAccessException("Only the creator can update this event");
+        }
+
+        // Apply string updates with moderation
+        if (dto.Title != null)
+        {
+            var check = await moderationService.CheckContentAsync(dto.Title);
+            if (check.IsFlagged) throw new ArgumentException($"Title violates content policy: {check.Reason}");
+            ev.Title = dto.Title;
+        }
+
+        if (dto.Description != null)
+        {
+            var check = await moderationService.CheckContentAsync(dto.Description);
+            if (check.IsFlagged) throw new ArgumentException($"Description violates content policy: {check.Reason}");
+            ev.Description = dto.Description;
+        }
+
+        if (dto.Location != null)
+        {
+            var check = await moderationService.CheckContentAsync(dto.Location);
+            if (check.IsFlagged) throw new ArgumentException($"Location violates content policy: {check.Reason}");
+            ev.Location = dto.Location;
+        }
+        
+        // Apply simple fields
+        if (dto.IsPublic.HasValue) ev.IsPublic = dto.IsPublic.Value;
+        
+        bool timeChanged = false;
+        if (dto.StartTime.HasValue)
+        {
+            ev.StartTime = dto.StartTime.Value;
+            timeChanged = true;
+        }
+        if (dto.EndTime.HasValue)
+        {
+            ev.EndTime = dto.EndTime.Value;
+            timeChanged = true;
+        }
+        
+        if (timeChanged)
+        {
+             if (ev.StartTime < DateTime.UtcNow)
+                throw new ArgumentException("Event start time must be in the future.");
+             if (ev.EndTime <= ev.StartTime)
+                throw new ArgumentException("End time must be after start time.");
+             if ((ev.EndTime - ev.StartTime).TotalMinutes < 15)
+                throw new ArgumentException("Event duration must be at least 15 minutes.");
+        }
+
+        if (dto.Latitude.HasValue) ev.Latitude = dto.Latitude.Value;
+        if (dto.Longitude.HasValue) ev.Longitude = dto.Longitude.Value;
+
+        // Place Linking & Unlinking Logic
+        // Scenario 1: User selected a specific Place (Pin) -> Link it and overwrite location details
+        if (dto.PlaceId.HasValue)
+        {
+            var place = await appDb.Places.FindAsync(dto.PlaceId.Value);
+            if (place == null) throw new ArgumentException($"Place with ID {dto.PlaceId} not found");
+            
+            ev.PlaceId = dto.PlaceId.Value;
+            ev.Location = place.Name;
+            ev.Latitude = place.Latitude;
+            ev.Longitude = place.Longitude;
+        }
+        // Scenario 2: User manually changed location (Location text OR Coords) but did NOT provide a PlaceId
+        // This implies they are moving the pin or typing a custom address, so we must UNLINK the old Place.
+        else if (dto.Location != null || dto.Latitude.HasValue || dto.Longitude.HasValue)
+        {
+            ev.PlaceId = null;
+        }
+
+        await appDb.SaveChangesAsync();
+        
+        logger.LogInformation("Event updated: {EventId} by {UserId}", ev.Id, userId);
+
+        // Return updated DTO
+        // Re-fetch or reuse? Reuse is fine but need creator user info
+        var creatorUser = await userManager.FindByIdAsync(ev.CreatedById);
+        var creatorSummary = creatorUser != null
+            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.FirstName, creatorUser.LastName)
+            : new UserSummaryDto("?", "Unknown", null, null);
+            
+        // Get attendees
+        var attendeeIds = ev.Attendees.Select(a => a.UserId).Distinct().ToList();
+        var attendeeUsers = await userManager.Users.Where(u => attendeeIds.Contains(u.Id)).ToListAsync();
+        var usersById = attendeeUsers.ToDictionary(u => u.Id);
+        
+        return EventMapper.MapToDto(ev, creatorSummary, usersById, userId); 
+    }
+
+    public async Task<EventDto?> GetEventByIdAsync(int id, string? userId = null)
     {
         var ev = await appDb.Events
             .Include(e => e.Attendees)
@@ -132,21 +236,8 @@ public class EventService(
         
         var usersById = attendeeUsers.ToDictionary(u => u.Id);
 
-        return EventMapper.MapToDto(ev, creatorSummary, usersById, null); // status is calculated in controller if needed, or we pass null here and let caller handle logic? 
-        // Actually, status depends on "me". 
-        // Service shouldn't know about "me" for a generic GetById unless we pass it.
-        // Let's keep it simple and return the DTO. The controller can override status if needed, 
-        // but wait, the DTO has a Status field.
-        // We should probably pass "currentUserId" to this method if we want to fill status correctly.
-        // But the interface signature I defined doesn't have it. 
-        // Let's stick to returning the DTO with "unknown" status and let controller fill it?
-        // Or better, update interface to take optional userId.
-        // For now, I'll return "unknown" status.
+        return EventMapper.MapToDto(ev, creatorSummary, usersById, userId); 
     }
-
-    // Overload or update interface? Let's update interface in next step if needed. 
-    // Actually, looking at my interface: GetEventByIdAsync(int id).
-    // I'll return "unknown" for status.
     
     public async Task<PaginatedResult<EventDto>> GetMyEventsAsync(string userId, PaginationParams pagination)
     {

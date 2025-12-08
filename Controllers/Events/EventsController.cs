@@ -30,11 +30,14 @@ namespace Conquest.Controllers.Events
             }
         }
 
-        // GET /api/events/{id}
         [HttpGet("{id:int}")]
         public async Task<ActionResult<EventDto>> GetById(int id)
         {
-            var result = await eventService.GetEventByIdAsync(id);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            // Even if userId is null (not auth?), service handles null securely.
+            // But controller has [Authorize], so userId should exist unless token issue.
+
+            var result = await eventService.GetEventByIdAsync(id, userId);
             if (result is null) return NotFound("Event not found.");
             return Ok(result);
         }
@@ -128,6 +131,32 @@ namespace Conquest.Controllers.Events
             var result = await eventService.JoinEventAsync(id, userId);
             if (!result) return NotFound("Event not found.");
             return Ok("Joined event.");
+        }
+
+        // PATCH /api/Events/{id}
+        [HttpPatch("{id:int}")]
+        public async Task<ActionResult<EventDto>> UpdateEvent(int id, [FromBody] UpdateEventDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            try
+            {
+                var result = await eventService.UpdateEventAsync(id, dto, userId);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("Event not found.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         // POST /api/events/{id}/leave

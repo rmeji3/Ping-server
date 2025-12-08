@@ -7,7 +7,8 @@ namespace Conquest.Services.Events;
 public interface IEventService
 {
     Task<EventDto> CreateEventAsync(CreateEventDto dto, string userId);
-    Task<EventDto?> GetEventByIdAsync(int id);
+    Task<EventDto> UpdateEventAsync(int id, UpdateEventDto dto, string userId);
+    Task<EventDto?> GetEventByIdAsync(int id, string? userId = null);
     Task<PaginatedResult<EventDto>> GetMyEventsAsync(string userId, PaginationParams pagination);
     Task<PaginatedResult<EventDto>> GetEventsAttendingAsync(string userId, PaginationParams pagination);
     Task<PaginatedResult<EventDto>> GetPublicEventsAsync(double minLat, double maxLat, double minLng, double maxLng, PaginationParams pagination);
