@@ -10,4 +10,5 @@ public interface IAuthService
     Task<object> ForgotPasswordAsync(ForgotPasswordDto dto, string scheme, string host);
     Task<string> ResetPasswordAsync(ResetPasswordDto dto);
     Task<string> ChangePasswordAsync(string userId, ChangePasswordDto dto);
+    Task MakeAdminAsync(string email);
 }

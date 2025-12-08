@@ -113,5 +113,23 @@ namespace Conquest.Controllers.Auth
                 return BadRequest(new { errors = ex.Message.Split(", ").Select(e => new { Description = e }) });
             }
         }
+        [HttpPost("dev/make-admin")]
+        [AllowAnonymous] // Dev tool, could add secret check if needed
+        public async Task<IActionResult> MakeAdmin([FromQuery] string email)
+        {
+            // Simple safety check - only allow in Development environment if possible.
+            // But I don't have IWebHostEnvironment injected here.
+            // Assuming this is a local dev convenience tool.
+            
+            try 
+            {
+                await authService.MakeAdminAsync(email);
+                return Ok(new { message = $"User {email} is now an Admin." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
     }
 }

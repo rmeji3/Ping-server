@@ -8,6 +8,7 @@ using Conquest.Services.Friends;
 using Conquest.Services.Places;
 using Conquest.Services.Events;
 using Conquest.Services.Reviews;
+using Conquest.Services.Tags;
 using Conquest.Services.Activities;
 using Conquest.Services.Profiles;
 using Conquest.Services.Auth;
@@ -139,10 +140,13 @@ builder.Services.AddScoped<IFriendService, FriendService>();
 builder.Services.AddScoped<IPlaceService, PlaceService>();
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddHttpClient<IPlaceNameService, GooglePlacesService>();
+builder.Services.AddHttpClient<Conquest.Services.Moderation.IModerationService, Conquest.Services.Moderation.OpenAIModerationService>();
+builder.Services.AddScoped<Conquest.Services.AI.ISemanticService, Conquest.Services.AI.OpenAISemanticService>();
 builder.Services.AddScoped<RecommendationService>();
 
 // --- Semantic Kernel ---
@@ -213,6 +217,17 @@ using (var scope = app.Services.CreateScope())
 
     var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     appDb.Database.Migrate();
+
+    // --- Seed Roles ---
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    string[] roleNames = { "Admin", "User" };
+    foreach (var roleName in roleNames)
+    {
+        if (!await roleManager.RoleExistsAsync(roleName))
+        {
+            await roleManager.CreateAsync(new IdentityRole(roleName));
+        }
+    }
 }
 
 

@@ -18,6 +18,11 @@ Comprehensive internal documentation of the current server codebase. This guide 
 13. Conventions & Extension Points
 14. Redis & Caching
 15. Rate Limiting
+16. Content Moderation & AI
+17. Quick Reference Summary
+18. Error Response Formats
+19. Suggested Future Enhancements
+20. Agent Usage Notes
 
 ---
 ## 1. Overview
@@ -29,6 +34,7 @@ Conquest is an ASP.NET Core API (targeting .NET 9) that manages users, places, a
 - JWT-based authentication
 - **Redis** for distributed caching, rate limiting, and session management
 - **Rate Limiting Middleware** for API protection
+- **AI Integration**: OpenAI for Content Moderation and Semantic Deduplication
 - Global Exception Handling (standardized JSON responses)
 - Swagger/OpenAPI (exposed at root path `/`)
 
@@ -42,6 +48,8 @@ Conquest is an ASP.NET Core API (targeting .NET 9) that manages users, places, a
 - `Controllers/*` – Thin orchestrators handling HTTP concerns only.
 - `Services/*` – Business logic, database queries, and domain operations.
 - `Services/Redis/*` – Redis service for caching and rate limiting.
+- `Services/Moderation/*` - Content moderation services.
+- `Services/AI/*` - Semantic analysis services.
 - `Middleware/*` – Global exception handling and rate limiting middleware.
 
 ---
@@ -52,7 +60,7 @@ Registered services:
 - JWT options bound from `configuration["Jwt"]` (Key, Issuer, Audience, AccessTokenMinutes).
 - **Redis**: `IConnectionMultiplexer` (singleton), distributed cache, `IRedisService` (scoped).
 - **Session**: Distributed session state with Redis backend (30-minute timeout).
-- **Service Layer** (all scoped): `ITokenService`, `IPlaceService`, `IPlaceNameService` (Google Places API), `IEventService`, `IReviewService`, `IActivityService`, `IFriendService`, `IProfileService`, `IAuthService`, `IRedisService`, `RecommendationService`.
+- **Service Layer** (all scoped): `ITokenService`, `IPlaceService`, `IPlaceNameService` (Google Places API), `IEventService`, `IReviewService`, `IActivityService`, `IFriendService`, `IProfileService`, `IAuthService`, `IRedisService`, `IModerationService`, `ISemanticService`, `ITagService`, `RecommendationService`.
 - **Middleware**: `GlobalExceptionHandler` (transient), `RateLimitMiddleware` (scoped).
 - Authentication: JWT Bearer with validation (issuer, audience, lifetime, signing key).
 - Swagger with Bearer security scheme.
@@ -88,12 +96,7 @@ Required `appsettings.json` keys:
   },
   "Google": {
     "ApiKey": "[google-places-api-key]"
-  }
-}
-```
-
-**Environment Variables**:
-- `OPENAI_API_KEY`: Required for AI Recommendations (Semantic Kernel).,
+  },
   "RateLimiting": {
     "GlobalLimitPerMinute": 100,
     "AuthenticatedLimitPerMinute": 200,
@@ -102,6 +105,9 @@ Required `appsettings.json` keys:
   }
 }
 ```
+
+**Environment Variables**:
+- `OPENAI_API_KEY`: Required for AI Services (Moderation & Semantic Search).
 
 **Development overrides** (`appsettings.Development.json`):
 ```json
@@ -117,6 +123,7 @@ Required `appsettings.json` keys:
 ### Identity
 - `AppUser : IdentityUser` adds: `FirstName`, `LastName`, `ProfileImageUrl`.
 - Unique index on `UserName` enforced in `AuthDbContext`.
+- Roles: `Admin`, `User`.
 
 ### JWT
 - Claims added: `sub`, `email`, `nameidentifier`, `name`, plus each role.
@@ -131,7 +138,8 @@ Required `appsettings.json` keys:
 - Change Password: requires existing password & JWT auth.
 
 ### Authorization
-- Most controllers require `[Authorize]` at class level (Events, Places, Profiles, Reviews implicitly via needing User ID). Some endpoints explicitly `[AllowAnonymous]` (register/login/forgot/reset).
+- Most controllers require `[Authorize]` at class level.
+- Admin endpoints require `[Authorize(Roles = "Admin")]` (e.g., Tag Moderation).
 
 ---
 ## 5. Database Contexts
@@ -169,7 +177,7 @@ Relationships & Cascades:
 - `EventAttendee` → `Event` cascade.
 
 Property Configuration:
-- `Review.Content` max length 2000 (model class shows 1000 – guide notes difference; EF config wins at runtime).
+- `Review.Content` max length 2000.
 - Timestamp defaults via `CURRENT_TIMESTAMP` for `Review.CreatedAt`.
 - `Tag.Name` max 30.
 
@@ -186,13 +194,14 @@ Property Configuration:
 | Review        | Id                 | UserId, UserName, PlaceActivityId, Rating, Type, Content, CreatedAt, Likes                                               | PlaceActivity, ReviewTags              | Rating required; Type (Review/CheckIn); First post is Review, subsequent are CheckIns                                 |
 | Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee)              | Status computed dynamically                                                                                           |
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
+| Tag           | Id                 | Name, IsApproved, IsBanned, CanonicalTagId                                                                               | ReviewTags                             | Used for categorizing reviews                                                                                         |
 
 ---
 ## 7. DTO Contracts
 ### Activities
 - `ActivitySummaryDto(Id, Name, ActivityKindId?, ActivityKindName?)`
 - `CreateActivityDto(PlaceId, Name, ActivityKindId?)`
-- `ActivityDetailsDto(Id, PlaceId, Name, ActivityKindId?, ActivityKindName?, CreatedUtc)`
+- `ActivityDetailsDto(Id, PlaceId, Name, ActivityKindId?, ActivityKindName?, CreatedUtc, WarningMessage?)`
 - `ActivityKindDto(Id, Name)` / `CreateActivityKindDto(Name)`
 
 ### Auth
@@ -227,9 +236,12 @@ Property Configuration:
 ### Reviews
 - `UserReviewsDto(Review, History[])` - Grouped response
 - `ReviewDto(Id, Rating, Content?, UserId, UserName, CreatedAt, Likes, IsLiked)`
-- `CreateReviewDto(Rating, Content?)`
+- `CreateReviewDto(Rating, Content?, Tags[])`
 - `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, ActivityName, ActivityKindName?, Latitude, Longitude, Rating, Content?, UserName, CreatedAt, Likes, IsLiked, Tags[])`
 - `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, ActivityKindIds?[], PageSize, PageNumber)`
+
+### Tags
+- `TagDto(Id, Name, Count, IsApproved, IsBanned)`
 
 ### Recommendations
 - `RecommendationDto(Name, Address, Latitude?, Longitude?, Source, LocalPlaceId?)`
@@ -237,133 +249,64 @@ Property Configuration:
 ---
 ## 8. Services (Service Layer Architecture)
 
-**Architecture Pattern**: The application follows the "Thin Controller, Fat Service" pattern. Controllers handle only HTTP concerns (request/response, status codes), while all business logic, database queries, and domain operations are encapsulated in service classes.
+**Architecture Pattern**: The application follows the "Thin Controller, Fat Service" pattern.
 
 ### Service Interfaces & Implementations
 
 #### TokenService (`ITokenService`)
-- **Purpose**: JWT token generation
-- **Methods**: `CreateAuthResponseAsync(AppUser)`
-- **Logic**: Generates JWT with configured options, includes roles and identity claims
+- Generates JWT with configured options, includes roles and identity claims.
 
 #### PlaceService (`IPlaceService`)
-- **Purpose**: Place management with geo-spatial operations, privacy controls, and official place verification
-- **Dependencies**: `IPlaceNameService` (Google Places API), `IRedisService`, `IFriendService`
-- **Methods**:
-  - `CreatePlaceAsync(UpsertPlaceDto, userId)` - Creates place with type-specific duplicate detection and rate limiting
-  - `GetPlaceByIdAsync(id, userId)` - Retrieves place with privacy checks (Private/Friends/Public visibility)
-  - `SearchNearbyAsync(lat, lng, radiusKm, activityName, activityKind, visibility, type, userId)` - Geo-spatial search with filters
-  - `AddFavoriteAsync(id, userId)` - Adds place to user's favorites, increments `Favorites` counter
-  - `UnfavoriteAsync(id, userId)` - Removes place from favorites, decrements `Favorites` counter
-  - `GetFavoritedPlacesAsync(userId)` - Retrieves all favorited places (includes deleted places for history)
-- **PlaceType Logic**:
-  - **Verified Places** (Public only): Require address, check duplicates by address only, auto-fetch name from Google Places API
-  - **Custom Places**: Address optional, check duplicates by coordinates (~50m), use user-provided name
-  - **Visibility Rule**: Private/Friends places are automatically converted to Custom type (no Google API calls for non-public places)
-- **Privacy Enforcement**:
-  - **Private**: Only owner can view
-  - **Friends**: Owner + accepted friends can view
-  - **Public**: Everyone can view
-- **Duplicate Detection** (Public places only):
-  - Verified: Address match only (no coordinate checking)
-  - Custom: Coordinates within ~50m (0.0005 degrees)
-  - Private/Friends: No duplicate checking (always create new)
-- **Rate Limiting**: Max 10 places per user per day (Redis-backed)
+- Manages places, geo-spatial search, favoriting, and visibility rules.
+- **AI Moderation**: Checks Place Name for offensive content (Custom places).
 
 #### GooglePlacesService (`IPlaceNameService`)
-- **Purpose**: Fetch official place names from Google Places API (New)
-- **Methods**:
-  - `GetPlaceNameAsync(lat, lng)` - Returns official place name from Google or null if not found
-  - `SearchPlacesAsync(query, lat, lng, radiusKm)` - Text search with strict rectangular location restriction
-- **Implementation**:
-  - Uses Google Places API `places:searchNearby` endpoint
-  - 50m search radius, max 1 result
-  - Field mask: `places.displayName`
-  - Falls back to user-provided name if no POI found
-- **Configuration**: Requires `Google:ApiKey` in `appsettings.json`
-- **Rate Limiting**: Only called for Public Verified places (not for Custom or Private/Friends)
+- Fetches official place names from Google Places API for verified places.
 
 #### RecommendationService (`RecommendationService`)
-- **Purpose**: AI-powered place recommendations based on "vibe"
-- **Dependencies**: `Kernel` (Semantic Kernel), `IPlaceNameService`, `AppDbContext`
-- **Methods**:
-  - `GetRecommendationsAsync(vibe, lat, lng, radiusKm)` - Orchestrates the search flow
-- **Logic**:
-  1.  **Analyze Vibe**: Uses OpenAI (`gpt-3.5-turbo`) to translate user vibe (e.g., "cozy study spot") into specific search terms (e.g., "library", "cafe"). Includes location context for local language support.
-  2.  **Local Search**: Searches local `AppDbContext` for places matching terms in Name, Activities, or Review Tags within radius.
-  3.  **Fallback**: If < 3 local matches, calls Google Places API (Text Search with strict location restriction).
-  4.  **Merge**: Combines and deduplicates results, prioritizing local places. Returns "System" message if no results found.
+- Provides AI-powered place recommendations based on "vibe" using Semantic Kernel + Google Places fallback.
 
 #### EventService (`IEventService`)
-- **Purpose**: Event lifecycle and attendance management
-- **Methods**:
-  - `CreateEventAsync(CreateEventDto, userId)` - Creates event and auto-joins creator
-  - `GetEventByIdAsync(id)` - Retrieves single event with attendees
-  - `GetMyEventsAsync(userId)` - Events owned by user
-  - `GetEventsAttendingAsync(userId)` - Events user is attending
-  - `GetPublicEventsAsync(minLat, maxLat, minLng, maxLng)` - Public events in bounding box
-  - `DeleteEventAsync(id, userId)` - Deletes event (owner only)
-  - `JoinEventAsync(id, userId)` - Join event
-  - `LeaveEventAsync(id, userId)` - Leave event
-- **Logic**: N+1 query optimization (batch user loading), status calculation (mine/attending/not-attending), ownership validation
-- **Helper**: `EventMapper.MapToDto` - Converts Event entities to EventDto with user summaries
+- Manages event lifecycle and attendance.
 
 #### ReviewService (`IReviewService`)
-- **Purpose**: Review creation and retrieval with scope filtering
-- **Methods**:
-  - `CreateReviewAsync(placeActivityId, CreateReviewDto, userId, userName)` - Creates review or checkin (based on history)
-  - `GetReviewsAsync(placeActivityId, scope, userId)` - Retrieves reviews grouped by user (`UserReviewsDto`)
-  - `GetExploreReviewsAsync(ExploreReviewsFilterDto, userId)` - Retrieves paginated feed of reviews with filters (location, category, search) and `IsLiked` status
-  - `LikeReviewAsync(reviewId, userId)` - Adds like to review (idempotent)
-  - `UnlikeReviewAsync(reviewId, userId)` - Removes like from review (idempotent)
-  - `GetLikedReviewsAsync(userId)` - Retrieves all reviews liked by user
-- **Logic**: Activity validation, friend-based filtering via `IFriendService`, pagination with max 100 items per page (default 20), newest reviews first, batch `IsLiked` checking to avoid N+1 queries
+- Manages reviews, check-ins, likes, and feed retrieval.
+- **AI Moderation**: Checks Review Content and new Tags for offensive content.
+- **Tag Integration**: Automatically creates or links tags during review creation.
+
+#### TagService (`ITagService`)
+- Manages tags and admin moderation.
+- Methods: `GetPopularTagsAsync`, `SearchTagsAsync`, `ApproveTagAsync`, `BanTagAsync`, `MergeTagAsync`.
 
 #### ActivityService (`IActivityService`)
-- **Purpose**: Activity creation and validation
-- **Methods**:
-  - `CreateActivityAsync(CreateActivityDto)` - Creates place activity
-- **Logic**: Place validation, name normalization, uniqueness enforcement (per place), optional ActivityKind validation
+- Manages activity creation.
+- **AI Moderation**: Checks Activity Name.
+- **Semantic Deduplication**: Uses AI to detect and merge duplicate activities (e.g., "Hoops" -> "Basketball"). Returns `WarningMessage` to frontend.
 
 #### FriendService (`IFriendService`)
-- **Purpose**: Friendship management and relationship queries
-- **Methods**:
-  - `GetFriendIdsAsync(userId)` - Returns all accepted friend IDs (bidirectional)
-  - `GetMyFriendsAsync(userId)` - Returns friend summaries
-  - `AddFriendAsync(userId, friendUsername)` - Sends friend request
-  - `AcceptFriendAsync(userId, friendUsername)` - Accepts pending request, creates bidirectional relationship
-  - `GetIncomingRequestsAsync(userId)` - Returns pending requests
-  - `RemoveFriendAsync(userId, friendUsername)` - Removes friendship (both directions)
-- **Logic**: Bidirectional relationship management, blocking checks, duplicate prevention, self-friendship prevention
+- Manages friendships (requests, accepts, blocks).
 
 #### ProfileService (`IProfileService`)
-- **Purpose**: User profile operations
-- **Methods**:
-  - `GetMyProfileAsync(userId)` - Returns personal profile with email
-  - `SearchProfilesAsync(query, currentUsername)` - Searches users by username (excludes self)
-- **Logic**: Username normalization, self-exclusion from search results
+- Manages user profiles and search.
 
 #### AuthService (`IAuthService`)
-- **Purpose**: Authentication and password management
-- **Methods**:
-  - `RegisterAsync(RegisterDto)` - User registration
-  - `LoginAsync(LoginDto)` - User login with lockout
-  - `GetCurrentUserAsync(userId)` - Returns current user info
-  - `ForgotPasswordAsync(ForgotPasswordDto, scheme, host)` - Generates password reset token
-  - `ResetPasswordAsync(ResetPasswordDto)` - Resets password with token
-  - `ChangePasswordAsync(userId, ChangePasswordDto)` - Changes password (authenticated)
-- **Logic**: Username uniqueness validation, password validation, token generation, account enumeration prevention
+- Manages registration, login, and password flows.
 
-### Service Layer Benefits
-- **Separation of Concerns**: Controllers handle HTTP, services handle business logic
-- **Testability**: Services can be unit tested independently
-- **Reusability**: Business logic can be shared across controllers or other contexts
-- **Maintainability**: Easier to locate and modify business rules
-- **Dependency Injection**: Promotes loose coupling through interfaces
+#### ModerationService (`IModerationService`)
+- **Implementation**: `OpenAIModerationService`.
+- **Method**: `CheckContentAsync(text)`.
+- **Backing**: OpenAI Free Moderation API (`v1/moderations`).
+- **Behavior**: Returns `ModerationResult(IsFlagged, Reason)`. Rejects offensive content with `ArgumentException`.
+
+#### SemanticService (`ISemanticService`)
+- **Implementation**: `OpenAISemanticService`.
+- **Method**: `FindDuplicateAsync(newItem, existingItems)`.
+- **Backing**: OpenAI Chat Completion (GPT-3.5/4o).
+- **Purpose**: Identifies semantic duplicates for activity merging.
 
 ---
 ## 9. Controllers & Endpoints
-Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body. Auth: A=Requires JWT, An=AllowAnonymous.
+Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body. Auth: A=Requires JWT, An=AllowAnonymous, Adm=Admin Only.
 
 ### ActivitiesController (`/api/activities`)
 | Method | Route           | Auth | Body                | Returns              | Notes                                                |
@@ -435,6 +378,15 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | DELETE | /api/reviews/{reviewId}/like                               | A    | —                         | 204 NoContent        | Unlike a review (idempotent)                       |
 | GET    | /api/reviews/liked                                         | A    | —                         | `ExploreReviewDto[]` | User's liked reviews                               |
 
+### TagsController (`/api/tags`)
+| Method | Route                                        | Auth | Body | Returns     | Notes                        |
+| ------ | -------------------------------------------- | ---- | ---- | ----------- | ---------------------------- |
+| GET    | /api/tags/popular (Q: count)                 | An   | —    | `TagDto[]`  | Popular approved tags        |
+| GET    | /api/tags/search (Q: q, count)               | A    | —    | `TagDto[]`  | Search tags                  |
+| POST   | /api/admin/tags/{id}/approve                 | Adm  | —    | 200         | Admin: Approve tag           |
+| POST   | /api/admin/tags/{id}/ban                     | Adm  | —    | 200         | Admin: Ban tag               |
+| POST   | /api/admin/tags/{id}/merge/{targetId}        | Adm  | —    | 200         | Admin: Merge source to target|
+
 ### RecommendationController (`/api/recommendations`)
 | Method | Route                                            | Auth | Body | Returns               | Notes                                   |
 | ------ | ------------------------------------------------ | ---- | ---- | --------------------- | --------------------------------------- |
@@ -485,6 +437,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - Batch `IsLiked` checking prevents N+1 queries
 - Pagination: max 100 items per page (default 20)
 - Rating required for both Reviews and CheckIns
+- **Moderation**: Content is checked against OpenAI policies.
 
 ### Events
 - Start time must be in future
@@ -497,16 +450,18 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - Name must be unique per place (case-insensitive)
 - ActivityKind is optional
 - Cascade deletes when parent Place is deleted
+- **Moderation**: Content is checked.
+- **Deduplication**: Semantically similar activities are merged (e.g. "Hoops" = "Basketball").
 
 ### Friends
 - Prevents: duplicates, self-addition, blocked users
 - Bidirectional relationship: accepting creates two Accepted rows
 - Friend requests are Pending until accepted
 
-### Tags (Pending Full Implementation)
+### Tags
 - Tag moderation flags exist: `IsBanned`, `IsApproved`
 - Canonical tag relationship via `CanonicalTagId`
-- **Status**: Models and database schema exist, but no controller endpoints or moderation workflow implemented yet
+- Admins can merge tags.
 
 ### CheckIns
 - Merged into `Review` model via `ReviewType` enum.
@@ -533,9 +488,6 @@ dotnet ef database update --context Conquest.Data.Auth.AuthDbContext
 dotnet ef migrations add <MigrationName> --context Conquest.Data.App.AppDbContext
 dotnet ef database update --context Conquest.Data.App.AppDbContext
 ```
-
-### Legacy Note (From Original UserGuide.md)
-Pending model changes warning indicates migrations not generated. Resolve by adding and updating the relevant context as above.
 
 ---
 ## 13. Conventions & Extension Points
@@ -664,7 +616,24 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 - Set up Redis key expiration monitoring
 
 ---
-## 16. Quick Reference Summary
+## 16. Content Moderation & AI
+
+### Moderation
+- **Scope**: User-generated text (Reviews, Place Names, Activity Names, Tags).
+- **Service**: OpenAI Moderation API (Free).
+- **Policy**:
+  - Hate, Harassment, Self-harm, Violence, Sexual content => Rejected.
+  - Error: 400 Bad Request with "Content rejected: Reason".
+  - Fail-Open: If moderation API fails, we allow content (except on explicit safety triggers).
+
+### Semantic Logic
+- **Scope**: Duplicate Activity Names (e.g., "Hoops" & "Basketball").
+- **Service**: OpenAI Chat Completion (GPT-4o/3.5).
+- **Behavior**: Merges new activity into existing one if semantically identical.
+- **Feedback**: Returns warning message in `ActivityDetailsDto`.
+
+---
+## 17. Quick Reference Summary
 | Layer      | Items                                                           |
 | ---------- | --------------------------------------------------------------- |
 | Auth       | Register, Login, Me, Password flows                             |
@@ -674,9 +643,10 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 | Friends    | Add, Accept, List, Incoming, Remove                             |
 | Profiles   | Me, Search                                                      |
 | Reviews    | Create, List by scope, Like/Unlike, Explore Feed (with filters) |
+| Tags       | Search, Popular, Moderation                                     |
 
 ---
-## 17. Error Response Formats
+## 18. Error Response Formats
 
 ### Standard Error Response
 All errors follow the ProblemDetails format:
@@ -715,9 +685,10 @@ All errors follow the ProblemDetails format:
 - Duplicate place: "A place already exists at this location."
 - Event duration: "Event duration must be at least 15 minutes."
 - Self-friend request: "You cannot add yourself as a friend."
+- Content moderation: "Content rejected: Hate/Harassment."
 
 ---
-## 18. Suggested Future Enhancements
+## 19. Suggested Future Enhancements
 
 **High Priority:**
 - ✅ ~~PlaceType feature (Verified vs Custom)~~ - COMPLETED
@@ -727,7 +698,9 @@ All errors follow the ProblemDetails format:
 - ✅ ~~CheckIns feature implementation~~ - COMPLETED (Merged into Reviews)
 - ✅ ~~Soft delete for Places with historical review preservation~~ - COMPLETED
 - ✅ ~~Enhanced Favorites (Counter + History)~~ - COMPLETED
-- Implement tag moderation system (approval/banning workflow, endpoints)
+- ✅ ~~Implement tag moderation system (approval/banning workflow, endpoints)~~ - COMPLETED
+- ✅ ~~AI Content Moderation (Reviews, Activities, Places)~~ - COMPLETED
+- ✅ ~~Semantic Deduplication (Activities)~~ - COMPLETED
 - Normalize and validate rating range (1–5) at DTO/model layer
 
 **Medium Priority:**
@@ -743,7 +716,7 @@ All errors follow the ProblemDetails format:
 - Redis cache invalidation strategy for frequently updated data
 
 ---
-## 19. Agent Usage Notes
+## 20. Agent Usage Notes
 When generating or modifying code:
 - Respect existing route and DTO contracts documented above.
 - Validate business rules listed in Section 10 for new features.

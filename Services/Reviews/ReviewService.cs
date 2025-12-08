@@ -10,6 +10,7 @@ namespace Conquest.Services.Reviews;
 public class ReviewService(
     AppDbContext appDb,
     IFriendService friendService,
+    Conquest.Services.Moderation.IModerationService moderationService,
     ILogger<ReviewService> logger) : IReviewService
 {
     public async Task<ReviewDto> CreateReviewAsync(int placeActivityId, CreateReviewDto dto, string userId, string userName)
@@ -40,6 +41,17 @@ public class ReviewService(
             throw new ArgumentException("Content must be at most 1000 characters.");
         }
 
+        // Moderation Check for Content
+        if (!string.IsNullOrWhiteSpace(dto.Content))
+        {
+            var modResult = await moderationService.CheckContentAsync(dto.Content);
+            if (modResult.IsFlagged)
+            {
+                logger.LogWarning("Review content flagged: {Reason}", modResult.Reason);
+                throw new ArgumentException($"Content rejected: {modResult.Reason}");
+            }
+        }
+
         var review = new Review
         {
             PlaceActivityId = placeActivityId,
@@ -67,6 +79,14 @@ public class ReviewService(
                 var tag = await appDb.Tags.FirstOrDefaultAsync(t => t.Name == tagName);
                 if (tag == null)
                 {
+                    // Moderate new tag name
+                    var tagMod = await moderationService.CheckContentAsync(tagName);
+                    if (tagMod.IsFlagged)
+                    {
+                        logger.LogWarning("Tag creation flagged: {TagName} - {Reason}", tagName, tagMod.Reason);
+                        continue; // Skip this bad tag, don't block entire review
+                    }
+
                     tag = new Tag { Name = tagName };
                     appDb.Tags.Add(tag);
                     // Save immediately to get Id? Or just rely on EF tracking?

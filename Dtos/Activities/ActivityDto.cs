@@ -20,7 +20,8 @@ namespace Conquest.Dtos.Activities
         string Name,
         int? ActivityKindId,
         string? ActivityKindName,
-        DateTime CreatedUtc
+        DateTime CreatedUtc,
+        string? WarningMessage = null
     );
     
     public record ActivityKindDto(int Id, string Name);

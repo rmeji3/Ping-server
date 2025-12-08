@@ -30,6 +30,10 @@ public class ReviewsController(IReviewService reviewService, ILogger<ReviewsCont
         {
             return NotFound(ex.Message);
         }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
     
 

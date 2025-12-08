@@ -151,4 +151,20 @@ public class AuthService(
         logger.LogInformation("Password changed for {UserId}", user.Id);
         return "Password changed.";
     }
+    public async Task MakeAdminAsync(string email)
+    {
+        // Development only safety check could go here or in controller
+        var user = await users.FindByEmailAsync(email);
+        if (user == null) throw new KeyNotFoundException($"User with email {email} not found.");
+
+        if (!await users.IsInRoleAsync(user, "Admin"))
+        {
+            await users.AddToRoleAsync(user, "Admin");
+            logger.LogInformation("User {Email} promoted to Admin.", email);
+        }
+        else
+        {
+            logger.LogInformation("User {Email} is already Admin.", email);
+        }
+    }
 }

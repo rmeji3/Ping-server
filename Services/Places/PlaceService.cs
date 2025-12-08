@@ -17,6 +17,7 @@ public class PlaceService(
     IConfiguration config,
     IPlaceNameService placeNameService,
     IFriendService friendService,
+    Services.Moderation.IModerationService moderationService,
     ILogger<PlaceService> logger) : IPlaceService
 {
     public async Task<PlaceDetailsDto> CreatePlaceAsync(UpsertPlaceDto dto, string userId)
@@ -50,6 +51,20 @@ public class PlaceService(
         // 2. If Visibility is Private/Friends -> Always create new (Allow duplicates)
 
         var finalName = dto.Name.Trim();
+
+        // Moderate Place Name (only if User Provided)
+        // If Verified/Google provided, we might trust it? But safest to just check all if user can edit it.
+        // User PROVIDES the name in dto.Name initially, even if we later overwrite it with Google Name.
+        // But if they use PlaceType.Custom, they set the name.
+        if (dto.Type == PlaceType.Custom)
+        {
+             var mod = await moderationService.CheckContentAsync(finalName);
+             if (mod.IsFlagged)
+             {
+                 logger.LogWarning("Place name flagged: {Name} - {Reason}", finalName, mod.Reason);
+                 throw new ArgumentException($"Place name rejected: {mod.Reason}");
+             }
+        }
 
         if (dto.Visibility == PlaceVisibility.Public)
         {

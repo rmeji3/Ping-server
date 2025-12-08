@@ -34,6 +34,10 @@ namespace Conquest.Controllers.Places
             {
                 return BadRequest(new { error = ex.Message });
             }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
         }
 
         // GET /api/places/{id}

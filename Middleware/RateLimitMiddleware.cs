@@ -91,16 +91,14 @@ public class RateLimitMiddleware : IMiddleware
 
                 return;
             }
-
-            await next(context);
         }
         catch (Exception ex)
         {
+            // Redis failure: log and allow request
             _logger.LogError(ex, "Error in rate limiting middleware. Allowing request to proceed.");
-            // Fail open: if Redis is down, allow the request
-            // This prevents Redis outages from taking down the entire API
-            await next(context);
         }
+
+        await next(context);
     }
 
     private static string GetClientIp(HttpContext context)

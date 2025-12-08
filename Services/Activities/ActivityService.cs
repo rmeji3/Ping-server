@@ -2,12 +2,18 @@ using Conquest.Data.App;
 using Conquest.Dtos.Activities;
 using Conquest.Models.Activities;
 using Conquest.Models.Places;
+using Conquest.Services.AI;
+using Conquest.Services.Moderation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Conquest.Services.Activities;
 
-public class ActivityService(AppDbContext db, ILogger<ActivityService> logger) : IActivityService
+public class ActivityService(
+    AppDbContext db, 
+    IModerationService moderationService, 
+    ISemanticService semanticService,
+    ILogger<ActivityService> logger) : IActivityService
 {
     public async Task<ActivityDetailsDto> CreateActivityAsync(CreateActivityDto dto)
     {
@@ -23,6 +29,14 @@ public class ActivityService(AppDbContext db, ILogger<ActivityService> logger) :
         var name = dto.Name.Trim();
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Activity name is required.");
+        
+        // Moderation check
+        var mod = await moderationService.CheckContentAsync(name);
+        if (mod.IsFlagged)
+        {
+            logger.LogWarning("Activity name flagged: {Name} - {Reason}", name, mod.Reason);
+            throw new ArgumentException($"Activity name rejected: {mod.Reason}");
+        }
 
         // 3. Optional: validate ActivityKind if provided
         ActivityKind? kind = null;
@@ -37,13 +51,36 @@ public class ActivityService(AppDbContext db, ILogger<ActivityService> logger) :
         }
 
         // 4. Enforce uniqueness per place (PlaceId + Name)
-        var exists = await db.PlaceActivities
-            .AnyAsync(pa => pa.PlaceId == dto.PlaceId && pa.Name == name);
+        var existingActivities = await db.PlaceActivities
+            .Where(pa => pa.PlaceId == dto.PlaceId)
+            .ToListAsync();
 
-        if (exists)
+        // 4a. Exact Match
+        var exactMatch = existingActivities.FirstOrDefault(pa => pa.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (exactMatch != null)
         {
-            logger.LogWarning("CreateActivity failed: Activity '{Name}' already exists at Place {PlaceId}.", name, dto.PlaceId);
-            throw new InvalidOperationException("An activity with that name already exists at this place.");
+            logger.LogInformation("CreateActivity: Exact match found for '{Name}'. Returning existing ID {Id}.", name, exactMatch.Id);
+            // Return existing activity details
+            return new ActivityDetailsDto(
+                exactMatch.Id, exactMatch.PlaceId, exactMatch.Name, exactMatch.ActivityKindId, exactMatch.ActivityKind?.Name, exactMatch.CreatedUtc,
+                WarningMessage: $"Activity '{name}' already exists here."
+            );
+        }
+
+        // 4b. AI Semantic Match
+        var existingNames = existingActivities.Select(x => x.Name).ToList();
+        if (existingNames.Count > 0)
+        {
+            var semanticMatchName = await semanticService.FindDuplicateAsync(name, existingNames);
+            if (semanticMatchName != null)
+            {
+                var match = existingActivities.First(x => x.Name == semanticMatchName);
+                 logger.LogInformation("CreateActivity: Semantic duplicate found. '{New}' -> '{Existing}'. Returning ID {Id}.", name, match.Name, match.Id);
+                 return new ActivityDetailsDto(
+                    match.Id, match.PlaceId, match.Name, match.ActivityKindId, match.ActivityKind?.Name, match.CreatedUtc,
+                    WarningMessage: $"Merged '{name}' into existing activity '{match.Name}'."
+                );
+            }
         }
 
         // 5. Create PlaceActivity
