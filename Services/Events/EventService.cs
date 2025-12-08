@@ -4,6 +4,7 @@ using Conquest.Dtos.Common;
 using Conquest.Dtos.Events;
 using Conquest.Models.AppUsers;
 using Conquest.Models.Events;
+using Conquest.Services.Moderation;
 using Conquest.Utils;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -14,10 +15,27 @@ namespace Conquest.Services.Events;
 public class EventService(
     AppDbContext appDb,
     UserManager<AppUser> userManager,
+    IModerationService moderationService,
     ILogger<EventService> logger) : IEventService
 {
     public async Task<EventDto> CreateEventAsync(CreateEventDto dto, string userId)
     {
+        // 1. Moderate content
+        var titleCheck = await moderationService.CheckContentAsync(dto.Title);
+        if (titleCheck.IsFlagged)
+        {
+            throw new ArgumentException($"Title violates content policy: {titleCheck.Reason}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.Description))
+        {
+            var descCheck = await moderationService.CheckContentAsync(dto.Description);
+            if (descCheck.IsFlagged)
+            {
+                throw new ArgumentException($"Description violates content policy: {descCheck.Reason}");
+            }
+        }
+
         var ev = new Event
         {
             Title = dto.Title,
@@ -135,6 +153,7 @@ public class EventService(
         var query = appDb.Events
             .Include(e => e.Attendees)
             .Where(e => e.IsPublic)
+            .Where(e => e.EndTime > DateTime.UtcNow)
             .Where(e => e.Latitude >= minLat && e.Latitude <= maxLat &&
                         e.Longitude >= minLng && e.Longitude <= maxLng)
             .OrderBy(e => e.StartTime);

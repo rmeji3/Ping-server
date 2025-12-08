@@ -1,4 +1,5 @@
 using System.Text;
+using Amazon.S3;
 using Conquest.Data.Auth;
 using Conquest.Data.App;
 using Conquest.Dtos.Auth;
@@ -15,6 +16,7 @@ using Conquest.Services.Auth;
 using Conquest.Services.Redis;
 using Conquest.Services.Google;
 using Conquest.Services.Recommendations;
+using Conquest.Services.Storage;
 using Microsoft.SemanticKernel;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -144,7 +146,22 @@ builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddHttpClient<IPlaceNameService, GooglePlacesService>();
+builder.Services.AddScoped<IPlaceNameService, GooglePlacesService>();
+
+// --- AWS S3 & Storage ---
+// --- AWS S3 & Storage ---
+var awsOptions = builder.Configuration.GetAWSOptions();
+// Explicitly set credentials if they are in the config (e.g. UserSecrets)
+// This fixes issues where the SDK fails to resolve them from the "AWS" section automatically
+var awsAccessKey = builder.Configuration["AWS:AccessKey"];
+var awsSecretKey = builder.Configuration["AWS:SecretKey"];
+if (!string.IsNullOrEmpty(awsAccessKey) && !string.IsNullOrEmpty(awsSecretKey))
+{
+    awsOptions.Credentials = new Amazon.Runtime.BasicAWSCredentials(awsAccessKey, awsSecretKey);
+}
+builder.Services.AddDefaultAWSOptions(awsOptions);
+builder.Services.AddAWSService<IAmazonS3>();
+builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddHttpClient<Conquest.Services.Moderation.IModerationService, Conquest.Services.Moderation.OpenAIModerationService>();
 builder.Services.AddScoped<Conquest.Services.AI.ISemanticService, Conquest.Services.AI.OpenAISemanticService>();
 builder.Services.AddScoped<RecommendationService>();

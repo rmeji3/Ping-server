@@ -46,4 +46,25 @@ public class ProfilesController(IProfileService profileService) : ControllerBase
             return BadRequest(ex.Message);
         }
     }
+    [HttpPost("me/image")]
+    public async Task<ActionResult<string>> UploadProfileImage(IFormFile file)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var url = await profileService.UpdateProfileImageAsync(userId, file);
+            return Ok(new { Url = url });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception)
+        {
+            // Log ex
+            return StatusCode(500, "An error occurred while uploading the image.");
+        }
+    }
 }

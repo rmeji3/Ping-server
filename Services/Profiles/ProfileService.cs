@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
+using Conquest.Services.Storage;
+
 namespace Conquest.Services.Profiles;
 
-public class ProfileService(UserManager<AppUser> userManager, ILogger<ProfileService> logger) : IProfileService
+public class ProfileService(UserManager<AppUser> userManager, ILogger<ProfileService> logger, IStorageService storageService) : IProfileService
 {
     public async Task<PersonalProfileDto> GetMyProfileAsync(string userId)
     {
@@ -54,5 +56,44 @@ public class ProfileService(UserManager<AppUser> userManager, ILogger<ProfileSer
         logger.LogDebug("Profile search for '{Query}' returned {Count} results.", query, users.Count);
 
         return users;
+    }
+
+
+
+    public async Task<string> UpdateProfileImageAsync(string userId, IFormFile file)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null)
+        {
+            throw new KeyNotFoundException("User not found.");
+        }
+
+        // Validate file
+        // 5MB limit
+        if (file.Length > 5 * 1024 * 1024)
+        {
+            throw new ArgumentException("File size exceeds 5MB limit.");
+        }
+
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp" };
+        if (!allowedTypes.Contains(file.ContentType))
+        {
+            throw new ArgumentException("Invalid file type. Only JPEG, PNG, and WebP are allowed.");
+        }
+
+        // Generate key: profiles/{userId}/{timestamp}-{random}.ext
+        var ext = Path.GetExtension(file.FileName);
+        var key = $"profiles/{userId}/{DateTime.UtcNow.Ticks}{ext}";
+
+        // Upload
+        var url = await storageService.UploadFileAsync(file, key);
+
+        // Update User
+        user.ProfileImageUrl = url;
+        await userManager.UpdateAsync(user);
+        
+        logger.LogInformation("Updated profile image for user {UserId} to {Url}", userId, url);
+
+        return url;
     }
 }
