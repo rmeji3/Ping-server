@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using Conquest.Dtos.Profiles;
 using Conquest.Services.Profiles;
+using Conquest.Services.Reviews;
+using Conquest.Dtos.Common;
+using Conquest.Dtos.Reviews;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,7 +12,7 @@ namespace Conquest.Controllers.Profiles;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class ProfilesController(IProfileService profileService) : ControllerBase
+public class ProfilesController(IProfileService profileService, IReviewService reviewService) : ControllerBase
 {
     // GET /api/profiles/me
     [HttpGet("me")]
@@ -46,6 +49,86 @@ public class ProfilesController(IProfileService profileService) : ControllerBase
             return BadRequest(ex.Message);
         }
     }
+
+    // GET /api/profiles/{id}
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ProfileDto>> GetProfile(string id)
+    {
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (currentUserId is null) return Unauthorized();
+
+        try
+        {
+            var profile = await profileService.GetProfileByIdAsync(id, currentUserId);
+            return Ok(profile);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound("User not found.");
+        }
+    }
+
+    // GET /api/profiles/{id}/summary
+    [HttpGet("{id}/summary")]
+    public async Task<ActionResult<QuickProfileDto>> GetQuickProfile(string id)
+    {
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (currentUserId is null) return Unauthorized();
+
+        try
+        {
+            var profile = await profileService.GetQuickProfileAsync(id, currentUserId);
+            return Ok(profile);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound("User not found.");
+        }
+    }
+
+    // GET /api/profiles/{id}/reviews?pageNumber=1&pageSize=10
+    [HttpGet("{id}/reviews")]
+    public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetUserReviews(string id, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+    {
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (currentUserId is null) return Unauthorized();
+
+        // 1. Check Privacy (Can I see reviews?)
+        // Reuse ProfileService logic? Or just duplicate simple check?
+        // Let's call GetProfileByIdAsync to get the privacy status and friendship status.
+        // It's a bit heavy but ensures consistency.
+        // Optimized way: Add a lightweight "CanViewReviews" method.
+        // For now, let's just fetch the profile and check IsFriends + Privacy.
+        try
+        {
+            var profile = await profileService.GetQuickProfileAsync(id, currentUserId);
+            
+            bool canView = profile.Id == currentUserId || 
+                           profile.ReviewsPrivacy == PrivacyConstraint.Public || 
+                           (profile.ReviewsPrivacy == PrivacyConstraint.FriendsOnly && profile.IsFriends);
+
+            if (!canView)
+            {
+                // Return empty or Forbidden?
+                // Let's return empty list to not leak existence, or forbidden if strict.
+                // Usually empty is safer/cleaner for UI "No reviews".
+                // But if it's explicitly private, UI should know.
+                // The frontend checks permissions via "ReviewsPrivacy" enum.
+                // So if we are here, frontend shouldn't have called it unless allowed.
+                // Backend must enforce.
+                return Forbid();
+            }
+
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+            var reviews = await reviewService.GetUserReviewsAsync(id, currentUserId, pagination);
+            return Ok(reviews);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound("User not found.");
+        }
+    }
+    
     [HttpPost("me/image")]
     public async Task<ActionResult<string>> UploadProfileImage(IFormFile file)
     {

@@ -10,7 +10,7 @@ public record EventDto(
     string Location,
     UserSummaryDto CreatedBy,
     DateTime CreatedAt,
-    List<UserSummaryDto> Attendees,
+    List<EventAttendeeDto> Attendees,
     string Status,
     double latitude,
     double longitude,
@@ -24,7 +24,17 @@ public record UserSummaryDto(
     string Id,
     string UserName,
     string? FirstName,
-    string? LastName
+    string? LastName,
+    string? ProfilePictureUrl
+);
+
+public record EventAttendeeDto(
+    string Id,
+    string UserName,
+    string? FirstName,
+    string? LastName,
+    string? ProfilePictureUrl,
+    string Status
 );
 
 public record CreateEventDto(

@@ -1,7 +1,9 @@
 using Conquest.Data.App;
 using Conquest.Dtos.Common;
 using Conquest.Dtos.Reviews;
+using Conquest.Models.AppUsers;
 using Conquest.Models.Reviews;
+using Microsoft.AspNetCore.Identity;
 using Conquest.Services.Friends;
 using Conquest.Utils;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +14,7 @@ namespace Conquest.Services.Reviews;
 public class ReviewService(
     AppDbContext appDb,
     IFriendService friendService,
+    UserManager<AppUser> userManager,
     Conquest.Services.Moderation.IModerationService moderationService,
     ILogger<ReviewService> logger) : IReviewService
 {
@@ -104,12 +107,16 @@ public class ReviewService(
 
         logger.LogInformation("Review created for Activity {PlaceActivityId} by {UserName}. Rating: {Rating}", placeActivityId, userName, dto.Rating);
 
+        var user = await userManager.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        string? profileUrl = user?.ProfileImageUrl;
+
         return new ReviewDto(
             review.Id,
             review.Rating,
             review.Content,
             review.UserId,
             review.UserName,
+            profileUrl,
             review.CreatedAt,
             review.Likes,
             false, // IsLiked
@@ -170,12 +177,30 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
+        // Collect UserIds to fetch Profile Pictures
+        var userIds = reviews.Select(r => r.UserId).Distinct().ToList();
+        var userMap = new Dictionary<string, string?>();
+        if (userIds.Count > 0)
+        {
+             // We only need Id and ProfileImageUrl
+             // TODO: Optimize if necessary, but fetching a few users is okay.
+             // Using AsNoTracking and selecting only needed fields if possible, but IdentifyUser is strict.
+             // We can use a raw query or just fetch users.
+             var users = await userManager.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.ProfileImageUrl })
+                .ToListAsync();
+             
+             foreach(var u in users) userMap[u.Id] = u.ProfileImageUrl;
+        }
+
         var reviewDtos = reviews.Select(r => new ReviewDto(
             r.Id,
             r.Rating,
             r.Content,
             r.UserId,
             r.UserName,
+            userMap.GetValueOrDefault(r.UserId), // ProfilePictureUrl
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), // IsLiked
@@ -269,6 +294,18 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
+        // Collect UserIds
+        var userIds = reviews.Select(r => r.UserId).Distinct().ToList();
+        var userMap = new Dictionary<string, string?>();
+        if (userIds.Count > 0)
+        {
+             var users = await userManager.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.ProfileImageUrl })
+                .ToListAsync();
+             foreach(var u in users) userMap[u.Id] = u.ProfileImageUrl;
+        }
+
         var result = reviews.Select(r => new ExploreReviewDto(
             r.Id,
             r.PlaceActivityId,
@@ -281,7 +318,9 @@ public class ReviewService(
             r.PlaceActivity.Place.Longitude,
             r.Rating,
             r.Content,
+            r.UserId,
             r.UserName,
+            userMap.GetValueOrDefault(r.UserId),
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), // IsLiked
@@ -374,7 +413,21 @@ public class ReviewService(
                     .ThenInclude(rt => rt.Tag)
             .AsNoTracking()
             .OrderByDescending(rl => rl.CreatedAt)
-            .Select(rl => new ExploreReviewDto(
+            .ToListAsync();
+
+        // Collect UserIds
+        var userIds = likedReviews.Select(r => r.Review.UserId).Distinct().ToList();
+        var userMap = new Dictionary<string, string?>();
+        if (userIds.Count > 0)
+        {
+             var users = await userManager.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.ProfileImageUrl })
+                .ToListAsync();
+             foreach(var u in users) userMap[u.Id] = u.ProfileImageUrl;
+        }
+
+        var result = likedReviews.Select(rl => new ExploreReviewDto(
                 rl.Review.Id,
                 rl.Review.PlaceActivityId,
                 rl.Review.PlaceActivity.PlaceId,
@@ -386,18 +439,19 @@ public class ReviewService(
                 rl.Review.PlaceActivity.Place.Longitude,
                 rl.Review.Rating,
                 rl.Review.Content,
+                rl.Review.UserId,
                 rl.Review.UserName,
+                userMap.GetValueOrDefault(rl.Review.UserId),
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
                 true, // IsLiked - always true for liked reviews
                 rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(), // Tags
                 rl.Review.PlaceActivity.Place.IsDeleted
-            ))
-            .ToListAsync();
+            )).ToList();
 
-        logger.LogInformation("Liked reviews for {UserId} retrieved: {Count} reviews", userId, likedReviews.Count);
+        logger.LogInformation("Liked reviews for {UserId} retrieved: {Count} reviews", userId, result.Count);
 
-        return likedReviews.ToPaginatedResult(pagination);
+        return result.ToPaginatedResult(pagination);
     }
     public async Task<PaginatedResult<ExploreReviewDto>> GetMyReviewsAsync(string userId, PaginationParams pagination)
     {
@@ -425,6 +479,18 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
+        // Collect UserIds (Just me, but consistent logic)
+        var userIds = myReviews.Select(r => r.UserId).Distinct().ToList();
+        var userMap = new Dictionary<string, string?>();
+        if (userIds.Count > 0)
+        {
+             var users = await userManager.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.ProfileImageUrl })
+                .ToListAsync();
+             foreach(var u in users) userMap[u.Id] = u.ProfileImageUrl;
+        }
+
         var result = myReviews.Select(r => new ExploreReviewDto(
             r.Id,
             r.PlaceActivityId,
@@ -437,7 +503,9 @@ public class ReviewService(
             r.PlaceActivity.Place.Longitude,
             r.Rating,
             r.Content,
+            r.UserId,
             r.UserName,
+            userMap.GetValueOrDefault(r.UserId),
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), // IsLiked
@@ -448,5 +516,73 @@ public class ReviewService(
         logger.LogInformation("My reviews fetched for {UserId}: {Count} reviews", userId, result.Count);
 
         return result.ToPaginatedResult(pagination);
+    }
+
+    public async Task<PaginatedResult<ExploreReviewDto>> GetUserReviewsAsync(string targetUserId, string currentUserId, PaginationParams pagination)
+    {
+        var userReviews = await appDb.Reviews
+            .Where(r => r.UserId == targetUserId)
+            .Include(r => r.PlaceActivity)
+                .ThenInclude(pa => pa.Place)
+            .Include(r => r.PlaceActivity)
+                .ThenInclude(pa => pa.ActivityKind)
+            .Include(r => r.ReviewTags)
+                .ThenInclude(rt => rt.Tag)
+            .AsNoTracking()
+            .OrderByDescending(r => r.CreatedAt)
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .ToListAsync();
+
+        var count = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId);
+
+        var reviewIds = userReviews.Select(r => r.Id).ToList();
+        var likedReviewIds = new HashSet<int>();
+        
+        if (reviewIds.Count > 0 && !string.IsNullOrEmpty(currentUserId))
+        {
+            likedReviewIds = await appDb.ReviewLikes
+                .Where(rl => rl.UserId == currentUserId && reviewIds.Contains(rl.ReviewId))
+                .Select(rl => rl.ReviewId)
+                .ToHashSetAsync();
+        }
+
+        // Collect UserIds (Target user)
+        var userIds = userReviews.Select(r => r.UserId).Distinct().ToList();
+        var userMap = new Dictionary<string, string?>();
+        if (userIds.Count > 0)
+        {
+             var users = await userManager.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.ProfileImageUrl })
+                .ToListAsync();
+             foreach(var u in users) userMap[u.Id] = u.ProfileImageUrl;
+        }
+
+        var result = userReviews.Select(r => new ExploreReviewDto(
+            r.Id,
+            r.PlaceActivityId,
+            r.PlaceActivity.PlaceId,
+            r.PlaceActivity.Place.Name,
+            r.PlaceActivity.Place.Address ?? string.Empty,
+            r.PlaceActivity.Name,
+            r.PlaceActivity.ActivityKind?.Name,
+            r.PlaceActivity.Place.Latitude,
+            r.PlaceActivity.Place.Longitude,
+            r.Rating,
+            r.Content,
+            r.UserId,
+            r.UserName,
+            userMap.GetValueOrDefault(r.UserId),
+            r.CreatedAt,
+            r.Likes,
+            likedReviewIds.Contains(r.Id), 
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
+            r.PlaceActivity.Place.IsDeleted
+        )).ToList();
+
+        logger.LogInformation("User reviews fetched for {UserId}: {Count} reviews", targetUserId, result.Count);
+
+        return new PaginatedResult<ExploreReviewDto>(result, count, pagination.PageNumber, pagination.PageSize);
     }
 }

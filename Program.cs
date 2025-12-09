@@ -86,6 +86,7 @@ if (!string.IsNullOrEmpty(rateLimitPlaceCreation))
 
 
 // --- EF Core (SQLite) ---
+// change to postgres later for production
 // Auth (Identity tables)
 builder.Services.AddDbContext<AuthDbContext>(opt =>
     opt.UseSqlite(builder.Configuration.GetConnectionString("AuthConnection")));
@@ -149,7 +150,6 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlaceNameService, GooglePlacesService>();
 
 // --- AWS S3 & Storage ---
-// --- AWS S3 & Storage ---
 var awsOptions = builder.Configuration.GetAWSOptions();
 // Explicitly set credentials if they are in the config (e.g. UserSecrets)
 // This fixes issues where the SDK fails to resolve them from the "AWS" section automatically
@@ -166,7 +166,6 @@ builder.Services.AddHttpClient<Conquest.Services.Moderation.IModerationService, 
 builder.Services.AddScoped<Conquest.Services.AI.ISemanticService, Conquest.Services.AI.OpenAISemanticService>();
 builder.Services.AddScoped<RecommendationService>();
 
-// --- Semantic Kernel ---
 // --- Semantic Kernel ---
 builder.Services.AddKernel(); // Always register Kernel
 
@@ -201,7 +200,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // --- Controllers + Swagger ---
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddTransient<Conquest.Middleware.GlobalExceptionHandler>();
 builder.Services.AddScoped<Conquest.Middleware.RateLimitMiddleware>();
@@ -273,16 +276,11 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// app.UseHttpsRedirection();
-
 app.UseRouting();
 app.UseMiddleware<Conquest.Middleware.RateLimitMiddleware>();
 app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseStaticFiles();
-
-
 
 app.MapControllers();
 

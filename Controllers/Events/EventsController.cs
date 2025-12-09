@@ -102,6 +102,19 @@ namespace Conquest.Controllers.Events
             return Ok(result);
         }
 
+        // GET /api/events/place/{placeId}?pageNumber=1&pageSize=20
+        [HttpGet("place/{placeId:int}")]
+        public async Task<ActionResult<PaginatedResult<EventDto>>> GetByPlace(
+            int placeId,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+            var result = await eventService.GetEventsByPlaceAsync(placeId, userId, pagination);
+            return Ok(result);
+        }
+
         // DELETE /api/events/{id}
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> DeleteEvent(int id)
@@ -131,6 +144,65 @@ namespace Conquest.Controllers.Events
             var result = await eventService.JoinEventAsync(id, userId);
             if (!result) return NotFound("Event not found.");
             return Ok("Joined event.");
+        }
+
+        // POST /api/events/{id}/attend
+        [HttpPost("{id:int}/attend")]
+        public async Task<IActionResult> AttendEvent(int id)
+        {
+            // Reuse Join logic
+            return await JoinEvent(id);
+        }
+
+        public record InviteRequest(string UserId);
+
+        // POST /api/events/{id}/invite
+        [HttpPost("{id:int}/invite")]
+        public async Task<IActionResult> InviteUser(int id, [FromBody] InviteRequest req)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            if (string.IsNullOrEmpty(req.UserId)) return BadRequest("UserId is required.");
+
+            try
+            {
+                await eventService.InviteUserAsync(id, userId, req.UserId);
+                return Ok("User invited.");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
+        }
+
+        // POST /api/events/{id}/uninvite
+        [HttpPost("{id:int}/uninvite")]
+        public async Task<IActionResult> UninviteUser(int id, [FromBody] InviteRequest req)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            if (string.IsNullOrEmpty(req.UserId)) return BadRequest("UserId is required.");
+
+            try
+            {
+                var result = await eventService.UninviteUserAsync(id, userId, req.UserId);
+                if (!result) return NotFound("User not found in event list.");
+                return Ok("User uninvited.");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
         }
 
         // PATCH /api/Events/{id}

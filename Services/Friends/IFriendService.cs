@@ -1,5 +1,6 @@
 using Conquest.Dtos.Common;
 using Conquest.Dtos.Friends;
+using Conquest.Models.Friends;
 
 namespace Conquest.Services.Friends;
 
@@ -11,4 +12,5 @@ public interface IFriendService
     Task<string> AcceptFriendAsync(string userId, string friendUsername);
     Task<PaginatedResult<FriendSummaryDto>> GetIncomingRequestsAsync(string userId, PaginationParams pagination);
     Task<string> RemoveFriendAsync(string userId, string friendUsername);
+    Task<Friendship.FriendshipStatus> GetFriendshipStatusAsync(string userId, string targetUserId);
 }

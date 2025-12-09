@@ -7,4 +7,14 @@ public class EventAttendee
 
     public string UserId { get; set; } = null!;
     public DateTime JoinedAt { get; set; }
+    
+    public AttendeeStatus Status { get; set; } = AttendeeStatus.Attending;
+}
+
+public enum AttendeeStatus
+{
+    Attending,
+    Invited,
+    Declined,
+    Maybe
 }

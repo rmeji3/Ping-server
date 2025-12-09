@@ -79,7 +79,6 @@ public class PlaceService(
                     throw new InvalidOperationException("Verified places require an address.");
                 }
 
-                // Duplicate check: BY ADDRESS ONLY (no coordinate checking)
                 var existingByAddress = await db.Places
                     .Where(p => p.Visibility == PlaceVisibility.Public &&
                                 p.Type == PlaceType.Verified &&

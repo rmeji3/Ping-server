@@ -8,19 +8,24 @@ public static class EventMapper
 {
     public static EventDto MapToDto(Event ev, UserSummaryDto creatorSummary, Dictionary<string, AppUser> attendeeMap, string? currentUserId)
     {
-        var attendeeSummaries = ev.Attendees
-            .Where(a => attendeeMap.ContainsKey(a.UserId))
-            .Select(a =>
+        var attendeeSummaries = new List<EventAttendeeDto>();
+        if (ev.Attendees != null)
+        {
+            foreach (var att in ev.Attendees)
             {
-                var u = attendeeMap[a.UserId];
-                return new UserSummaryDto(
-                    u.Id,
-                    u.UserName!,
-                    u.FirstName,
-                    u.LastName
-                );
-            })
-            .ToList();
+                if (attendeeMap.TryGetValue(att.UserId, out var u))
+                {
+                    attendeeSummaries.Add(new EventAttendeeDto(
+                        u.Id,
+                        u.UserName!,
+                        u.FirstName,
+                        u.LastName,
+                        u.ProfileImageUrl,
+                        att.Status.ToString().ToLower()
+                    ));
+                }
+            }
+        }
 
         // Determine status based on currentUserId
         string status;

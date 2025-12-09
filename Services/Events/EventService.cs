@@ -81,7 +81,8 @@ public class EventService(
         {
             EventId = ev.Id,
             UserId = userId,
-            JoinedAt = DateTime.UtcNow
+            JoinedAt = DateTime.UtcNow,
+            Status = AttendeeStatus.Attending
         };
         appDb.EventAttendees.Add(attendance);
         await appDb.SaveChangesAsync();
@@ -91,7 +92,7 @@ public class EventService(
         // Return DTO
         // For a fresh event, we know the creator is the only attendee
         var user = await userManager.FindByIdAsync(userId);
-        var creatorSummary = new UserSummaryDto(user!.Id, user.UserName!, user.FirstName, user.LastName);
+        var creatorSummary = new UserSummaryDto(user!.Id, user.UserName!, user.FirstName, user.LastName, user.ProfileImageUrl);
         
         return new EventDto(
             ev.Id,
@@ -103,7 +104,10 @@ public class EventService(
             ev.Location,
             creatorSummary,
             ev.CreatedAt,
-            new List<UserSummaryDto> { creatorSummary },
+            new List<EventAttendeeDto> 
+            { 
+                new EventAttendeeDto(creatorSummary.Id, creatorSummary.UserName, creatorSummary.FirstName, creatorSummary.LastName, creatorSummary.ProfilePictureUrl, "attending") 
+            },
             "attending",
             ev.Latitude,
             ev.Longitude,
@@ -204,8 +208,8 @@ public class EventService(
         // Re-fetch or reuse? Reuse is fine but need creator user info
         var creatorUser = await userManager.FindByIdAsync(ev.CreatedById);
         var creatorSummary = creatorUser != null
-            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.FirstName, creatorUser.LastName)
-            : new UserSummaryDto("?", "Unknown", null, null);
+            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.FirstName, creatorUser.LastName, creatorUser.ProfileImageUrl)
+            : new UserSummaryDto("?", "Unknown", null, null, null);
             
         // Get attendees
         var attendeeIds = ev.Attendees.Select(a => a.UserId).Distinct().ToList();
@@ -226,8 +230,8 @@ public class EventService(
         // Load users for creator + attendees
         var creatorUser = await userManager.FindByIdAsync(ev.CreatedById);
         var creatorSummary = creatorUser != null
-            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.FirstName, creatorUser.LastName)
-            : new UserSummaryDto("?", "Unknown", null, null);
+            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.FirstName, creatorUser.LastName, creatorUser.ProfileImageUrl)
+            : new UserSummaryDto("?", "Unknown", null, null, null);
 
         var attendeeIds = ev.Attendees.Select(a => a.UserId).Distinct().ToList();
         var attendeeUsers = await userManager.Users
@@ -263,6 +267,75 @@ public class EventService(
         return await MapEventsBatchAsync(query, userId, pagination);
     }
 
+    public async Task<bool> InviteUserAsync(int eventId, string inviterId, string targetUserId)
+    {
+        var ev = await appDb.Events.FindAsync(eventId);
+        if (ev == null) throw new KeyNotFoundException("Event not found");
+
+        // Permission Check
+        if (!ev.IsPublic)
+        {
+            // Private: Only creator can invite
+            if (ev.CreatedById != inviterId) 
+            {
+                throw new UnauthorizedAccessException("Only the creator can invite to private events.");
+            }
+        }
+        // Public: Anyone can invite (no check needed)
+
+        // Check if target exists
+        var targetUser = await userManager.FindByIdAsync(targetUserId);
+        if (targetUser == null) throw new KeyNotFoundException("Target user not found");
+
+        // Check if already attending/invited
+        var existing = await appDb.EventAttendees.FirstOrDefaultAsync(a => a.EventId == eventId && a.UserId == targetUserId);
+        if (existing != null)
+        {
+            // Already there
+            return true; 
+        }
+
+        appDb.EventAttendees.Add(new EventAttendee
+        {
+            EventId = eventId,
+            UserId = targetUserId,
+            JoinedAt = DateTime.UtcNow,
+            Status = AttendeeStatus.Invited
+        });
+
+        await appDb.SaveChangesAsync();
+        await appDb.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> UninviteUserAsync(int eventId, string requesterId, string targetUserId)
+    {
+        var ev = await appDb.Events.FindAsync(eventId);
+        if (ev == null) throw new KeyNotFoundException("Event not found");
+
+        if (ev.CreatedById != requesterId) throw new UnauthorizedAccessException("Only creator can uninvite users.");
+
+        var att = await appDb.EventAttendees.FirstOrDefaultAsync(a => a.EventId == eventId && a.UserId == targetUserId);
+        if (att == null) return false; // Not attending/invited
+
+        appDb.EventAttendees.Remove(att);
+        await appDb.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<PaginatedResult<EventDto>> GetEventsByPlaceAsync(int placeId, string? userId, PaginationParams pagination)
+    {
+        var query = appDb.Events
+            .Include(e => e.Attendees)
+            .Where(e => e.PlaceId == placeId)
+            .Where(e => e.EndTime > DateTime.UtcNow)
+            .Where(e => e.IsPublic || 
+                        (userId != null && (e.CreatedById == userId || e.Attendees.Any(a => a.UserId == userId))))
+            .OrderBy(e => e.StartTime);
+
+        return await MapEventsBatchAsync(query, userId, pagination);
+    }
+
     public async Task<PaginatedResult<EventDto>> GetPublicEventsAsync(double minLat, double maxLat, double minLng, double maxLng, PaginationParams pagination)
     {
         var query = appDb.Events
@@ -293,14 +366,26 @@ public class EventService(
         var ev = await appDb.Events.FindAsync(id);
         if (ev is null) return false;
 
-        var exists = await appDb.EventAttendees.AnyAsync(a => a.EventId == id && a.UserId == userId);
-        if (exists) return true; // already joined
+        var attendance = await appDb.EventAttendees.FirstOrDefaultAsync(a => a.EventId == id && a.UserId == userId);
+        if (attendance != null)
+        {
+            if (attendance.Status == AttendeeStatus.Invited)
+            {
+                // Accept invite
+                attendance.Status = AttendeeStatus.Attending;
+                attendance.JoinedAt = DateTime.UtcNow; // Update join time? Or keep original? Let's update.
+                await appDb.SaveChangesAsync();
+                return true;
+            }
+            return true; // already joined/attending
+        }
 
         appDb.EventAttendees.Add(new EventAttendee
         {
             EventId = id,
             UserId = userId,
-            JoinedAt = DateTime.UtcNow
+            JoinedAt = DateTime.UtcNow,
+            Status = AttendeeStatus.Attending
         });
         await appDb.SaveChangesAsync();
         return true;
@@ -352,7 +437,7 @@ public class EventService(
             {
                 creator = new AppUser { Id = ev.CreatedById, UserName = "Unknown", FirstName = "Unknown", LastName = "User" };
             }
-            var creatorSummary = new UserSummaryDto(creator.Id, creator.UserName!, creator.FirstName, creator.LastName);
+            var creatorSummary = new UserSummaryDto(creator.Id, creator.UserName!, creator.FirstName, creator.LastName, creator.ProfileImageUrl);
 
             dtos.Add(EventMapper.MapToDto(ev, creatorSummary, usersById, currentUserId));
         }

@@ -202,4 +202,29 @@ public class FriendService(
         logger.LogInformation("Friend removed: {UserId} and {FriendId}", userId, friendId);
         return "Friend removed.";
     }
+
+    public async Task<Friendship.FriendshipStatus> GetFriendshipStatusAsync(string userId, string targetUserId)
+    {
+        if (userId == targetUserId) return Friendship.FriendshipStatus.Accepted; // Self is conceptually "Accepted" or handle specially.
+
+        // Check if I sent request to them
+        var outgoing = await authDb.Friendships.AsNoTracking().FirstOrDefaultAsync(f =>
+            f.UserId == userId && f.FriendId == targetUserId);
+        
+        if (outgoing != null) return outgoing.Status;
+
+        // Check if they sent request to me
+        var incoming = await authDb.Friendships.AsNoTracking().FirstOrDefaultAsync(f =>
+            f.UserId == targetUserId && f.FriendId == userId);
+
+        if (incoming != null)
+        {
+            // If they blocked me, I shouldn't know? Or I should know "None"?
+            // If I blocked them, I see Blocked.
+            // If they sent Pending to me, I see Pending (incoming).
+            return incoming.Status;
+        }
+
+        return (Friendship.FriendshipStatus)999; // None
+    }
 }
