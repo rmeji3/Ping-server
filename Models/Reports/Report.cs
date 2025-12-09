@@ -7,7 +7,8 @@ namespace Conquest.Models.Reports
         Place,
         Activity,
         Review,
-        Profile
+        Profile,
+        Bug
     }
 
     public enum ReportStatus

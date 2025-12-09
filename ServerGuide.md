@@ -195,7 +195,7 @@ Property Configuration:
 | Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, PlaceId?, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee), Place?      | Status computed dynamically; PlaceId links to Place entity (optional)                                                                 |
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
 | Tag           | Id                 | Name, IsApproved, IsBanned, CanonicalTagId                                                                               | ReviewTags                             | Used for categorizing reviews                                                                                         |
-| Report        | Id                 | ReporterId, TargetId, TargetType, Reason, Description, Status, CreatedAt                                                 | (None - Polymorphic)                    | TargetId is string; TargetType enum (Place/Activity/Review/Profile); Status enum (Pending/Reviewed/Dismissed)         |
+| Report        | Id                 | ReporterId, TargetId, TargetType, Reason, Description, Status, CreatedAt                                                 | (None - Polymorphic)                    | TargetId is string; TargetType enum (Place/Activity/Review/Profile/Bug); Status enum (Pending/Reviewed/Dismissed)         |
 
 ---
 ## 7. DTO Contracts
@@ -523,6 +523,7 @@ dotnet ef database update --context Conquest.Data.App.AppDbContext
 ---
 ## 13. Conventions & Extension Points
 - Controllers use explicit route prefixes instead of `[Route("api/[controller]")]` in some cases for clarity (`ActivitiesController`: `api/activities`).
+- **Enums**: All enums are serialized as **Strings** via `JsonStringEnumConverter` globally.
 - DTOs use C# 9+ records for immutability; patch DTOs use nullable reference types.
 - Service extension points: Add domain logic (e.g., tagging, moderation) via new scoped services injected into controllers.
 - For geospatial improvements: consider EF Core function mapping to SQLite extensions or moving to PostGIS if precision/radius queries intensify.
