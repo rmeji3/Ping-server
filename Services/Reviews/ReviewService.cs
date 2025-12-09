@@ -10,6 +10,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Conquest.Models.Places;
 
+using Conquest.Services.Blocks;
+
 namespace Conquest.Services.Reviews;
 
 public class ReviewService(
@@ -17,6 +19,7 @@ public class ReviewService(
     IFriendService friendService,
     UserManager<AppUser> userManager,
     Conquest.Services.Moderation.IModerationService moderationService,
+    IBlockService blockService,
     ILogger<ReviewService> logger) : IReviewService
 {
     public async Task<ReviewDto> CreateReviewAsync(int placeActivityId, CreateReviewDto dto, string userId, string userName)
@@ -140,6 +143,13 @@ public class ReviewService(
             .OrderByDescending(r => r.CreatedAt)
             .AsQueryable();
 
+        // Filter Blacklisted Users
+        var blacklistedIds = await blockService.GetBlacklistedUserIdsAsync(userId);
+        if (blacklistedIds.Count > 0)
+        {
+            query = query.Where(r => !blacklistedIds.Contains(r.UserId));
+        }
+
         switch (scope.ToLowerInvariant())
         {
             case "mine":
@@ -237,6 +247,16 @@ public class ReviewService(
             .Where(r => !r.PlaceActivity.Place.IsDeleted)
             .Where(r => r.PlaceActivity.Place.Visibility == PlaceVisibility.Public)
             .AsQueryable();
+
+        // Filter Blacklisted Users
+        if (userId != null)
+        {
+            var blacklistedIds = await blockService.GetBlacklistedUserIdsAsync(userId);
+            if (blacklistedIds.Count > 0)
+            {
+                query = query.Where(r => !blacklistedIds.Contains(r.UserId));
+            }
+        }
 
         // Filter by Category
         if (filter.ActivityKindIds != null && filter.ActivityKindIds.Any())

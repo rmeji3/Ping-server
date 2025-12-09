@@ -41,7 +41,7 @@ Conquest is an ASP.NET Core API (targeting .NET 9) that manages users, places, a
 ---
 ## 2. Project Structure (Key Folders)
 - `Program.cs` – service registration, middleware pipeline, auto-migrations, Redis setup.
-- `Data/Auth/AuthDbContext.cs` – Identity + Friendships.
+- `Data/Auth/AuthDbContext.cs` – Identity + Friendships + UserBlocks.
 - `Data/App/AppDbContext.cs` – Places, Activities, Reviews, Tags, CheckIns, Events.
 - `Models/*` – EF Core entity classes.
 - `Dtos/*` – Records/classes exposed via API boundary.
@@ -60,7 +60,7 @@ Registered services:
 - JWT options bound from `configuration["Jwt"]` (Key, Issuer, Audience, AccessTokenMinutes).
 - **Redis**: `IConnectionMultiplexer` (singleton), distributed cache, `IRedisService` (scoped).
 - **Session**: Distributed session state with Redis backend (30-minute timeout).
-- **Service Layer** (all scoped): `ITokenService`, `IPlaceService`, `IPlaceNameService` (Google Places API), `IEventService`, `IReviewService`, `IActivityService`, `IFriendService`, `IProfileService`, `IAuthService`, `IRedisService`, `IModerationService`, `ISemanticService`, `ITagService`, `RecommendationService`.
+- **Service Layer** (all scoped): `ITokenService`, `IPlaceService`, `IPlaceNameService` (Google Places API), `IEventService`, `IReviewService`, `IActivityService`, `IFriendService`, `IBlockService`, `IProfileService`, `IAuthService`, `IRedisService`, `IModerationService`, `ISemanticService`, `ITagService`, `RecommendationService`.
 - **Middleware**: `GlobalExceptionHandler` (transient), `RateLimitMiddleware` (scoped).
 - Authentication: JWT Bearer with validation (issuer, audience, lifetime, signing key).
 - Swagger with Bearer security scheme.
@@ -146,8 +146,10 @@ Required `appsettings.json` keys:
 ### AuthDbContext
 DbSets:
 - `Friendships` (composite PK: `{UserId, FriendId}`)
+- `UserBlocks` (composite PK: `{BlockerId, BlockedId}`)
 Relationships:
 - `Friendship.User` and `Friendship.Friend` each `Restrict` delete.
+- `UserBlock.Blocker` and `UserBlock.Blocked` each `Cascade` delete.
 Indexes:
 - Unique index on `AppUser.UserName`.
 
@@ -195,6 +197,7 @@ Property Configuration:
 | Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, PlaceId?, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee), Place?      | Status computed dynamically; PlaceId links to Place entity (optional)                                                                 |
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
 | Tag           | Id                 | Name, IsApproved, IsBanned, CanonicalTagId                                                                               | ReviewTags                             | Used for categorizing reviews                                                                                         |
+| UserBlock     | (BlockerId, BlockedId) | CreatedAt                                                                                                                | Blocker, Blocked                       | Separation of concern for blocking users; masks content bidirectionally                                               |
 | Report        | Id                 | ReporterId, TargetId, TargetType, Reason, Description, Status, CreatedAt                                                 | (None - Polymorphic)                    | TargetId is string; TargetType enum (Place/Activity/Review/Profile/Bug); Status enum (Pending/Reviewed/Dismissed)         |
 
 ---
@@ -221,8 +224,9 @@ Property Configuration:
 - `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PlaceId?)`
 - `UpdateEventDto(Title?, Description?, IsPublic?, StartTime?, EndTime?, Location?, Latitude?, Longitude?, PlaceId?)`
 
-### Friends
+### Friends & Blocks
 - `FriendSummaryDto(Id, UserName, FirstName, LastName, ProfileImageUrl?)`
+- `BlockDto(BlockedUserId, BlockedUserName, BlockedAt)`
 
 ### Places
 - `PlaceVisibility` enum: `Private = 0`, `Friends = 1`, `Public = 2`
@@ -296,6 +300,12 @@ Property Configuration:
 #### FriendService (`IFriendService`)
 - Manages friendships (requests, accepts, blocks).
 
+#### BlockService (`IBlockService`)
+- Manages user blocking interactions.
+- Stores blocks in `AuthDbContext`.
+- **Bidirectional Filtering**: Ensures neither user can see the other's content (reviews, events, profile).
+- **Friendship Removal**: Automatically removes any existing friendship links upon blocking.
+
 #### ProfileService (`IProfileService`)
 - Manages user profiles and search.
 
@@ -344,6 +354,13 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/auth/password/forgot | An   | `ForgotPasswordDto` | Dev returns token | Avoids enumeration                        |
 | POST   | /api/auth/password/reset  | An   | `ResetPasswordDto`  | 200 status        | Decodes base64url token                   |
 | POST   | /api/auth/password/change | A    | `ChangePasswordDto` | 200 status        | Validates current password                |
+
+### BlocksController (`/api/blocks`)
+| Method | Route                       | Auth | Body | Returns     | Notes                                           |
+| ------ | --------------------------- | ---- | ---- | ----------- | ----------------------------------------------- |
+| POST   | /api/blocks/{userId}        | A    | —    | 200 OK      | Blocks user, removes friendship, hides content  |
+| DELETE | /api/blocks/{userId}        | A    | —    | 200 OK      | Unblocks user                                   |
+| GET    | /api/blocks                 | A    | —    | `BlockDto[]`| List of users blocked by current user           |
 
 ### EventsController (`/api/Events`)
 | Method | Route                                            | Auth | Body             | Returns      | Notes                                     |
@@ -488,6 +505,14 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - Prevents: duplicates, self-addition, blocked users
 - Bidirectional relationship: accepting creates two Accepted rows
 - Friend requests are Pending until accepted
+
+### User Blocking
+- **Blocking is final for friendship**: If two users are friends and one blocks the other, the friendship is immediately deleted (both rows).
+- **Content Masking**:
+  - Blocked users cannot see the blocker's Profile, Reviews, or Events.
+  - The blocker cannot see the blocked user's content (Bidirectional masking).
+  - API endpoints returning lists (e.g. `ExploreFeed`) filter out blocked content automatically.
+  - Direct access endpoints (e.g. `GetProfile`) return `404 Not Found` if a block exists.
 
 ### Tags
 - Tag moderation flags exist: `IsBanned`, `IsApproved`
@@ -672,7 +697,9 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 | Places     | Create, GetById, Nearby search, Favorites                       |
 | Activities | Create activity, CRUD kinds                                     |
 | Events     | Create, View, Manage attendance, Public search                  |
+| Events     | Create, View, Manage attendance, Public search                  |
 | Friends    | Add, Accept, List, Incoming, Remove                             |
+| Blocks     | Block/Unblock users, List blocked                               |
 | Profiles   | Me, Search                                                      |
 | Reviews    | Create, List by scope, Like/Unlike, Explore Feed (with filters) |
 | Reports    | Create (User), View/Filter (Admin)                              |
@@ -734,6 +761,7 @@ All errors follow the ProblemDetails format:
 - ✅ ~~Implement tag moderation system (approval/banning workflow, endpoints)~~ - COMPLETED
 - ✅ ~~AI Content Moderation (Reviews, Activities, Places)~~ - COMPLETED
 - ✅ ~~Semantic Deduplication (Activities)~~ - COMPLETED
+- ✅ ~~User Blocking & Content Filtering~~ - COMPLETED
 - Normalize and validate rating range (1–5) at DTO/model layer
 
 **Medium Priority:**

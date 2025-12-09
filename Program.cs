@@ -14,6 +14,7 @@ using Conquest.Services.Activities;
 using Conquest.Services.Profiles;
 using Conquest.Services.Auth;
 using Conquest.Services.Reports;
+using Conquest.Services.Blocks;
 using Conquest.Services.Redis;
 using Conquest.Services.Google;
 using Conquest.Services.Recommendations;
@@ -150,6 +151,7 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlaceNameService, GooglePlacesService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IBlockService, BlockService>();
 
 // --- AWS S3 & Storage ---
 var awsOptions = builder.Configuration.GetAWSOptions();

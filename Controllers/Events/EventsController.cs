@@ -90,13 +90,15 @@ namespace Conquest.Controllers.Events
             var latDelta = radius / 111.32;
             var lngDelta = radius / (111.32 * Math.Cos(centerLat * Math.PI / 180.0));
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             var result = await eventService.GetPublicEventsAsync(
                 centerLat - latDelta,
                 centerLat + latDelta,
                 centerLng - lngDelta,
                 centerLng + lngDelta,
-                pagination
+                pagination,
+                userId
             );
 
             return Ok(result);

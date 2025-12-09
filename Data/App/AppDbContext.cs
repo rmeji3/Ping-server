@@ -4,6 +4,7 @@ using Conquest.Models.Places;
 using Microsoft.EntityFrameworkCore;
 using Conquest.Models.Reviews;
 using Conquest.Models.Reports;
+using Conquest.Models.Users;
 
 namespace Conquest.Data.App
 {

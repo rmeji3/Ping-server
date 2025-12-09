@@ -16,6 +16,7 @@ public class EventService(
     AppDbContext appDb,
     UserManager<AppUser> userManager,
     IModerationService moderationService,
+    Services.Blocks.IBlockService blockService,
     ILogger<EventService> logger) : IEventService
 {
     public async Task<EventDto> CreateEventAsync(CreateEventDto dto, string userId)
@@ -331,12 +332,23 @@ public class EventService(
             .Where(e => e.EndTime > DateTime.UtcNow)
             .Where(e => e.IsPublic || 
                         (userId != null && (e.CreatedById == userId || e.Attendees.Any(a => a.UserId == userId))))
-            .OrderBy(e => e.StartTime);
+            .OrderBy(e => e.StartTime)
+            .AsQueryable();
+
+        // Filter Blacklisted Users
+        if (userId != null)
+        {
+            var blacklistedIds = await blockService.GetBlacklistedUserIdsAsync(userId);
+            if (blacklistedIds.Count > 0)
+            {
+                query = query.Where(e => !blacklistedIds.Contains(e.CreatedById));
+            }
+        }
 
         return await MapEventsBatchAsync(query, userId, pagination);
     }
 
-    public async Task<PaginatedResult<EventDto>> GetPublicEventsAsync(double minLat, double maxLat, double minLng, double maxLng, PaginationParams pagination)
+    public async Task<PaginatedResult<EventDto>> GetPublicEventsAsync(double minLat, double maxLat, double minLng, double maxLng, PaginationParams pagination, string? userId = null)
     {
         var query = appDb.Events
             .Include(e => e.Attendees)
@@ -344,9 +356,21 @@ public class EventService(
             .Where(e => e.EndTime > DateTime.UtcNow)
             .Where(e => e.Latitude >= minLat && e.Latitude <= maxLat &&
                         e.Longitude >= minLng && e.Longitude <= maxLng)
-            .OrderBy(e => e.StartTime);
+            .OrderBy(e => e.StartTime)
+            .AsQueryable();
 
-        return await MapEventsBatchAsync(query, null, pagination);
+        // Filter Blacklisted Users
+        if (userId != null)
+        {
+            var blacklistedIds = await blockService.GetBlacklistedUserIdsAsync(userId);
+            if (blacklistedIds.Count > 0)
+            {
+                // Exclude events created by blacklisted users
+                query = query.Where(e => !blacklistedIds.Contains(e.CreatedById));
+            }
+        }
+
+        return await MapEventsBatchAsync(query, userId, pagination);
     }
 
     public async Task<bool> DeleteEventAsync(int id, string userId)

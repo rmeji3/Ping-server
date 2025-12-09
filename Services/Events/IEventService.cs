@@ -12,7 +12,7 @@ public interface IEventService
     Task<EventDto?> GetEventByIdAsync(int id, string? userId = null);
     Task<PaginatedResult<EventDto>> GetMyEventsAsync(string userId, PaginationParams pagination);
     Task<PaginatedResult<EventDto>> GetEventsAttendingAsync(string userId, PaginationParams pagination);
-    Task<PaginatedResult<EventDto>> GetPublicEventsAsync(double minLat, double maxLat, double minLng, double maxLng, PaginationParams pagination);
+    Task<PaginatedResult<EventDto>> GetPublicEventsAsync(double minLat, double maxLat, double minLng, double maxLng, PaginationParams pagination, string? userId = null);
     Task<PaginatedResult<EventDto>> GetEventsByPlaceAsync(int placeId, string? userId, PaginationParams pagination);
     Task<bool> DeleteEventAsync(int id, string userId);
     Task<bool> JoinEventAsync(int id, string userId);

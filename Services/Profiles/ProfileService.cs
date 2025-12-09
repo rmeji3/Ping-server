@@ -19,6 +19,8 @@ using Conquest.Services.Profiles;
 using DtoPrivacy = Conquest.Dtos.Profiles.PrivacyConstraint; // Alias for DTO enum
 using AppUserPrivacy = Conquest.Models.AppUsers.PrivacyConstraint; // Alias for Model enum
 
+using Conquest.Services.Blocks;
+
 namespace Conquest.Services.Profiles;
 
 public class ProfileService(
@@ -26,7 +28,8 @@ public class ProfileService(
     ILogger<ProfileService> logger, 
     IStorageService storageService,
     AppDbContext appDb,
-    IFriendService friendService) : IProfileService
+    IFriendService friendService,
+    IBlockService blockService) : IProfileService
 {
     public async Task<PersonalProfileDto> GetMyProfileAsync(string userId)
     {
@@ -82,10 +85,24 @@ public class ProfileService(
 
         var normalized = query.ToUpper(); // match Identity normalization
 
-        var users = await userManager.Users
+        var currentUser = await userManager.FindByNameAsync(currentUsername);
+        var currentUserId = currentUser?.Id;
+
+        var queryable = userManager.Users
             .AsNoTracking()
             .Where(u => u.NormalizedUserName!.StartsWith(normalized)
-            && u.NormalizedUserName != currentUsername.ToUpper()) // exclude yourself
+            && u.NormalizedUserName != currentUsername.ToUpper());
+
+        if (currentUserId != null)
+        {
+            var blacklisted = await blockService.GetBlacklistedUserIdsAsync(currentUserId);
+            if (blacklisted.Count > 0)
+            {
+                queryable = queryable.Where(u => !blacklisted.Contains(u.Id));
+            }
+        }
+
+        var users = await queryable
             .OrderBy(u => u.UserName)
             .Take(15)
             .Select(u => new ProfileDto(
@@ -158,6 +175,18 @@ public class ProfileService(
         if (user is null)
         {
             throw new KeyNotFoundException("User not found.");
+        }
+
+        // Check Blocking
+        if (targetUserId != currentUserId)
+        {
+             var isBlocked = await blockService.IsBlockedAsync(currentUserId, targetUserId) || 
+                             await blockService.IsBlockedAsync(targetUserId, currentUserId);
+             
+             if (isBlocked)
+             {
+                 throw new KeyNotFoundException("User not found.");
+             }
         }
 
         var isSelf = targetUserId == currentUserId;
@@ -389,6 +418,18 @@ public class ProfileService(
             throw new KeyNotFoundException("User not found.");
         }
 
+        // Check Blocking
+        if (targetUserId != currentUserId)
+        {
+             var isBlocked = await blockService.IsBlockedAsync(currentUserId, targetUserId) || 
+                             await blockService.IsBlockedAsync(targetUserId, currentUserId);
+             
+             if (isBlocked)
+             {
+                 throw new KeyNotFoundException("User not found.");
+             }
+        }
+
         // Friendship
         var fsStatus = await friendService.GetFriendshipStatusAsync(currentUserId, targetUserId);
         var friendshipStatus = FriendshipStatus.None;
@@ -434,6 +475,13 @@ public class ProfileService(
     {
         var user = await userManager.FindByIdAsync(targetUserId);
         if (user is null) throw new KeyNotFoundException("User not found.");
+
+        if (targetUserId != currentUserId)
+        {
+             var isBlocked = await blockService.IsBlockedAsync(currentUserId, targetUserId) || 
+                             await blockService.IsBlockedAsync(targetUserId, currentUserId);
+             if (isBlocked) throw new KeyNotFoundException("User not found.");
+        }
 
         // Check Privacy
         var fsStatus = await friendService.GetFriendshipStatusAsync(currentUserId, targetUserId);
@@ -523,6 +571,13 @@ public class ProfileService(
     {
         var user = await userManager.FindByIdAsync(targetUserId);
         if (user is null) throw new KeyNotFoundException("User not found.");
+
+        if (targetUserId != currentUserId)
+        {
+             var isBlocked = await blockService.IsBlockedAsync(currentUserId, targetUserId) || 
+                             await blockService.IsBlockedAsync(targetUserId, currentUserId);
+             if (isBlocked) throw new KeyNotFoundException("User not found.");
+        }
 
         var isSelf = targetUserId == currentUserId;
         
