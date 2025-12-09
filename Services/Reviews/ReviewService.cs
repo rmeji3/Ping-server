@@ -8,6 +8,7 @@ using Conquest.Services.Friends;
 using Conquest.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Conquest.Models.Places;
 
 namespace Conquest.Services.Reviews;
 
@@ -234,6 +235,7 @@ public class ReviewService(
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
             .Where(r => !r.PlaceActivity.Place.IsDeleted)
+            .Where(r => r.PlaceActivity.Place.Visibility == PlaceVisibility.Public)
             .AsQueryable();
 
         // Filter by Category
