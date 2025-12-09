@@ -285,6 +285,7 @@ Property Configuration:
 
 #### ReviewService (`IReviewService`)
 - Manages reviews, check-ins, likes, and feed retrieval.
+- **Methods**: `GetFriendsFeedAsync` (paginated friends' reviews), `GetExploreReviewsAsync`.
 - **AI Moderation**: Checks Review Content and new Tags for offensive content.
 - **Tag Integration**: Automatically creates or links tags during review creation.
 
@@ -416,6 +417,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | DELETE | /api/reviews/{reviewId}/like                               | A    | —                         | 204 NoContent        | Unlike a review (idempotent)                       |
 | GET    | /api/reviews/liked (Q: pageNumber, pageSize)               | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's liked reviews                               |
 | GET    | /api/reviews/my-reviews (Q: pageNumber, pageSize)          | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's own reviews                                 |
+| GET    | /api/reviews/friends (Q: pageNumber, pageSize)             | A    | —                         | `PaginatedResult<ExploreReviewDto>` | Friends' reviews sorted by date                    |
 
 ### TagsController (`/api/tags`)
 | Method | Route                                        | Auth | Body | Returns     | Notes                        |

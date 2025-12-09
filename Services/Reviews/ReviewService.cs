@@ -606,5 +606,89 @@ public class ReviewService(
         logger.LogInformation("User reviews fetched for {UserId}: {Count} reviews", targetUserId, result.Count);
 
         return new PaginatedResult<ExploreReviewDto>(result, count, pagination.PageNumber, pagination.PageSize);
+        return new PaginatedResult<ExploreReviewDto>(result, count, pagination.PageNumber, pagination.PageSize);
+    }
+
+    public async Task<PaginatedResult<ExploreReviewDto>> GetFriendsFeedAsync(string userId, PaginationParams pagination)
+    {
+        var friendIds = await friendService.GetFriendIdsAsync(userId);
+        
+        if (friendIds.Count == 0)
+        {
+            return new PaginatedResult<ExploreReviewDto>(new List<ExploreReviewDto>(), 0, pagination.PageNumber, pagination.PageSize);
+        }
+
+        var query = appDb.Reviews
+            .AsNoTracking()
+            .Where(r => friendIds.Contains(r.UserId))
+            .Include(r => r.PlaceActivity)
+                .ThenInclude(pa => pa.Place)
+            .Include(r => r.PlaceActivity)
+                .ThenInclude(pa => pa.ActivityKind)
+            .Include(r => r.ReviewTags)
+                .ThenInclude(rt => rt.Tag)
+            .Where(r => !r.PlaceActivity.Place.IsDeleted) // Ensure place is not soft-deleted
+            .Where(r => r.PlaceActivity.Place.Visibility == PlaceVisibility.Public) // Usually feed only shows public stuff, but friends might show friend-visibility too? 
+                                                                                    // Let's assume for now friends feed should show Public AND Friends visibility places.
+                                                                                    // But the prompt said "all recent friends reviews". 
+                                                                                    // Safety check: if my friend reviewed a Private place, I shouldn't see it unless I'm the owner (imposible) or it's visible to friends.
+            .Where(r => r.PlaceActivity.Place.Visibility == PlaceVisibility.Public || r.PlaceActivity.Place.Visibility == PlaceVisibility.Friends)
+            .OrderByDescending(r => r.CreatedAt);
+
+        var count = await query.CountAsync();
+        
+        var reviews = await query
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .ToListAsync();
+
+        // Batch check likes
+        var reviewIds = reviews.Select(r => r.Id).ToList();
+        var likedReviewIds = new HashSet<int>();
+        if (reviewIds.Count > 0)
+        {
+            likedReviewIds = await appDb.ReviewLikes
+                .Where(rl => rl.UserId == userId && reviewIds.Contains(rl.ReviewId))
+                .Select(rl => rl.ReviewId)
+                .ToHashSetAsync();
+        }
+
+        // Collect UserIds for profiles
+        var userIds = reviews.Select(r => r.UserId).Distinct().ToList();
+        var userMap = new Dictionary<string, string?>();
+        if (userIds.Count > 0)
+        {
+             var users = await userManager.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.ProfileImageUrl })
+                .ToListAsync();
+             foreach(var u in users) userMap[u.Id] = u.ProfileImageUrl;
+        }
+
+        var result = reviews.Select(r => new ExploreReviewDto(
+            r.Id,
+            r.PlaceActivityId,
+            r.PlaceActivity.PlaceId,
+            r.PlaceActivity.Place.Name,
+            r.PlaceActivity.Place.Address ?? string.Empty,
+            r.PlaceActivity.Name,
+            r.PlaceActivity.ActivityKind?.Name,
+            r.PlaceActivity.Place.Latitude,
+            r.PlaceActivity.Place.Longitude,
+            r.Rating,
+            r.Content,
+            r.UserId,
+            r.UserName,
+            userMap.GetValueOrDefault(r.UserId),
+            r.CreatedAt,
+            r.Likes,
+            likedReviewIds.Contains(r.Id), 
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
+            r.PlaceActivity.Place.IsDeleted
+        )).ToList();
+
+        logger.LogInformation("Friends feed fetched for {UserId}: {Count} reviews", userId, result.Count);
+
+        return new PaginatedResult<ExploreReviewDto>(result, count, pagination.PageNumber, pagination.PageSize);
     }
 }

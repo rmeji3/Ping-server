@@ -164,4 +164,21 @@ public class ReviewsController(IReviewService reviewService, ILogger<ReviewsCont
         logger.LogInformation("GetMyReviews: Reviews fetched for {UserId}", userId);
         return Ok(reviews);
     }
+    [HttpGet("/api/reviews/friends")]
+    public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetFriendsFeed(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+        {
+            logger.LogWarning("GetFriendsFeed: User is not authenticated or missing id.");
+            return Unauthorized();
+        }
+
+        var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+        var reviews = await reviewService.GetFriendsFeedAsync(userId, pagination);
+        logger.LogInformation("GetFriendsFeed: Friends feed fetched for {UserId}", userId);
+        return Ok(reviews);
+    }
 }
