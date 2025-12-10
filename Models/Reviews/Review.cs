@@ -21,4 +21,8 @@ public class Review
     public List<ReviewTag> ReviewTags { get; set; } = new();
     public int Likes { get; set; }
     public List<ReviewLike> LikesList { get; set; } = new();
+    
+    [Required] // Enforce non-null in DB
+    [MaxLength(500)]
+    public string ImageUrl { get; set; } = null!;
 }

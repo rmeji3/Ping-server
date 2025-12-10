@@ -9,6 +9,7 @@ public record ReviewDto(
     string UserId,
     string UserName,
     string? ProfilePictureUrl,
+    string ImageUrl,
     DateTime CreatedAt,
     int Likes,
     bool IsLiked,
@@ -20,6 +21,8 @@ public record CreateReviewDto(
     int Rating,
     [MaxLength(1000, ErrorMessage = "Content must be at most 1000 characters.")]
     string? Content,
+    [Required]
+    string ImageUrl,
     List<string>? Tags = null
 );
 
@@ -38,6 +41,7 @@ public record ExploreReviewDto(
     string UserId,
     string UserName,
     string? ProfilePictureUrl,
+    string ImageUrl,
     DateTime CreatedAt,
     int Likes,
     bool IsLiked,

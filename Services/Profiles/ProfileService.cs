@@ -249,6 +249,7 @@ public class ProfileService(
                      r.UserId,
                      user.UserName!, // Target user name
                      user.ProfileImageUrl,
+                     r.ImageUrl,
                      r.CreatedAt,
                      r.LikesList.Count,
                      r.LikesList.Any(l => l.UserId == currentUserId), // IsLiked

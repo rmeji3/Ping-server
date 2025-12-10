@@ -199,7 +199,7 @@ Property Configuration:
 | Favorited     | Id                 | UserId, PlaceId                                                                                                          | Place                                  | Unique per user per place; cascade deletes with Place                                                                 |
 | ActivityKind  | Id                 | Name                                                                                                                     | PlaceActivities                        | Seeded                                                                                                                |
 | PlaceActivity | Id                 | PlaceId, ActivityKindId?, Name, CreatedUtc                                                                               | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name                                                                                              |
-| Review        | Id                 | UserId, UserName, PlaceActivityId, Rating, Type, Content, CreatedAt, Likes                                               | PlaceActivity, ReviewTags              | Rating required; Type (Review/CheckIn); First post is Review, subsequent are CheckIns                                 |
+| Review        | Id                 | UserId, UserName, PlaceActivityId, Rating, Type, Content, ImageUrl, CreatedAt, Likes                      | PlaceActivity, ReviewTags              | Rating required; Type (Review/CheckIn); First post is Review, subsequent are CheckIns; ImageUrl required                              |
 | Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, PlaceId?, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee), Place?      | Status computed dynamically; PlaceId links to Place entity (optional)                                                                 |
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
 | Tag           | Id                 | Name, IsApproved, IsBanned, CanonicalTagId                                                                               | ReviewTags                             | Used for categorizing reviews                                                                                         |
@@ -249,9 +249,9 @@ Property Configuration:
 
 ### Reviews
 - `UserReviewsDto(Review, History[])` - Grouped response
-- `ReviewDto(Id, Rating, Content?, UserId, UserName, CreatedAt, Likes, IsLiked)`
-- `CreateReviewDto(Rating, Content?, Tags[])`
-- `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, ActivityName, ActivityKindName?, Latitude, Longitude, Rating, Content?, UserName, CreatedAt, Likes, IsLiked, Tags[])`
+- `ReviewDto(Id, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[])`
+- `CreateReviewDto(Rating, Content?, ImageUrl, Tags[])`
+- `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, ActivityName, ActivityKindName?, Latitude, Longitude, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[], IsPlaceDeleted)`
 - `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, ActivityKindIds?[], PageSize, PageNumber)`
 
 ### Tags

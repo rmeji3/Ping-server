@@ -69,6 +69,7 @@ public class ReviewService(
             Rating = dto.Rating,
             Type = hasReview ? ReviewType.CheckIn : ReviewType.Review,
             Content = dto.Content,
+            ImageUrl = dto.ImageUrl,
             CreatedAt = DateTime.UtcNow,
             Likes = 0,
         };
@@ -121,6 +122,7 @@ public class ReviewService(
             review.UserId,
             review.UserName,
             profileUrl,
+            review.ImageUrl,
             review.CreatedAt,
             review.Likes,
             false, // IsLiked
@@ -212,6 +214,7 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId), // ProfilePictureUrl
+            r.ImageUrl,
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), // IsLiked
@@ -343,6 +346,7 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
+            r.ImageUrl,
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), // IsLiked
@@ -464,6 +468,7 @@ public class ReviewService(
                 rl.Review.UserId,
                 rl.Review.UserName,
                 userMap.GetValueOrDefault(rl.Review.UserId),
+                rl.Review.ImageUrl,
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
                 true, // IsLiked - always true for liked reviews
@@ -528,6 +533,7 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
+            r.ImageUrl,
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), // IsLiked
@@ -596,6 +602,7 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
+            r.ImageUrl,
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
@@ -680,6 +687,7 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
+            r.ImageUrl,
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 

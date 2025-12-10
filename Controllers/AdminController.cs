@@ -27,6 +27,7 @@ namespace Conquest.Controllers
         IBanningService banningService,
         IBusinessService businessService,
         IAuthService authService,
+
         Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager
         ) : ControllerBase
     {
