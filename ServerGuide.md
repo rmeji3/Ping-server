@@ -797,6 +797,23 @@ A `docker-compose.yml` is provided to spin up:
 - **Prometheus**: Scrapes the API at `host.docker.internal:5055`.
 - **Grafana**: Visualizes the data (Port 3000).
 
+### Health Checks
+The server exposes a health check endpoint:
+- **Endpoint**: `/health`
+- **Logic**: Verifies connectivity to `AuthDbContext` and `AppDbContext`.
+- **Response**:
+  - `200 OK` "Healthy"
+  - `503 Service Unavailable` "Unhealthy" (if DB is unreachable)
+
+**Prometheus Integration**:
+Health check status is automatically exported as a metric:
+- **Metric**: `aspnetcore_healthcheck_status` (Gauge)
+  - `1` = Healthy
+  - `0` = Unhealthy
+  - `0.5` = Degraded
+- **Label**: `name` (e.g., `npgsql`, `auth_db_context`, etc.)
+
+
 ---
 ## 18. Quick Reference Summary
 | Layer      | Items                                                           |

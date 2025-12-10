@@ -181,6 +181,13 @@ builder.Services.AddHttpClient<Conquest.Services.Moderation.IModerationService, 
 builder.Services.AddScoped<Conquest.Services.AI.ISemanticService, Conquest.Services.AI.OpenAISemanticService>();
 builder.Services.AddScoped<RecommendationService>();
 
+
+// --- Health Checks ---
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AuthDbContext>()
+    .AddDbContextCheck<AppDbContext>()
+    .ForwardToPrometheus();
+
 // --- Semantic Kernel ---
 builder.Services.AddKernel(); // Always register Kernel
 
@@ -303,6 +310,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapMetrics();
+app.MapHealthChecks("/health");
 
 // Capture JVM-style runtime metrics (GC, ThreadPool, etc.)
 DotNetRuntimeStatsBuilder.Default().StartCollecting();
