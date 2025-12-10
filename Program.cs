@@ -1,4 +1,6 @@
 using System.Text;
+using Prometheus;
+using Prometheus.DotNetRuntime;
 using Amazon.S3;
 using Conquest.Data.Auth;
 using Conquest.Data.App;
@@ -290,7 +292,9 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+app.UseMiddleware<Conquest.Middleware.ResponseMetricMiddleware>();
 app.UseRouting();
+app.UseHttpMetrics();
 app.UseSession();
 app.UseAuthentication();
 app.UseMiddleware<Conquest.Middleware.BanningMiddleware>();
@@ -298,5 +302,9 @@ app.UseMiddleware<Conquest.Middleware.RateLimitMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapMetrics();
+
+// Capture JVM-style runtime metrics (GC, ThreadPool, etc.)
+DotNetRuntimeStatsBuilder.Default().StartCollecting();
 
 app.Run();

@@ -145,6 +145,33 @@ If you see `Network request failed` on your mobile device, it is likely the **Wi
 7.  Name it "Conquest API" -> **Finish**.
 
 Alternatively, run this command in an **Administrator** PowerShell:
-```powershell
 New-NetFirewallRule -DisplayName "Conquest API" -Direction Inbound -LocalPort 5055 -Protocol TCP -Action Allow
 ```
+
+## Setting Up Monitoring (Grafana & Prometheus)
+
+We include a pre-configured monitoring stack driven by Docker.
+
+### 1. Start the Stack
+```powershell
+docker-compose up -d
+```
+This spins up:
+-   **Prometheus** (Port 9090): Collects metrics from your local API.
+-   **Grafana** (Port 3000): Visualizes the metrics.
+
+### 2. Configure Grafana
+1.  Open [http://localhost:3000](http://localhost:3000)
+2.  Login with default credentials: `admin` / `admin`.
+3.  **Add Data Source**:
+    -   Go to Connections -> Data Sources -> Add data source.
+    -   Select **Prometheus**.
+    -   Host URL: `http://prometheus:9090` (internal Docker hostname).
+    -   Click "Save & Test".
+4.  **Import Dashboard**:
+    -   Go to Dashboards -> New -> Import.
+    -   Enter ID **10915** (ASP.NET Core Controller Summary) and click Load.
+    -   Select your Prometheus data source.
+    -   Click Import.
+
+You now have real-time visibility into usage, errors, and latency.

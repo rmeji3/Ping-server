@@ -776,7 +776,29 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 - **Feedback**: Returns warning message in `ActivityDetailsDto`.
 
 ---
-## 17. Quick Reference Summary
+## 17. Metrics & Monitoring
+
+### Overview
+The server exposes Prometheus-compatible metrics at `/metrics` for monitoring performance, errors, and resource usage.
+
+### Infrastructure
+- **Endpoint**: `/metrics` (Public, but can be secured later).
+- **Library**: `prometheus-net.AspNetCore`.
+- **Runtime Metrics**: `prometheus-net.DotNetRuntime` is enabled to capture GC, ThreadPool, and Lock contention stats.
+
+### Custom Metrics
+#### Middleware (`ResponseMetricMiddleware`)
+We use a custom middleware to track request and response sizes, useful for correlating latency with payload size.
+- **Metric**: `http_response_size_bytes` (Histogram).
+- **Labels**: `method`, `endpoint`, `code`.
+
+### Dashboarding
+A `docker-compose.yml` is provided to spin up:
+- **Prometheus**: Scrapes the API at `host.docker.internal:5055`.
+- **Grafana**: Visualizes the data (Port 3000).
+
+---
+## 18. Quick Reference Summary
 | Layer      | Items                                                           |
 | ---------- | --------------------------------------------------------------- |
 | Auth       | Register, Login, Me, Password flows                             |

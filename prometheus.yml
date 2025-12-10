@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'conquest_server'
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+    static_configs:
+      - targets: ['host.docker.internal:5055'] 
+        # Note: If running Prometheus locally (not in Docker), use 'localhost:5055'
