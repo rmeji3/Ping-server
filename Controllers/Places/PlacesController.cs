@@ -13,7 +13,7 @@ namespace Conquest.Controllers.Places
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class PlacesController(IPlaceService placeService) : ControllerBase
+    public class PlacesController(IPlaceService placeService, Conquest.Services.Business.IBusinessAnalyticsService analyticsService) : ControllerBase
     {
         // POST /api/places
         [HttpPost]
@@ -77,6 +77,15 @@ namespace Conquest.Controllers.Places
             if (result is null) return NotFound();
 
             return Ok(result);
+        }
+
+        // POST /api/places/{id}/view
+        [HttpPost("{id:int}/view")]
+        [AllowAnonymous] // Allow unauthenticated views? "tapping on place". Let's say yes for now, or match controller
+        public async Task<ActionResult> TrackView(int id)
+        {
+            await analyticsService.TrackPlaceViewAsync(id);
+            return Ok();
         }
 
         // GET /api/places/nearby?lat=..&lng=..&radiusKm=5&activityName=soccer&activityKind=outdoor&visibility=Public&type=Verified
@@ -152,7 +161,7 @@ namespace Conquest.Controllers.Places
            if (userId is null)
                return Unauthorized("You must be logged in to delete a place.");
 
-       await placeService.DeletePlaceAsync(id, userId);
+           await placeService.DeletePlaceAsync(id, userId);
            return NoContent();
         }
     }

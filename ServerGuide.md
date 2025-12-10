@@ -278,6 +278,11 @@ Property Configuration:
 - `TrendingPlaceDto(PlaceId, Name, ReviewCount, CheckInCount, TotalInteractions)`
 - `ModerationStatsDto(PendingReports, BannedUsers, BannedIps, RejectedReviews)`
 
+### Business Analytics
+- `BusinessPlaceAnalyticsDto(PlaceId, TotalViews, TotalFavorites, TotalReviews, AvgRating, EventCount, ViewsHistory, PeakHours)`
+- `PlaceDailyStatDto(Date, Value)`
+
+
 
 ---
 ## 8. Services (Service Layer Architecture)

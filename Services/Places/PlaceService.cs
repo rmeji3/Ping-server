@@ -474,6 +474,30 @@ public class PlaceService(
         }
     }
 
+    public async Task<List<PlaceDetailsDto>> GetPlacesByOwnerAsync(string userId, bool onlyClaimed = false)
+    {
+        var q = db.Places
+            .Where(p => p.OwnerUserId == userId && !p.IsDeleted);
+
+        if (onlyClaimed)
+        {
+            q = q.Where(p => p.IsClaimed);
+        }
+
+        var places = await q
+            .Include(p => p.PlaceActivities)
+                .ThenInclude(pa => pa.ActivityKind)
+            .AsNoTracking()
+            .ToListAsync();
+
+        var list = new List<PlaceDetailsDto>();
+        foreach (var p in places)
+        {
+            list.Add(await ToPlaceDetailsDto(p, userId));
+        }
+        return list;
+    }
+
 
 
     private async Task<PlaceDetailsDto> ToPlaceDetailsDto(Place p, string? userId)

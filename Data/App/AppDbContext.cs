@@ -23,6 +23,7 @@ namespace Conquest.Data.App
         public DbSet<ReviewLike> ReviewLikes => Set<ReviewLike>();
         public DbSet<Report> Reports => Set<Report>();
         public DbSet<PlaceClaim> PlaceClaims => Set<PlaceClaim>();
+        public DbSet<PlaceDailyMetric> PlaceDailyMetrics => Set<PlaceDailyMetric>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -66,6 +67,11 @@ namespace Conquest.Data.App
             // ActivityKind: unique name (e.g. "Soccer", "Rock climbing")
             builder.Entity<ActivityKind>()
                 .HasIndex(ak => ak.Name)
+                .IsUnique();
+
+            // PlaceDailyMetric: unique per place per day
+            builder.Entity<PlaceDailyMetric>()
+                .HasIndex(m => new { m.PlaceId, m.Date })
                 .IsUnique();
 
             // PlaceActivity: unique per place by name
