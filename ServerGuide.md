@@ -134,8 +134,9 @@ Required `appsettings.json` keys:
 ### Password Flows
 - Register: validates uniqueness of normalized `UserName` manually.
 - Login: email + password; uses `CheckPasswordSignInAsync` with lockout. Checks `IsBanned` and returns 403 if banned.
-- Forgot Password: generates identity reset token, returns encoded version in DEV.
-- Reset Password: base64url decode then `ResetPasswordAsync`.
+- Login: email + password; uses `CheckPasswordSignInAsync` with lockout. Checks `IsBanned` and returns 403 if banned.
+- Forgot Password: generates 6-digit code, stores in Redis (15m), emails via SES.
+- Reset Password: validates 6-digit code from Redis, then resets password.
 - Change Password: requires existing password & JWT auth.
 
 ### Authorization
@@ -221,7 +222,9 @@ Property Configuration:
 - `RegisterDto(Email, Password, FirstName, LastName, UserName)`
 - `LoginDto(Email, Password)`
 - `ForgotPasswordDto(Email)`
-- `ResetPasswordDto(Email, Token, NewPassword)`
+- `VerifyEmailDto(Email, Code)`
+- `ResendVerificationDto(Email)`
+- `ResetPasswordDto(Email, Code, NewPassword)`
 - `ChangePasswordDto(CurrentPassword, NewPassword)`
 - `UserDto(Id, Email, DisplayName, FirstName, LastName, ProfileImageUrl, Roles[])`
 - `AuthResponse(AccessToken, ExpiresUtc, User)`
@@ -362,6 +365,12 @@ Property Configuration:
   - Integration with Redis for fast middleware checks.
   - Support for temporary or permanent IP bans.
 
+#### EmailService (`IEmailService`)
+- **Implementation**: `SesEmailService`.
+- **Backing**: Amazon SES.
+- **Methods**: `SendEmailAsync(to, subject, body)`.
+- **Rate Limit**: 5 emails per hour per recipient (enforced in `AuthService`).
+
 ---
 ## 9. Controllers & Endpoints
 Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body. Auth: A=Requires JWT, An=AllowAnonymous, Adm=Admin Only.
@@ -402,6 +411,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /users/ban                 | `?username=...&reason=...`      | Msg         | Ban user by Username                    |
 | POST   | /users/{id}/unban          | -                               | Msg         | Unban user by ID                        |
 | POST   | /users/unban               | `?username=...`                 | Msg         | Unban user by Username                  |
+| DELETE | /users/{id}                | -                               | Msg         | Delete user account                     |
 | POST   | /users/make-admin          | `?email=...`                    | Msg         | Grant Admin role                        |
 | POST   | /moderation/ip/ban         | `IpBanRequest`                  | Msg         | Ban IP address                          |
 | POST   | /moderation/ip/unban       | `IpUnbanRequest`                | Msg         | Unban IP address                        |
@@ -415,12 +425,15 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 ### AuthController (`/api/auth`)
 | Method | Route                     | Auth | Body                | Returns           | Notes                                     |
 | ------ | ------------------------- | ---- | ------------------- | ----------------- | ----------------------------------------- |
-| POST   | /api/auth/register        | An   | `RegisterDto`       | `AuthResponse`    | Username uniqueness manual check          |
-| POST   | /api/auth/login           | An   | `LoginDto`          | `AuthResponse`    | Lockout on failures (Identity configured) |
+| POST   | /api/auth/register        | An   | `RegisterDto`       | 200 Message       | Sends verification code (Rate Limit: 5/hr) |
+| POST   | /api/auth/login           | An   | `LoginDto`          | `AuthResponse`    | Blocks if `EmailConfirmed=false`          |
+| POST   | /api/auth/verify-email    | An   | `VerifyEmailDto`    | `AuthResponse`    | Verifies email & Logs user in             |
+| POST   | /api/auth/verify-email/resend | An | `ResendVerificationDto` | 200 Message   | Resends code if unverified (Rate Limit: 5/hr) |
 | GET    | /api/auth/me              | A    | —                   | `UserDto`         | Uses `ClaimTypes.NameIdentifier`          |
-| POST   | /api/auth/password/forgot | An   | `ForgotPasswordDto` | Dev returns token | Avoids enumeration                        |
-| POST   | /api/auth/password/reset  | An   | `ResetPasswordDto`  | 200 status        | Decodes base64url token                   |
+| POST   | /api/auth/password/forgot | An   | `ForgotPasswordDto` | Dev returns code  | Avoids enumeration (Rate Limit: 5/hr)     |
+| POST   | /api/auth/password/reset  | An   | `ResetPasswordDto`  | 200 status        | Validates code from Redis                 |
 | POST   | /api/auth/password/change | A    | `ChangePasswordDto` | 200 status        | Validates current password                |
+| DELETE | /api/auth/me              | A    | —                   | Msg               | Self-delete account                       |
 
 ### BlocksController (`/api/blocks`)
 | Method | Route                       | Auth | Body | Returns     | Notes                                           |

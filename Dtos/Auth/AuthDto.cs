@@ -24,10 +24,17 @@
     );
 
     public record ForgotPasswordDto([Required, EmailAddress] string Email);
+    
+    public record VerifyEmailDto(
+        [Required, EmailAddress] string Email,
+        [Required] string Code
+    );
+
+    public record ResendVerificationDto([Required, EmailAddress] string Email);
 
     public record ResetPasswordDto(
         [Required, EmailAddress] string Email,
-        [Required] string Token,
+        [Required] string Code,
         [Required, MinLength(6)] string NewPassword
     );
 

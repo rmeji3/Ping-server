@@ -17,12 +17,12 @@ namespace Conquest.Controllers.Auth
     {
         [HttpPost("register")]
         [AllowAnonymous]
-        public async Task<ActionResult<AuthResponse>> Register(RegisterDto dto)
+        public async Task<IActionResult> Register(RegisterDto dto)
         {
             try
             {
                 var result = await authService.RegisterAsync(dto);
-                return result;
+                return Ok(result);
             }
             catch (InvalidOperationException ex)
             {
@@ -49,6 +49,31 @@ namespace Conquest.Controllers.Auth
             }
         }
 
+        [HttpPost("verify-email")]
+        [AllowAnonymous]
+        public async Task<ActionResult<AuthResponse>> VerifyEmail(VerifyEmailDto dto)
+        {
+            try
+            {
+                var result = await authService.VerifyEmailAsync(dto);
+                return result;
+            }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            catch (KeyNotFoundException) { return Unauthorized(); }
+        }
+
+        [HttpPost("verify-email/resend")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationDto dto)
+        {
+            try
+            {
+                await authService.ResendVerificationEmailAsync(dto.Email);
+                return Ok(new { message = "If the account exists and is unverified, a verification code has been sent." });
+            }
+            catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        }
+
         [HttpGet("me")]
         [Authorize]
         public async Task<ActionResult<UserDto>> Me()
@@ -65,6 +90,21 @@ namespace Conquest.Controllers.Auth
             {
                 return Unauthorized();
             }
+        }
+
+        [HttpDelete("me")]
+        [Authorize]
+        public async Task<IActionResult> DeleteMyAccount()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            try
+            {
+                await authService.DeleteAccountAsync(userId);
+                return Ok(new { message = "Account deleted successfully." });
+            }
+            catch (KeyNotFoundException) { return NotFound(); }
         }
 
         [HttpPost("password/forgot")]

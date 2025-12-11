@@ -126,6 +126,20 @@ namespace Conquest.Controllers
             return Ok(new { message = $"User {username} unbanned." });
         }
         
+        [HttpDelete("users/{id}")]
+        public async Task<IActionResult> DeleteUser(string id)
+        {
+            try
+            {
+                await authService.DeleteAccountAsync(id);
+                return Ok(new { message = $"User {id} deleted successfully." });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"User with ID {id} not found.");
+            }
+        }
+        
         [HttpPost("users/make-admin")]
         public async Task<IActionResult> MakeAdmin([FromQuery] string email)
         {

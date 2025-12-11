@@ -87,6 +87,7 @@ Specifically for this project, run the following commands:
 ```bash
 dotnet ef migrations add <MigrationName> --context AuthDbContext
 dotnet ef database update --context AuthDbContext
+
 dotnet ef migrations add <MigrationName> --context AppDbContext
 dotnet ef database update --context AppDbContext
 ```

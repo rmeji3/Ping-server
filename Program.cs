@@ -221,10 +221,8 @@ builder.Services.AddScoped<IBanningService, BanningService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddHostedService<AnalyticsBackgroundJob>();
 
-// --- AWS S3 & Storage ---
+// --- AWS S3 & Storage & Email ---
 var awsOptions = builder.Configuration.GetAWSOptions();
-// Explicitly set credentials if they are in the config (e.g. UserSecrets)
-// This fixes issues where the SDK fails to resolve them from the "AWS" section automatically
 var awsAccessKey = builder.Configuration["AWS:AccessKey"];
 var awsSecretKey = builder.Configuration["AWS:SecretKey"];
 if (!string.IsNullOrEmpty(awsAccessKey) && !string.IsNullOrEmpty(awsSecretKey))
@@ -233,7 +231,9 @@ if (!string.IsNullOrEmpty(awsAccessKey) && !string.IsNullOrEmpty(awsSecretKey))
 }
 builder.Services.AddDefaultAWSOptions(awsOptions);
 builder.Services.AddAWSService<IAmazonS3>();
+builder.Services.AddAWSService<Amazon.SimpleEmail.IAmazonSimpleEmailService>(); // Add SES
 builder.Services.AddScoped<IStorageService, S3StorageService>();
+builder.Services.AddScoped<Conquest.Services.Email.IEmailService, Conquest.Services.Email.SesEmailService>(); // Add EmailService
 builder.Services.AddHttpClient<Conquest.Services.Moderation.IModerationService, Conquest.Services.Moderation.OpenAIModerationService>();
 builder.Services.AddScoped<Conquest.Services.AI.ISemanticService, Conquest.Services.AI.OpenAISemanticService>();
 builder.Services.AddScoped<RecommendationService>();
