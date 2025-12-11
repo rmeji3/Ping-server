@@ -1,17 +1,19 @@
 ﻿using Conquest.Dtos.Activities;
 using Conquest.Dtos.Common;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using Conquest.Dtos.Places;
+using Conquest.Models.Places;
+using Conquest.Services.Places;
+using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 
 namespace Conquest.Controllers.Places
 {
-    using System.Security.Claims;
-    using Conquest.Dtos.Places;
-    using Conquest.Models.Places;
-    using Conquest.Services.Places;
-    using Microsoft.AspNetCore.Mvc;
-
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/[controller]")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize]
     public class PlacesController(IPlaceService placeService, Conquest.Services.Business.IBusinessAnalyticsService analyticsService) : ControllerBase
     {

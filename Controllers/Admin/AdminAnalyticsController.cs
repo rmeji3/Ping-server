@@ -1,11 +1,14 @@
 using Conquest.Services.Analytics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 
 namespace Conquest.Controllers.Admin;
 
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/admin/analytics")]
+[Route("api/v{version:apiVersion}/admin/analytics")]
 [Authorize(Roles = "Admin")]
 public class AdminAnalyticsController(IAnalyticsService analytics) : ControllerBase
 {

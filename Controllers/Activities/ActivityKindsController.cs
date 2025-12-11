@@ -2,12 +2,15 @@ using Conquest.Data.App;
 using Conquest.Dtos.Activities;
 using Conquest.Models.Activities;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using Microsoft.EntityFrameworkCore;
 
 namespace Conquest.Controllers.ActivityKinds
 {
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/activity-kinds")]
+    [Route("api/v{version:apiVersion}/activity-kinds")]
     public class ActivityKindsController(AppDbContext db) : ControllerBase
     {
         // GET /api/activity-kinds

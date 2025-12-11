@@ -367,6 +367,16 @@ Property Configuration:
 Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body. Auth: A=Requires JWT, An=AllowAnonymous, Adm=Admin Only.
 
 ### ActivitiesController (`/api/activities`)
+
+### 9.1. Versioning Strategy
+- **Version**: 1.0 (Default)
+- **Support**: 
+  - **URL Path**: `/api/v1/resource` (Preferred)
+  - **Query String**: `/api/resource?api-version=1.0`
+  - **Header**: `X-Api-Version: 1.0`
+- **Compatibility**: The API defaults to v1.0 if no version is specified. Existing routes (e.g., `/api/activities`) function as aliases for v1.0.
+
+### ActivitiesController (`/api/activities`)
 | Method | Route           | Auth | Body                | Returns              | Notes                                                |
 | ------ | --------------- | ---- | ------------------- | -------------------- | ---------------------------------------------------- |
 | POST   | /api/activities | A    | `CreateActivityDto` | `ActivityDetailsDto` | Validates place, optional kind, uniqueness per place |

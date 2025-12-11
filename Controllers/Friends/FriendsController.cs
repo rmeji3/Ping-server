@@ -3,11 +3,14 @@ using Conquest.Dtos.Friends;
 using Conquest.Services.Friends;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using System.Security.Claims;
 
 namespace Conquest.Controllers
 {
+    [ApiVersion("1.0")]
     [Route("api/[controller]")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     public class FriendsController(IFriendService friendService) : ControllerBase
     {
         [Authorize]

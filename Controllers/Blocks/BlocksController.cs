@@ -2,12 +2,15 @@ using Conquest.Models.AppUsers;
 using Conquest.Services.Blocks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using System.Security.Claims;
 
 namespace Conquest.Controllers.Blocks
 {
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/blocks")]
+    [Route("api/v{version:apiVersion}/blocks")]
     [Authorize]
     public class BlocksController(IBlockService blockService) : ControllerBase
     {

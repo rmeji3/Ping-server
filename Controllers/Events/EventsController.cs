@@ -4,11 +4,14 @@ using Conquest.Dtos.Events;
 using Conquest.Services.Events;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 
 namespace Conquest.Controllers.Events
 {
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/[controller]")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize]
     public class EventsController(IEventService eventService) : ControllerBase
     {

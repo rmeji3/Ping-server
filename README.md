@@ -97,6 +97,20 @@ Or you can run:
 - (migrateAuth.sh)[mAuth.sh]:
 ``` powershell ./mAuth.sh <MigrationName>```
 
+## Testing Strategy
+We use xUnit + Microsoft.AspNetCore.Mvc.Testing for integration testing.
+
+### Infrastructure
+Tests/Conquest.Tests: Main test project.
+IntegrationTestFactory: WebApplicationFactory customization that replaces the database with InMemory providers for isolation.
+BaseIntegrationTest: Base class creating HttpClient and handling auth.
+
+### How to Run
+``` powershell dotnet test Tests/Conquest.Tests ```
+
+### Writing Tests
+Inherit BaseIntegrationTest. The factory ensures a fresh server instance (logic-wise) and cleanable DBs.
+
 
 
 

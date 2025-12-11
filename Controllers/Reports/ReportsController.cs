@@ -7,11 +7,14 @@ using Conquest.DTOs.Reports;
 using Conquest.Services.Reports;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 
 namespace Conquest.Controllers.Reports
 {
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/[controller]")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize]
     public class ReportsController(IReportService reportService) : ControllerBase
     {

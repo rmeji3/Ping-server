@@ -34,6 +34,8 @@ using Microsoft.OpenApi.Models;
 using StackExchange.Redis;
 using Serilog;
 using Serilog.Events;
+using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
 
 // Load environment variables from .env file
 DotNetEnv.Env.Load();
@@ -277,6 +279,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // --- Controllers + Swagger ---
+builder.Services.AddApiVersioning(options =>
+    {
+        options.DefaultApiVersion = new ApiVersion(1, 0);
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.ReportApiVersions = true;
+        options.ApiVersionReader = ApiVersionReader.Combine(
+            new UrlSegmentApiVersionReader(),
+            new HeaderApiVersionReader("X-Api-Version"),
+            new QueryStringApiVersionReader("api-version"));
+    })
+    .AddMvc()
+    .AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'VVV";
+        options.SubstituteApiVersionInUrl = true;
+    });
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {

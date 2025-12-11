@@ -3,13 +3,16 @@ using Conquest.Services.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using System.Security.Claims;
 
 namespace Conquest.Controllers.Auth
 {
 
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/[controller]")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     public class AuthController(IAuthService authService) : ControllerBase
     {
         [HttpPost("register")]

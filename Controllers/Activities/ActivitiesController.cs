@@ -1,11 +1,14 @@
 ﻿using Conquest.Dtos.Activities;
 using Conquest.Services.Activities;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 
 namespace Conquest.Controllers.Activities
 {
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/activities")]
+    [Route("api/v{version:apiVersion}/activities")]
     public class ActivitiesController(IActivityService activityService) : ControllerBase
     {
         [HttpPost]

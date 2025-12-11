@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using System.Security.Claims;
 using Conquest.Services.Places;
 using Conquest.Services.Reviews;
@@ -16,7 +17,9 @@ using Conquest.Models.AppUsers;
 namespace Conquest.Controllers
 {
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/admin")]
+    [Route("api/v{version:apiVersion}/admin")]
     [Authorize(Roles = "Admin")]
     public class AdminController(
         IPlaceService placeService,
