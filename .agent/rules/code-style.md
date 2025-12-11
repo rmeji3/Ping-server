@@ -3,13 +3,8 @@ trigger: always_on
 ---
 
 # Copilot / Agent Project Instructions
+
 These instructions guide automated code assistance in this repository.
-
-# How to build
-- dotnet build Conquest-server.csproj
-
-# After every new feature or updating a feature:
-- generate a prompt to give the front end with context like endpoint changes, dtos, etc.
 
 ## Primary Context Source
 - Use `ServerGuide.md` for the authoritative description of architecture, endpoints, models, DTOs, services, and rules.
@@ -78,7 +73,7 @@ dotnet ef database update --context Conquest.Data.Auth.AuthDbContext
 dotnet ef migrations add <Name> --context Conquest.Data.App.AppDbContext
 dotnet ef database update --context Conquest.Data.App.AppDbContext
 ```
-Update `ServerGuide.md` after changes.
+Update `ServerGuide.md` after successful migration application.
 
 ## Performance & Future Extensions
 - Batch user lookups for events (consider ToDictionary patterns or joins) if scaling.
@@ -89,6 +84,7 @@ Update `ServerGuide.md` after changes.
 - ALWAYS consult `ServerGuide.md` before suggesting or implementing changes.
 - ALWAYS update `ServerGuide.md` after changes (endpoints, models, DTOs, services, schema, rules).
 - NEVER introduce breaking changes without explicit instruction or versioning plan.
+- After adding new changes, give a prompt to tell the front end how to use these changes with context(dtos,endpoints,etc).
 
 ## Minimal Desired Behavior Summary
 Update `ServerGuide.md` whenever you add or modify server code affecting endpoints, models, DTOs, services, or database schema.
