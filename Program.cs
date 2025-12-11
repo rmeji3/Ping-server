@@ -242,6 +242,7 @@ builder.Services.AddScoped<IBanningService, BanningService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<AnalyticsBackgroundJob>();
+builder.Services.AddHostedService<Conquest.Services.Background.UnverifiedUserCleanupService>();
 
 // --- AWS S3 & Storage & Email ---
 var awsOptions = builder.Configuration.GetAWSOptions();

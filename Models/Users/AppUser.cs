@@ -23,6 +23,8 @@ namespace Conquest.Models.AppUsers
         public string? BanReason { get; set; }
 
         public DateTimeOffset? LastLoginUtc { get; set; }
+
+        public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
     }
 
     public enum PrivacyConstraint

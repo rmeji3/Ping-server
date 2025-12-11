@@ -30,7 +30,8 @@ public class AuthService(
             UserName = dto.UserName,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
-            EmailConfirmed = true // Bypass verification for now
+            EmailConfirmed = false,
+            CreatedUtc = DateTimeOffset.UtcNow
         };
         
         var normalized = dto.UserName.ToUpper();
@@ -61,8 +62,8 @@ public class AuthService(
 
         logger.LogInformation("User registered: {UserId} ({UserName}). Sending verification email.", user.Id, user.UserName);
 
-        // Generate verification code
-        // await SendVerificationCodeAsync(user);
+        // Generate verification code (comment out for testing)
+        await SendVerificationCodeAsync(user);
 
         return new { message = "Registration successful. Welcome!" };
     }
@@ -82,14 +83,12 @@ public class AuthService(
              var msg = string.IsNullOrWhiteSpace(user.BanReason) ? "Your account has been banned." : $"Your account has been banned: {user.BanReason}";
              throw new UnauthorizedAccessException(msg);
         }
-
-        /*
+        // comment out for testing
         if (!await users.IsEmailConfirmedAsync(user))
         {
             logger.LogWarning("Login failed: User '{Email}' not confirmed.", dto.Email);
             throw new UnauthorizedAccessException("Please verify your email address.");
         }
-        */
 
         var result = await signIn.CheckPasswordSignInAsync(user, dto.Password, lockoutOnFailure: true);
         if (!result.Succeeded)

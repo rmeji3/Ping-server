@@ -137,8 +137,8 @@ Required `appsettings.json` keys:
 - `AuthResponse` returns: `AccessToken`, `ExpiresUtc`, `User` (`UserDto`).
 
 ### Password Flows
-- Register: validates uniqueness of normalized `UserName` manually.
-- Login: email + password; uses `CheckPasswordSignInAsync` with lockout. Checks `IsBanned` and returns 403 if banned.
+- Register: validates uniqueness of normalized `UserName` manually. Usernames are reserved for 12 hours pending verification.
+- Login: email + password; uses `CheckPasswordSignInAsync` with lockout. Checks `IsBanned` (403) and `EmailConfirmed` (403). Users cannot login until verified.
 - Login: email + password; uses `CheckPasswordSignInAsync` with lockout. Checks `IsBanned` and returns 403 if banned.
 - Forgot Password: generates 6-digit code, stores in Redis (15m), emails via SES.
 - Reset Password: validates 6-digit code from Redis, then resets password.
@@ -199,7 +199,7 @@ Property Configuration:
 ## 6. Domain Models (Summaries)
 | Entity        | Key                | Core Fields                                                                                                              | Navigation                             | Notes                                                                                                                 |
 | ------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| AppUser       | `IdentityUser`     | FirstName, LastName, ProfileImageUrl, IsBanned, BanCount, LastIpAddress, BanReason, LastLoginUtc         |(Friends)                              | Stored in Auth DB                                                                                                     |
+| AppUser       | `IdentityUser`     | FirstName, LastName, ProfileImageUrl, IsBanned, BanCount, LastIpAddress, BanReason, LastLoginUtc, CreatedUtc |(Friends)                              | Stored in Auth DB; Unverified users deleted after 12h |
 | IpBan         | IpAddress          | Reason, CreatedAt, ExpiresAt                                                                                             | (None)                                 | Stores banned IPs                                                                                                     |
 | Friendship    | (UserId, FriendId) | Status (Pending/Accepted/Blocked), CreatedAt                                                                             | User, Friend                           | Symmetric friendship stored as two Accepted rows after accept                                                         |
 | Place         | Id                 | Name, Address, **Location (Point)**, Latitude*, Longitude*, OwnerUserId, Visibility (Public/Private/Friends), Type (Verified/Custom), CreatedUtc | PlaceActivities                        | OwnerUserId is string (Identity FK); Visibility controls access; Type determines duplicate logic; *Lat/Lon are computed props mapped to Location (SRID 4326) |
@@ -370,6 +370,11 @@ Property Configuration:
   - Manages User and IP bans.
   - Integration with Redis for fast middleware checks.
   - Support for temporary or permanent IP bans.
+
+#### UnverifiedUserCleanupService (Hosted Service)
+- **Purpose**: Background task that runs hourly.
+- **Logic**: Deletes user accounts where `EmailConfirmed == false` AND `CreatedUtc` > 12 hours ago.
+- **Effect**: Releases reserved usernames if they are not verified in time.
 
 #### EmailService (`IEmailService`)
 - **Implementation**: `SesEmailService`.
