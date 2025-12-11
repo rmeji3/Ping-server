@@ -31,7 +31,7 @@ Conquest is an ASP.NET Core API (targeting .NET 9) that manages users, places, a
 - ASP.NET Core MVC + minimal hosting model
 - **Service Layer Architecture** ("Thin Controller, Fat Service" pattern)
 - Identity (custom `AppUser`) stored in `AuthDbContext` (SQLite)
-- Application domain stored in `AppDbContext` (SQLite + **NetTopologySuite** for geospatial)
+- Application domain stored in `AppDbContext` (SQLite **OR** PostgreSQL + **PostGIS** for geospatial)
 - JWT-based authentication
 - **Redis** for distributed caching, rate limiting, and session management
 - **Rate Limiting Middleware** for API protection
@@ -56,7 +56,7 @@ Conquest is an ASP.NET Core API (targeting .NET 9) that manages users, places, a
 ---
 ## 3. Configuration & Startup (`Program.cs`)
 Registered services:
-- Two DbContexts (`AuthDbContext`, `AppDbContext`) using separate SQLite connection strings: `AuthConnection`, `AppConnection`.
+- Two DbContexts (`AuthDbContext`, `AppDbContext`) using either **SQLite** or **PostgreSQL** based on `DatabaseProvider` config.
 - IdentityCore for `AppUser` + Roles + SignInManager + TokenProviders.
 - JWT options bound from `configuration["Jwt"]` (Key, Issuer, Audience, AccessTokenMinutes).
 - **Redis**: `IConnectionMultiplexer` (singleton), distributed cache, `IRedisService` (scoped).
@@ -85,9 +85,10 @@ Pipeline order:
 Required `appsettings.json` keys:
 ```json
 {
+  "DatabaseProvider": "Sqlite", // or "Postgres"
   "ConnectionStrings": {
-    "AuthConnection": "Data Source=auth.db",
-    "AppConnection": "Data Source=app.db",
+    "AuthConnection": "", // Set in .env
+    "AppConnection": "",  // Set in .env
     "RedisConnection": "localhost:6379"
   },
   "Jwt": {
@@ -108,8 +109,11 @@ Required `appsettings.json` keys:
 }
 ```
 
-**Environment Variables**:
-- `OPENAI_API_KEY`: Required for AI Services (Moderation & Semantic Search).
+**Environment Variables (.env)**:
+- `AUTH_CONNECTION`: Connection string (Postgres or SQLite file path).
+- `APP_CONNECTION`: Connection string.
+- `OPENAI_API_KEY`: Required for AI Services.
+- `DatabaseProvider`: Override default provider (e.g. `Postgres`).
 
 **Development overrides** (`appsettings.Development.json`):
 ```json
@@ -168,7 +172,8 @@ Seed Data:
 - `ActivityKind` seeded with ids 1–20 (Sports, Food, Outdoors, Art, etc.).
 
 Indexes:
-- `Place (Location)` Spatial Index. NTS `Point` (SRID 4326).
+- `Place (Location)` Spatial Index. NTS `Point`.
+- **PostgreSQL Only**: `Place (SearchVector)` GIN Index for Full-Text Search.
 - Unique composite `Favorited (UserId, PlaceId)` prevents duplicate favorites.
 - Unique `ActivityKind.Name`.
 - Unique composite `PlaceActivity (PlaceId, Name)`.
@@ -652,12 +657,27 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 `Program.cs` executes `Database.Migrate()` for both contexts at startup.
 
 ### Manual Commands
-Use full context type when generating migrations:
+### Manual Commands
+We maintain **separate migration folders** for SQLite and PostgreSQL.
+
+**PostgreSQL (AWS/Prod):**
 ```bash
-dotnet ef migrations add <MigrationName> --context Conquest.Data.Auth.AuthDbContext
+# Set provider in .env or shell
+$env:DatabaseProvider='Postgres' 
+dotnet ef migrations add <Name> --context Conquest.Data.Auth.AuthDbContext --output-dir Data/Auth/Migrations/Postgres
 dotnet ef database update --context Conquest.Data.Auth.AuthDbContext
 
-dotnet ef migrations add <MigrationName> --context Conquest.Data.App.AppDbContext
+dotnet ef migrations add <Name> --context Conquest.Data.App.AppDbContext --output-dir Data/App/Migrations/Postgres
+dotnet ef database update --context Conquest.Data.App.AppDbContext
+```
+
+**SQLite (Local):**
+```bash
+# Default provider
+dotnet ef migrations add <Name> --context Conquest.Data.Auth.AuthDbContext
+dotnet ef database update --context Conquest.Data.Auth.AuthDbContext
+
+dotnet ef migrations add <Name> --context Conquest.Data.App.AppDbContext
 dotnet ef database update --context Conquest.Data.App.AppDbContext
 ```
 

@@ -348,9 +348,17 @@ builder.Services.AddSwaggerGen(o =>
 
 var app = builder.Build();
 
-// --- Seed Roles ---
+// --- Auto-Migration & Seed Roles ---
 using (var scope = app.Services.CreateScope())
 {
+    // 1. Migrate Databases
+    var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+    await authDb.Database.MigrateAsync();
+    
+    var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await appDb.Database.MigrateAsync();
+
+    // 2. Seed Roles
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     string[] roleNames = { "Admin", "User", "Business" };
     foreach (var roleName in roleNames)

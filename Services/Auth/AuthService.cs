@@ -29,7 +29,8 @@ public class AuthService(
             Email = dto.Email,
             UserName = dto.UserName,
             FirstName = dto.FirstName,
-            LastName = dto.LastName
+            LastName = dto.LastName,
+            EmailConfirmed = true // Bypass verification for now
         };
         
         var normalized = dto.UserName.ToUpper();
@@ -61,9 +62,9 @@ public class AuthService(
         logger.LogInformation("User registered: {UserId} ({UserName}). Sending verification email.", user.Id, user.UserName);
 
         // Generate verification code
-        await SendVerificationCodeAsync(user);
+        // await SendVerificationCodeAsync(user);
 
-        return new { message = "Registration successful. Please check your email to verify your account." };
+        return new { message = "Registration successful. Welcome!" };
     }
 
     public async Task<AuthResponse> LoginAsync(LoginDto dto)
@@ -82,11 +83,13 @@ public class AuthService(
              throw new UnauthorizedAccessException(msg);
         }
 
+        /*
         if (!await users.IsEmailConfirmedAsync(user))
         {
             logger.LogWarning("Login failed: User '{Email}' not confirmed.", dto.Email);
             throw new UnauthorizedAccessException("Please verify your email address.");
         }
+        */
 
         var result = await signIn.CheckPasswordSignInAsync(user, dto.Password, lockoutOnFailure: true);
         if (!result.Succeeded)
