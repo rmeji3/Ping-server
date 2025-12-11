@@ -257,6 +257,7 @@ if (!string.IsNullOrEmpty(awsAccessKey) && !string.IsNullOrEmpty(awsSecretKey))
     awsOptions.Credentials = new Amazon.Runtime.BasicAWSCredentials(awsAccessKey, awsSecretKey);
 }
 builder.Services.AddDefaultAWSOptions(awsOptions);
+builder.Services.AddMemoryCache(); // Required for AppleAuthService JWKS caching
 builder.Services.AddAWSService<IAmazonS3>();
 builder.Services.AddAWSService<Amazon.SimpleEmail.IAmazonSimpleEmailService>(); // Add SES
 builder.Services.AddScoped<IStorageService, S3StorageService>();
