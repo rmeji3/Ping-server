@@ -98,7 +98,11 @@ Required `appsettings.json` keys:
     "AccessTokenMinutes": 60
   },
   "Google": {
-    "ApiKey": "[google-places-api-key]"
+    "ApiKey": "[google-places-api-key]",
+    "ClientId": "[google-oauth-client-id]"
+  },
+  "Apple": {
+    "ClientId": "[apple-bundle-id]"
   },
   "RateLimiting": {
     "GlobalLimitPerMinute": 100,
@@ -143,6 +147,15 @@ Required `appsettings.json` keys:
 - Forgot Password: generates 6-digit code, stores in Redis (15m), emails via SES.
 - Reset Password: validates 6-digit code from Redis, then resets password.
 - Change Password: requires existing password & JWT auth.
+- **Google OAuth**:
+  - Client-side flow: Client sends `idToken` to server.
+  - Server verifies token with Google.
+  - **Account Merging**: If email exists, logs into existing account (email verified automatically).
+  - **Registration**: If email is new, creates account with random username (based on name/email).
+- **Apple OAuth**:
+  - Similar flow to Google.
+  - **Name Privacy**: Apple only sends `firstName` and `lastName` on the **first** login.
+  - Server validates `identityToken` against Apple's JWKS (cached).
 
 ### Authorization
 - Most controllers require `[Authorize]` at class level.
@@ -444,6 +457,8 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/auth/password/forgot | An   | `ForgotPasswordDto` | Dev returns code  | Avoids enumeration (Rate Limit: 5/hr)     |
 | POST   | /api/auth/password/reset  | An   | `ResetPasswordDto`  | 200 status        | Validates code from Redis                 |
 | POST   | /api/auth/password/change | A    | `ChangePasswordDto` | 200 status        | Validates current password                |
+| POST   | /api/auth/google          | An   | `GoogleLoginDto`    | `AuthResponse`    | Google Sign-In (Login or Register)        |
+| POST   | /api/auth/apple           | An   | `AppleLoginDto`     | `AuthResponse`    | Apple Sign-In (Login or Register)         |
 | DELETE | /api/auth/me              | A    | —                   | Msg               | Self-delete account                       |
 
 ### BlocksController (`/api/blocks`)

@@ -82,6 +82,39 @@ public class IntegrationTestFactory : WebApplicationFactory<Program>
 
             // Add Mock IChatCompletionService
             services.AddSingleton(new Moq.Mock<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService>().Object);
+
+            // Mock GoogleAuthService
+            services.RemoveAll<Conquest.Services.Google.GoogleAuthService>();
+            // GoogleAuthService(IConfiguration)
+            var mockGoogle = new Moq.Mock<Conquest.Services.Google.GoogleAuthService>(
+                new Moq.Mock<Microsoft.Extensions.Configuration.IConfiguration>().Object
+            );
+            services.AddScoped(_ => mockGoogle.Object);
+
+            // Mock AppleAuthService
+            services.RemoveAll<Conquest.Services.Apple.AppleAuthService>();
+            // AppleAuthService(IHttpClientFactory, IMemoryCache, IConfiguration)
+            var mockCache = new Moq.Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+            var mockClientFactory = new Moq.Mock<IHttpClientFactory>();
+            mockClientFactory.Setup(x => x.CreateClient(It.IsAny<string>())).Returns(new HttpClient());
+
+            var mockApple = new Moq.Mock<Conquest.Services.Apple.AppleAuthService>(
+                mockClientFactory.Object,
+                mockCache.Object,
+                new Moq.Mock<Microsoft.Extensions.Configuration.IConfiguration>().Object
+            );
+            services.AddScoped(_ => mockApple.Object);
+
+            // Mock IEmailService
+            services.RemoveAll<Conquest.Services.Email.IEmailService>();
+            var mockEmail = new Moq.Mock<Conquest.Services.Email.IEmailService>();
+            services.AddScoped(_ => mockEmail.Object);
+
+            // Mock IStorageService
+            services.RemoveAll<Conquest.Services.Storage.IStorageService>();
+            var mockStorage = new Moq.Mock<Conquest.Services.Storage.IStorageService>();
+            mockStorage.Setup(x => x.UploadFileAsync(It.IsAny<Microsoft.AspNetCore.Http.IFormFile>(), It.IsAny<string>())).ReturnsAsync("https://mock-s3.com/file.jpg");
+            services.AddScoped(_ => mockStorage.Object);
         });
     }
 }

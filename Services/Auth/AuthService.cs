@@ -21,6 +21,8 @@ public class AuthService(
     IModerationService moderationService,
     Conquest.Services.Email.IEmailService emailService,
     Microsoft.Extensions.Configuration.IConfiguration config,
+    Conquest.Services.Google.GoogleAuthService googleAuthService,
+    Conquest.Services.Apple.AppleAuthService appleAuthService,
     Conquest.Services.Redis.IRedisService redis) : IAuthService
 {
     public async Task<object> RegisterAsync(RegisterDto dto)
@@ -134,6 +136,142 @@ public class AuthService(
 
         logger.LogInformation("User logged in: {UserId}", user.Id);
         return await tokens.CreateAuthResponseAsync(user);
+    }
+
+    public async Task<AuthResponse> LoginWithGoogleAsync(GoogleLoginDto dto)
+    {
+        // 1. Verify Token with Google
+        // We need to inject GoogleAuthService. Since it's new, I'll resolve it or add it to constructor.
+        // For now, let's assume it's injected. I will update the constructor below.
+        
+        var payload = await googleAuthService.VerifyGoogleTokenAsync(dto.IdToken);
+
+        // 2. Check if user exists
+        var user = await users.FindByEmailAsync(payload.Email);
+
+        if (user == null)
+        {
+            // 3. Register new user
+            user = new AppUser
+            {
+                UserName = await GenerateUniqueUsernameAsync(payload.Name, payload.Email),
+                Email = payload.Email,
+                FirstName = payload.GivenName ?? payload.Name,
+                LastName = payload.FamilyName,
+                EmailConfirmed = true, // Trusted from Google
+                CreatedUtc = DateTimeOffset.UtcNow,
+                ProfileImageUrl = payload.Picture
+            };
+
+            var result = await users.CreateAsync(user);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                throw new Exception($"Failed to create Google user: {errors}");
+            }
+            
+            logger.LogInformation("New user created via Google: {UserId}", user.Id);
+        }
+        else
+        {
+            // 4. Existing user - Ensure Email is confirmed if it wasn't
+            if (!user.EmailConfirmed)
+            {
+                user.EmailConfirmed = true;
+                await users.UpdateAsync(user);
+            }
+            
+            // Check ban status
+            if (user.IsBanned)
+            {
+                 var msg = string.IsNullOrWhiteSpace(user.BanReason) ? "Your account has been banned." : $"Your account has been banned: {user.BanReason}";
+                 throw new UnauthorizedAccessException(msg);
+            }
+        }
+
+        // 5. Log Activity (Reusing login logic would be better but for speed copying inline)
+        user.LastLoginUtc = DateTimeOffset.UtcNow;
+        await users.UpdateAsync(user);
+        
+        return await tokens.CreateAuthResponseAsync(user);
+    }
+
+    public async Task<AuthResponse> LoginWithAppleAsync(AppleLoginDto dto)
+    {
+        // 1. Verify Token with Apple
+        var payload = await appleAuthService.VerifyAppleTokenAsync(dto.IdToken);
+
+        // 2. Check if user exists by Email
+        var user = await users.FindByEmailAsync(payload.Email);
+
+        if (user == null)
+        {
+            // 3. Register new user
+            // NOTE: Apple only sends FirstName/LastName on the FIRST login. 
+            // If we missed it (e.g. user re-installing app), these might be null.
+            string firstName = !string.IsNullOrWhiteSpace(dto.FirstName) ? dto.FirstName : "Apple";
+            string lastName = !string.IsNullOrWhiteSpace(dto.LastName) ? dto.LastName : "User";
+
+            user = new AppUser
+            {
+                UserName = await GenerateUniqueUsernameAsync(firstName, payload.Email),
+                Email = payload.Email,
+                FirstName = firstName,
+                LastName = lastName,
+                EmailConfirmed = true,
+                CreatedUtc = DateTimeOffset.UtcNow
+            };
+
+            var result = await users.CreateAsync(user);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                throw new Exception($"Failed to create Apple user: {errors}");
+            }
+            
+            logger.LogInformation("New user created via Apple: {UserId}", user.Id);
+        }
+        else
+        {
+            // 4. Existing user
+            if (!user.EmailConfirmed)
+            {
+                user.EmailConfirmed = true;
+                await users.UpdateAsync(user);
+            }
+
+            if (user.IsBanned)
+            {
+                 var msg = string.IsNullOrWhiteSpace(user.BanReason) ? "Your account has been banned." : $"Your account has been banned: {user.BanReason}";
+                 throw new UnauthorizedAccessException(msg);
+            }
+        }
+
+        user.LastLoginUtc = DateTimeOffset.UtcNow;
+        await users.UpdateAsync(user);
+        
+        return await tokens.CreateAuthResponseAsync(user);
+    }
+
+    private async Task<string> GenerateUniqueUsernameAsync(string name, string email)
+    {
+        // Strategy: Try name-based, then email-part, then append random numbers
+        string baseName = "user";
+        if (!string.IsNullOrWhiteSpace(name)) baseName = name.Replace(" ", "").ToLower();
+        else if (!string.IsNullOrWhiteSpace(email)) baseName = email.Split('@')[0].ToLower();
+
+        // Remove special chars
+        baseName = new string(baseName.Where(char.IsLetterOrDigit).ToArray());
+        if (string.IsNullOrEmpty(baseName)) baseName = "user";
+
+        string candidate = baseName;
+        int check = 0;
+        while (await users.FindByNameAsync(candidate) != null)
+        {
+            check++;
+            candidate = $"{baseName}{check}";
+        }
+        return candidate;
     }
 
     public async Task<UserDto> GetCurrentUserAsync(string userId)

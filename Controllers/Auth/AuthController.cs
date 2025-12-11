@@ -49,6 +49,44 @@ namespace Conquest.Controllers.Auth
             }
         }
 
+        [HttpPost("google")]
+        [AllowAnonymous]
+        public async Task<ActionResult<AuthResponse>> LoginWithGoogle(GoogleLoginDto dto)
+        {
+            try
+            {
+                var result = await authService.LoginWithGoogleAsync(dto);
+                return result;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("apple")]
+        [AllowAnonymous]
+        public async Task<ActionResult<AuthResponse>> LoginWithApple(AppleLoginDto dto)
+        {
+            try
+            {
+                var result = await authService.LoginWithAppleAsync(dto);
+                return result;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPost("verify-email")]
         [AllowAnonymous]
         public async Task<ActionResult<AuthResponse>> VerifyEmail(VerifyEmailDto dto)

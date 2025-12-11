@@ -7,6 +7,8 @@ public interface IAuthService
     Task<object> RegisterAsync(RegisterDto dto);
     Task<AuthResponse> LoginAsync(LoginDto dto);
     Task<AuthResponse> VerifyEmailAsync(VerifyEmailDto dto);
+    Task<AuthResponse> LoginWithGoogleAsync(GoogleLoginDto dto);
+    Task<AuthResponse> LoginWithAppleAsync(AppleLoginDto dto);
     Task ResendVerificationEmailAsync(string email);
     Task<UserDto> GetCurrentUserAsync(string userId);
     Task<object> ForgotPasswordAsync(ForgotPasswordDto dto, string scheme, string host);

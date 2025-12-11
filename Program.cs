@@ -103,6 +103,10 @@ var googleApiKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY");
 if (!string.IsNullOrEmpty(googleApiKey))
     builder.Configuration["Google:ApiKey"] = googleApiKey;
 
+var googleClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
+if (!string.IsNullOrEmpty(googleClientId))
+    builder.Configuration["Google:ClientId"] = googleClientId;
+
 // Rate Limiting
 var rateLimitGlobal = Environment.GetEnvironmentVariable("RATE_LIMIT_GLOBAL_PER_MINUTE");
 if (!string.IsNullOrEmpty(rateLimitGlobal))
@@ -259,6 +263,8 @@ builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddScoped<Conquest.Services.Email.IEmailService, Conquest.Services.Email.SesEmailService>(); // Add EmailService
 builder.Services.AddHttpClient<Conquest.Services.Moderation.IModerationService, Conquest.Services.Moderation.OpenAIModerationService>();
 builder.Services.AddScoped<Conquest.Services.AI.ISemanticService, Conquest.Services.AI.OpenAISemanticService>();
+builder.Services.AddScoped<Conquest.Services.Apple.AppleAuthService>();
+builder.Services.AddScoped<Conquest.Services.Google.GoogleAuthService>();
 builder.Services.AddScoped<RecommendationService>();
 
 
@@ -353,11 +359,14 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     // 1. Migrate Databases
-    var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-    await authDb.Database.MigrateAsync();
-    
-    var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await appDb.Database.MigrateAsync();
+    if (app.Environment.EnvironmentName != "Testing")
+    {
+        var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        await authDb.Database.MigrateAsync();
+        
+        var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await appDb.Database.MigrateAsync();
+    }
 
     // 2. Seed Roles
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
@@ -446,7 +455,10 @@ app.MapMetrics();
 app.MapHealthChecks("/health");
 
 // Capture JVM-style runtime metrics (GC, ThreadPool, etc.)
-DotNetRuntimeStatsBuilder.Default().StartCollecting();
+if (app.Environment.EnvironmentName != "Testing")
+{
+    DotNetRuntimeStatsBuilder.Default().StartCollecting();
+}
 
 app.Run();
 }
