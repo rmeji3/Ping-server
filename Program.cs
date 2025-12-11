@@ -23,6 +23,7 @@ using Conquest.Services.Redis;
 using Conquest.Services.Google;
 using Conquest.Services.Recommendations;
 using Conquest.Services.Storage;
+using Conquest.Services.Notifications;
 using Conquest.Services;
 using Conquest.Services.Analytics;
 using Microsoft.SemanticKernel;
@@ -219,6 +220,7 @@ builder.Services.AddScoped<IBusinessService, BusinessService>();
 builder.Services.AddScoped<IBusinessAnalyticsService, BusinessAnalyticsService>();
 builder.Services.AddScoped<IBanningService, BanningService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<AnalyticsBackgroundJob>();
 
 // --- AWS S3 & Storage & Email ---

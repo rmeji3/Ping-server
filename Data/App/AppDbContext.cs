@@ -6,6 +6,7 @@ using Conquest.Models.Reviews;
 using Conquest.Models.Reports;
 using Conquest.Models.Users;
 using Conquest.Models.Business;
+using Conquest.Models;
 
 namespace Conquest.Data.App
 {
@@ -15,6 +16,7 @@ namespace Conquest.Data.App
         public DbSet<ActivityKind> ActivityKinds => Set<ActivityKind>();
         public DbSet<PlaceActivity> PlaceActivities => Set<PlaceActivity>();
         public DbSet<Review> Reviews => Set<Review>();
+        public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<Tag> Tags => Set<Tag>();
         public DbSet<ReviewTag> ReviewTags => Set<ReviewTag>();
         public DbSet<Event> Events => Set<Event>();

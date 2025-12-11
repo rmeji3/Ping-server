@@ -19,10 +19,11 @@ Comprehensive internal documentation of the current server codebase. This guide 
 14. Redis & Caching
 15. Rate Limiting
 16. Content Moderation & AI
-17. Quick Reference Summary
-18. Error Response Formats
-19. Suggested Future Enhancements
-20. Agent Usage Notes
+17. Notifications
+18. Quick Reference Summary
+19. Error Response Formats
+20. Suggested Future Enhancements
+21. Agent Usage Notes
 
 ---
 ## 1. Overview

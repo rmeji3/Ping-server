@@ -12,6 +12,9 @@ using Conquest.Models.Places;
 
 using Conquest.Services.Blocks;
 
+using Conquest.Services.Notifications;
+using Conquest.Models;
+
 namespace Conquest.Services.Reviews;
 
 public class ReviewService(
@@ -20,6 +23,7 @@ public class ReviewService(
     UserManager<AppUser> userManager,
     Conquest.Services.Moderation.IModerationService moderationService,
     IBlockService blockService,
+    INotificationService notificationService,
     ILogger<ReviewService> logger) : IReviewService
 {
     public async Task<ReviewDto> CreateReviewAsync(int placeActivityId, CreateReviewDto dto, string userId, string userName)
@@ -398,6 +402,23 @@ public class ReviewService(
 
         await appDb.SaveChangesAsync();
         logger.LogInformation("Review {ReviewId} liked by {UserId}", reviewId, userId);
+
+        // Send Notification
+        if (review != null && review.UserId != userId) // Don't notify if liking own review
+        {
+            var sender = await userManager.FindByIdAsync(userId);
+            await notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = review.UserId,
+                SenderId = userId,
+                SenderName = sender?.UserName ?? "Someone",
+                SenderProfileImageUrl = sender?.ProfileImageUrl,
+                Type = NotificationType.ReviewLike,
+                Title = "New Like",
+                Message = $"{sender?.UserName ?? "Someone"} liked your review.",
+                ReferenceId = reviewId.ToString()
+            });
+        }
     }
 
     public async Task UnlikeReviewAsync(int reviewId, string userId)

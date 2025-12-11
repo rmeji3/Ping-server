@@ -8,11 +8,15 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
+using Conquest.Services.Notifications;
+using Conquest.Models;
+
 namespace Conquest.Services.Friends;
 
 public class FriendService(
     AuthDbContext authDb,
     UserManager<AppUser> userManager,
+    INotificationService notificationService,
     ILogger<FriendService> logger) : IFriendService
 {
     public async Task<IReadOnlyList<string>> GetFriendIdsAsync(string userId)
@@ -117,6 +121,21 @@ public class FriendService(
         await authDb.SaveChangesAsync();
 
         logger.LogInformation("Friend request sent from {UserId} to {FriendId}", userId, friendId);
+
+        // Send Notification
+        var sender = await userManager.FindByIdAsync(userId);
+        await notificationService.SendNotificationAsync(new Notification
+        {
+            UserId = friendId,
+            SenderId = userId,
+            SenderName = sender?.UserName ?? "Someone",
+            SenderProfileImageUrl = sender?.ProfileImageUrl,
+            Type = NotificationType.FriendRequest,
+            Title = "New Friend Request",
+            Message = $"{sender?.UserName ?? "Someone"} sent you a friend request.",
+            ReferenceId = userId // Reference to the user who sent it
+        });
+
         return "Friend request sent!";
     }
 
