@@ -13,7 +13,7 @@ public interface IEventService
     Task<PaginatedResult<EventDto>> GetMyEventsAsync(string userId, PaginationParams pagination);
     Task<PaginatedResult<EventDto>> GetEventsAttendingAsync(string userId, PaginationParams pagination);
     Task<PaginatedResult<EventDto>> GetPublicEventsAsync(double minLat, double maxLat, double minLng, double maxLng, PaginationParams pagination, string? userId = null);
-    Task<PaginatedResult<EventDto>> GetEventsByPlaceAsync(int placeId, string? userId, PaginationParams pagination);
+    Task<PaginatedResult<EventDto>> GetEventsByPingAsync(int pingId, string? userId, PaginationParams pagination);
     Task<bool> DeleteEventAsync(int id, string userId);
     Task DeleteEventAsAdminAsync(int id);
     Task<bool> JoinEventAsync(int id, string userId);

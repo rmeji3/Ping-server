@@ -8,7 +8,7 @@ using Ping.Dtos.Auth;
 using Ping.Features.Auth;
 using Ping.Models.AppUsers;
 using Ping.Services.Friends;
-using Ping.Services.Places;
+using Ping.Services.Pings;
 using Ping.Services.Events;
 using Ping.Services.Reviews;
 using Ping.Services.Business;
@@ -230,14 +230,14 @@ builder.Services.AddSession(options =>
 
 // --- Services ---
 builder.Services.AddScoped<IFriendService, FriendService>();
-builder.Services.AddScoped<IPlaceService, PlaceService>();
+builder.Services.AddScoped<IPingService, PingService>();
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<ITagService, TagService>();
-builder.Services.AddScoped<IActivityService, ActivityService>();
+builder.Services.AddScoped<IPingActivityService, PingActivityService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IPlaceNameService, GooglePlacesService>();
+builder.Services.AddScoped<IPingNameService, GooglePingsService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IBlockService, BlockService>();
 builder.Services.AddScoped<IBusinessService, BusinessService>();

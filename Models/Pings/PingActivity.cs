@@ -1,18 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using Ping.Models.Reviews;
-using Ping.Models.Activities;
 
-namespace Ping.Models.Places;
+namespace Ping.Models.Pings;
 
-public class PlaceActivity
+public class PingActivity
 {
     public int Id { get; init; }
 
-    public int PlaceId { get; init; }
-    public Place Place { get; init; } = null!;
-
-    public int? ActivityKindId { get; init; }
-    public ActivityKind? ActivityKind { get; init; }
+    public int PingId { get; init; }
+    public Ping Ping { get; init; } = null!;
 
     [MaxLength(200)]
     public required string Name { get; init; }  // user-facing label

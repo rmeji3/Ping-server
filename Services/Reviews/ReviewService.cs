@@ -8,7 +8,7 @@ using Ping.Services.Friends;
 using Ping.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Ping.Models.Places;
+using Ping.Models.Pings;
 
 using Ping.Services.Blocks;
 
@@ -26,31 +26,31 @@ public class ReviewService(
     INotificationService notificationService,
     ILogger<ReviewService> logger) : IReviewService
 {
-    public async Task<ReviewDto> CreateReviewAsync(int placeActivityId, CreateReviewDto dto, string userId, string userName)
+    public async Task<ReviewDto> CreateReviewAsync(int pingActivityId, CreateReviewDto dto, string userId, string userName)
     {
         // Ensure activity exists
-        var activityExists = await appDb.PlaceActivities
-            .AnyAsync(pa => pa.Id == placeActivityId);
+        var activityExists = await appDb.PingActivities
+            .AnyAsync(pa => pa.Id == pingActivityId);
 
         if (!activityExists)
         {
-            logger.LogWarning("CreateReview: Activity {PlaceActivityId} not found.", placeActivityId);
+            logger.LogWarning("CreateReview: Activity {PingActivityId} not found.", pingActivityId);
             throw new KeyNotFoundException("Activity not found.");
         }
 
         // Check if user already has a review for this activity
         var hasReview = await appDb.Reviews
-            .AnyAsync(r => r.PlaceActivityId == placeActivityId && r.UserId == userId);
+            .AnyAsync(r => r.PingActivityId == pingActivityId && r.UserId == userId);
 
         if (dto.Rating < 1 || dto.Rating > 5)
         {
-            logger.LogWarning("CreateReview: Invalid rating {Rating} for activity {PlaceActivityId} by {UserName}", dto.Rating, placeActivityId, userName);
+            logger.LogWarning("CreateReview: Invalid rating {Rating} for activity {PingActivityId} by {UserName}", dto.Rating, pingActivityId, userName);
             throw new ArgumentException("Rating must be between 1 and 5.");
         }
 
         if (dto.Content?.Length > 1000)
         {
-            logger.LogWarning("CreateReview: Content too long for activity {PlaceActivityId} by {UserName}", placeActivityId, userName);
+            logger.LogWarning("CreateReview: Content too long for activity {PingActivityId} by {UserName}", pingActivityId, userName);
             throw new ArgumentException("Content must be at most 1000 characters.");
         }
 
@@ -67,7 +67,7 @@ public class ReviewService(
 
         var review = new Review
         {
-            PlaceActivityId = placeActivityId,
+            PingActivityId = pingActivityId,
             UserId = userId,
             UserName = userName,
             Rating = dto.Rating,
@@ -103,8 +103,6 @@ public class ReviewService(
 
                     tag = new Tag { Name = tagName };
                     appDb.Tags.Add(tag);
-                    // Save immediately to get Id? Or just rely on EF tracking?
-                    // EF tracking handles it if we add to context.
                 }
 
                 review.ReviewTags.Add(new ReviewTag { Tag = tag });
@@ -114,7 +112,7 @@ public class ReviewService(
         appDb.Reviews.Add(review);
         await appDb.SaveChangesAsync();
 
-        logger.LogInformation("Review created for Activity {PlaceActivityId} by {UserName}. Rating: {Rating}", placeActivityId, userName, dto.Rating);
+        logger.LogInformation("Review created for Activity {PingActivityId} by {UserName}. Rating: {Rating}", pingActivityId, userName, dto.Rating);
 
         var user = await userManager.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
         string? profileUrl = user?.ProfileImageUrl;
@@ -134,10 +132,10 @@ public class ReviewService(
         );
     }
 
-    public async Task<PaginatedResult<UserReviewsDto>> GetReviewsAsync(int placeActivityId, string scope, string userId, PaginationParams pagination)
+    public async Task<PaginatedResult<UserReviewsDto>> GetReviewsAsync(int pingActivityId, string scope, string userId, PaginationParams pagination)
     {
-        var activityExists = await appDb.PlaceActivities
-            .AnyAsync(pa => pa.Id == placeActivityId);
+        var activityExists = await appDb.PingActivities
+            .AnyAsync(pa => pa.Id == pingActivityId);
         if (!activityExists)
             throw new KeyNotFoundException("Activity not found.");
 
@@ -145,7 +143,7 @@ public class ReviewService(
             .AsNoTracking()
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
-            .Where(r => r.PlaceActivityId == placeActivityId)
+            .Where(r => r.PingActivityId == pingActivityId)
             .OrderByDescending(r => r.CreatedAt)
             .AsQueryable();
 
@@ -168,7 +166,6 @@ public class ReviewService(
                     var friendIds = await friendService.GetFriendIdsAsync(userId);
                     if (friendIds.Count == 0)
                     {
-                        // no friends → no reviews in this scope
                         return new PaginatedResult<UserReviewsDto>(new List<UserReviewsDto>(), 0, pagination.PageNumber, pagination.PageSize);
                     }
                     query = query.Where(r => friendIds.Contains(r.UserId));
@@ -176,13 +173,11 @@ public class ReviewService(
                 }
             case "global":
             default:
-                // no extra filter
                 break;
         }
 
         var reviews = await query.ToListAsync();
 
-        // Batch check which reviews are liked by the current user
         var reviewIds = reviews.Select(r => r.Id).ToList();
         var likedReviewIds = new HashSet<int>();
         
@@ -194,15 +189,10 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
-        // Collect UserIds to fetch Profile Pictures
         var userIds = reviews.Select(r => r.UserId).Distinct().ToList();
         var userMap = new Dictionary<string, string?>();
         if (userIds.Count > 0)
         {
-             // We only need Id and ProfileImageUrl
-             // TODO: Optimize if necessary, but fetching a few users is okay.
-             // Using AsNoTracking and selecting only needed fields if possible, but IdentifyUser is strict.
-             // We can use a raw query or just fetch users.
              var users = await userManager.Users.AsNoTracking()
                 .Where(u => userIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.ProfileImageUrl })
@@ -217,15 +207,14 @@ public class ReviewService(
             r.Content,
             r.UserId,
             r.UserName,
-            userMap.GetValueOrDefault(r.UserId), // ProfilePictureUrl
+            userMap.GetValueOrDefault(r.UserId),
             r.ImageUrl,
             r.CreatedAt,
             r.Likes,
-            likedReviewIds.Contains(r.Id), // IsLiked
-            r.ReviewTags.Select(rt => rt.Tag.Name).ToList() // Tags
+            likedReviewIds.Contains(r.Id), 
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList() 
         )).ToList();
 
-        // Group by UserId
         var groupedReviews = reviewDtos
             .GroupBy(r => r.UserId)
             .Select(g =>
@@ -245,17 +234,15 @@ public class ReviewService(
 
         var query = appDb.Reviews
             .AsNoTracking()
-            .Include(r => r.PlaceActivity)
-                .ThenInclude(pa => pa.Place)
-            .Include(r => r.PlaceActivity)
-                .ThenInclude(pa => pa.ActivityKind)
+            .Include(r => r.PingActivity)
+                .ThenInclude(pa => pa.Ping)
+                    .ThenInclude(p => p.PingGenre)
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
-            .Where(r => !r.PlaceActivity.Place.IsDeleted)
-            .Where(r => r.PlaceActivity.Place.Visibility == PlaceVisibility.Public)
+            .Where(r => !r.PingActivity.Ping.IsDeleted)
+            .Where(r => r.PingActivity.Ping.Visibility == PingVisibility.Public)
             .AsQueryable();
 
-        // Filter Blacklisted Users
         if (userId != null)
         {
             var blacklistedIds = await blockService.GetBlacklistedUserIdsAsync(userId);
@@ -265,19 +252,19 @@ public class ReviewService(
             }
         }
 
-        // Filter by Category
-        if (filter.ActivityKindIds != null && filter.ActivityKindIds.Any())
+        // Filter by PingGenre
+        if (filter.PingGenreIds != null && filter.PingGenreIds.Any())
         {
-            query = query.Where(r => r.PlaceActivity.ActivityKindId.HasValue &&
-                                     filter.ActivityKindIds.Contains(r.PlaceActivity.ActivityKindId.Value));
+            query = query.Where(r => r.PingActivity.Ping.PingGenreId.HasValue &&
+                                     filter.PingGenreIds.Contains(r.PingActivity.Ping.PingGenreId.Value));
         }
 
         // Filter by Search Query
         if (!string.IsNullOrWhiteSpace(filter.SearchQuery))
         {
             var q = filter.SearchQuery.ToLower();
-            query = query.Where(r => r.PlaceActivity.Place.Name.ToLower().Contains(q) ||
-                                     (r.PlaceActivity.Place.Address != null && r.PlaceActivity.Place.Address.ToLower().Contains(q)));
+            query = query.Where(r => r.PingActivity.Ping.Name.ToLower().Contains(q) ||
+                                     (r.PingActivity.Ping.Address != null && r.PingActivity.Ping.Address.ToLower().Contains(q)));
         }
 
         // Filter by Location (Bounding Box)
@@ -287,9 +274,7 @@ public class ReviewService(
             var lon = filter.Longitude.Value;
             var radius = filter.RadiusKm.Value;
             
-            // 1 deg lat ~= 111 km
             var latDelta = radius / 111.0;
-            // 1 deg lon ~= 111 km * cos(lat)
             var cosLat = Math.Cos(lat * (Math.PI / 180.0));
             var lonDelta = radius / (111.0 * (Math.Abs(cosLat) < 0.0001 ? 1 : cosLat));
 
@@ -298,11 +283,10 @@ public class ReviewService(
             var minLon = lon - lonDelta;
             var maxLon = lon + lonDelta;
 
-            query = query.Where(r => r.PlaceActivity.Place.Latitude >= minLat && r.PlaceActivity.Place.Latitude <= maxLat &&
-                                     r.PlaceActivity.Place.Longitude >= minLon && r.PlaceActivity.Place.Longitude <= maxLon);
+            query = query.Where(r => r.PingActivity.Ping.Latitude >= minLat && r.PingActivity.Ping.Latitude <= maxLat &&
+                                     r.PingActivity.Ping.Longitude >= minLon && r.PingActivity.Ping.Longitude <= maxLon);
         }
 
-        // Sort by Likes (Default)
         query = query.OrderByDescending(r => r.Likes);
 
         var count = await query.CountAsync();
@@ -311,7 +295,6 @@ public class ReviewService(
             .Take(pagination.PageSize)
             .ToListAsync();
 
-        // Batch check which reviews are liked by the current user
         var reviewIds = reviews.Select(r => r.Id).ToList();
         var likedReviewIds = new HashSet<int>();
         
@@ -323,7 +306,6 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
-        // Collect UserIds
         var userIds = reviews.Select(r => r.UserId).Distinct().ToList();
         var userMap = new Dictionary<string, string?>();
         if (userIds.Count > 0)
@@ -337,14 +319,14 @@ public class ReviewService(
 
         var result = reviews.Select(r => new ExploreReviewDto(
             r.Id,
-            r.PlaceActivityId,
-            r.PlaceActivity.PlaceId,
-            r.PlaceActivity.Place.Name,
-            r.PlaceActivity.Place.Address ?? string.Empty,
-            r.PlaceActivity.Name,
-            r.PlaceActivity.ActivityKind?.Name,
-            r.PlaceActivity.Place.Latitude,
-            r.PlaceActivity.Place.Longitude,
+            r.PingActivityId,
+            r.PingActivity.PingId,
+            r.PingActivity.Ping.Name,
+            r.PingActivity.Ping.Address ?? string.Empty,
+            r.PingActivity.Name,
+            r.PingActivity.Ping.PingGenre?.Name,
+            r.PingActivity.Ping.Latitude,
+            r.PingActivity.Ping.Longitude,
             r.Rating,
             r.Content,
             r.UserId,
@@ -353,9 +335,9 @@ public class ReviewService(
             r.ImageUrl,
             r.CreatedAt,
             r.Likes,
-            likedReviewIds.Contains(r.Id), // IsLiked
-            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), // Tags
-            r.PlaceActivity.Place.IsDeleted
+            likedReviewIds.Contains(r.Id), 
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
+            r.PingActivity.Ping.IsDeleted
         )).ToList();
 
         logger.LogInformation("Explore reviews fetched: Page {PageNumber}, Size {PageSize}, Count {Count}", 
@@ -366,24 +348,21 @@ public class ReviewService(
 
     public async Task LikeReviewAsync(int reviewId, string userId)
     {
-        // Check if review exists
         var reviewExists = await appDb.Reviews.AnyAsync(r => r.Id == reviewId);
         if (!reviewExists)
         {
             throw new KeyNotFoundException("Review not found.");
         }
 
-        // Check if already liked
         var existingLike = await appDb.ReviewLikes
             .FirstOrDefaultAsync(rl => rl.ReviewId == reviewId && rl.UserId == userId);
 
         if (existingLike != null)
         {
             logger.LogInformation("Review {ReviewId} already liked by {UserId}", reviewId, userId);
-            return; // Idempotent
+            return;
         }
 
-        // Add like
         var like = new ReviewLike
         {
             ReviewId = reviewId,
@@ -393,7 +372,6 @@ public class ReviewService(
 
         appDb.ReviewLikes.Add(like);
 
-        // Increment like count
         var review = await appDb.Reviews.FindAsync(reviewId);
         if (review != null)
         {
@@ -403,8 +381,7 @@ public class ReviewService(
         await appDb.SaveChangesAsync();
         logger.LogInformation("Review {ReviewId} liked by {UserId}", reviewId, userId);
 
-        // Send Notification
-        if (review != null && review.UserId != userId) // Don't notify if liking own review
+        if (review != null && review.UserId != userId)
         {
             var sender = await userManager.FindByIdAsync(userId);
             await notificationService.SendNotificationAsync(new Notification
@@ -429,12 +406,11 @@ public class ReviewService(
         if (like == null)
         {
             logger.LogInformation("Review {ReviewId} not liked by {UserId}, nothing to unlike", reviewId, userId);
-            return; // Idempotent
+            return;
         }
 
         appDb.ReviewLikes.Remove(like);
 
-        // Decrement like count
         var review = await appDb.Reviews.FindAsync(reviewId);
         if (review != null && review.Likes > 0)
         {
@@ -450,11 +426,9 @@ public class ReviewService(
         var likedReviews = await appDb.ReviewLikes
             .Where(rl => rl.UserId == userId)
             .Include(rl => rl.Review)
-                .ThenInclude(r => r.PlaceActivity)
-                    .ThenInclude(pa => pa.Place)
-            .Include(rl => rl.Review)
-                .ThenInclude(r => r.PlaceActivity)
-                    .ThenInclude(pa => pa.ActivityKind)
+                .ThenInclude(r => r.PingActivity)
+                    .ThenInclude(pa => pa.Ping)
+                        .ThenInclude(p => p.PingGenre)
             .Include(rl => rl.Review)
                 .ThenInclude(r => r.ReviewTags)
                     .ThenInclude(rt => rt.Tag)
@@ -462,7 +436,6 @@ public class ReviewService(
             .OrderByDescending(rl => rl.CreatedAt)
             .ToListAsync();
 
-        // Collect UserIds
         var userIds = likedReviews.Select(r => r.Review.UserId).Distinct().ToList();
         var userMap = new Dictionary<string, string?>();
         if (userIds.Count > 0)
@@ -476,14 +449,14 @@ public class ReviewService(
 
         var result = likedReviews.Select(rl => new ExploreReviewDto(
                 rl.Review.Id,
-                rl.Review.PlaceActivityId,
-                rl.Review.PlaceActivity.PlaceId,
-                rl.Review.PlaceActivity.Place.Name,
-                rl.Review.PlaceActivity.Place.Address ?? string.Empty,
-                rl.Review.PlaceActivity.Name,
-                rl.Review.PlaceActivity.ActivityKind != null ? rl.Review.PlaceActivity.ActivityKind.Name : null,
-                rl.Review.PlaceActivity.Place.Latitude,
-                rl.Review.PlaceActivity.Place.Longitude,
+                rl.Review.PingActivityId,
+                rl.Review.PingActivity.PingId,
+                rl.Review.PingActivity.Ping.Name,
+                rl.Review.PingActivity.Ping.Address ?? string.Empty,
+                rl.Review.PingActivity.Name,
+                rl.Review.PingActivity.Ping.PingGenre?.Name,
+                rl.Review.PingActivity.Ping.Latitude,
+                rl.Review.PingActivity.Ping.Longitude,
                 rl.Review.Rating,
                 rl.Review.Content,
                 rl.Review.UserId,
@@ -492,9 +465,9 @@ public class ReviewService(
                 rl.Review.ImageUrl,
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
-                true, // IsLiked - always true for liked reviews
-                rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(), // Tags
-                rl.Review.PlaceActivity.Place.IsDeleted
+                true, // IsLiked
+                rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
+                rl.Review.PingActivity.Ping.IsDeleted
             )).ToList();
 
         logger.LogInformation("Liked reviews for {UserId} retrieved: {Count} reviews", userId, result.Count);
@@ -505,17 +478,15 @@ public class ReviewService(
     {
         var myReviews = await appDb.Reviews
             .Where(r => r.UserId == userId)
-            .Include(r => r.PlaceActivity)
-                .ThenInclude(pa => pa.Place)
-            .Include(r => r.PlaceActivity)
-                .ThenInclude(pa => pa.ActivityKind)
+            .Include(r => r.PingActivity)
+                .ThenInclude(pa => pa.Ping)
+                    .ThenInclude(p => p.PingGenre)
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
             .AsNoTracking()
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
 
-        // Batch check which reviews are liked by the current user (my own reviews can also be liked by me)
         var reviewIds = myReviews.Select(r => r.Id).ToList();
         var likedReviewIds = new HashSet<int>();
         
@@ -527,7 +498,6 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
-        // Collect UserIds (Just me, but consistent logic)
         var userIds = myReviews.Select(r => r.UserId).Distinct().ToList();
         var userMap = new Dictionary<string, string?>();
         if (userIds.Count > 0)
@@ -541,14 +511,14 @@ public class ReviewService(
 
         var result = myReviews.Select(r => new ExploreReviewDto(
             r.Id,
-            r.PlaceActivityId,
-            r.PlaceActivity.PlaceId,
-            r.PlaceActivity.Place.Name,
-            r.PlaceActivity.Place.Address ?? string.Empty,
-            r.PlaceActivity.Name,
-            r.PlaceActivity.ActivityKind?.Name,
-            r.PlaceActivity.Place.Latitude,
-            r.PlaceActivity.Place.Longitude,
+            r.PingActivityId,
+            r.PingActivity.PingId,
+            r.PingActivity.Ping.Name,
+            r.PingActivity.Ping.Address ?? string.Empty,
+            r.PingActivity.Name,
+            r.PingActivity.Ping.PingGenre?.Name,
+            r.PingActivity.Ping.Latitude,
+            r.PingActivity.Ping.Longitude,
             r.Rating,
             r.Content,
             r.UserId,
@@ -557,9 +527,9 @@ public class ReviewService(
             r.ImageUrl,
             r.CreatedAt,
             r.Likes,
-            likedReviewIds.Contains(r.Id), // IsLiked
-            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), // Tags
-            r.PlaceActivity.Place.IsDeleted
+            likedReviewIds.Contains(r.Id),
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
+            r.PingActivity.Ping.IsDeleted
         )).ToList();
 
         logger.LogInformation("My reviews fetched for {UserId}: {Count} reviews", userId, result.Count);
@@ -571,10 +541,9 @@ public class ReviewService(
     {
         var userReviews = await appDb.Reviews
             .Where(r => r.UserId == targetUserId)
-            .Include(r => r.PlaceActivity)
-                .ThenInclude(pa => pa.Place)
-            .Include(r => r.PlaceActivity)
-                .ThenInclude(pa => pa.ActivityKind)
+            .Include(r => r.PingActivity)
+                .ThenInclude(pa => pa.Ping)
+                    .ThenInclude(p => p.PingGenre)
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
             .AsNoTracking()
@@ -596,7 +565,6 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
-        // Collect UserIds (Target user)
         var userIds = userReviews.Select(r => r.UserId).Distinct().ToList();
         var userMap = new Dictionary<string, string?>();
         if (userIds.Count > 0)
@@ -610,14 +578,14 @@ public class ReviewService(
 
         var result = userReviews.Select(r => new ExploreReviewDto(
             r.Id,
-            r.PlaceActivityId,
-            r.PlaceActivity.PlaceId,
-            r.PlaceActivity.Place.Name,
-            r.PlaceActivity.Place.Address ?? string.Empty,
-            r.PlaceActivity.Name,
-            r.PlaceActivity.ActivityKind?.Name,
-            r.PlaceActivity.Place.Latitude,
-            r.PlaceActivity.Place.Longitude,
+            r.PingActivityId,
+            r.PingActivity.PingId,
+            r.PingActivity.Ping.Name,
+            r.PingActivity.Ping.Address ?? string.Empty,
+            r.PingActivity.Name,
+            r.PingActivity.Ping.PingGenre?.Name,
+            r.PingActivity.Ping.Latitude,
+            r.PingActivity.Ping.Longitude,
             r.Rating,
             r.Content,
             r.UserId,
@@ -628,7 +596,7 @@ public class ReviewService(
             r.Likes,
             likedReviewIds.Contains(r.Id), 
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
-            r.PlaceActivity.Place.IsDeleted
+            r.PingActivity.Ping.IsDeleted
         )).ToList();
 
         logger.LogInformation("User reviews fetched for {UserId}: {Count} reviews", targetUserId, result.Count);
@@ -649,18 +617,13 @@ public class ReviewService(
         var query = appDb.Reviews
             .AsNoTracking()
             .Where(r => friendIds.Contains(r.UserId))
-            .Include(r => r.PlaceActivity)
-                .ThenInclude(pa => pa.Place)
-            .Include(r => r.PlaceActivity)
-                .ThenInclude(pa => pa.ActivityKind)
+            .Include(r => r.PingActivity)
+                .ThenInclude(pa => pa.Ping)
+                    .ThenInclude(p => p.PingGenre)
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
-            .Where(r => !r.PlaceActivity.Place.IsDeleted) // Ensure place is not soft-deleted
-            .Where(r => r.PlaceActivity.Place.Visibility == PlaceVisibility.Public) // Usually feed only shows public stuff, but friends might show friend-visibility too? 
-                                                                                    // Let's assume for now friends feed should show Public AND Friends visibility places.
-                                                                                    // But the prompt said "all recent friends reviews". 
-                                                                                    // Safety check: if my friend reviewed a Private place, I shouldn't see it unless I'm the owner (imposible) or it's visible to friends.
-            .Where(r => r.PlaceActivity.Place.Visibility == PlaceVisibility.Public || r.PlaceActivity.Place.Visibility == PlaceVisibility.Friends)
+            .Where(r => !r.PingActivity.Ping.IsDeleted) // Ensure ping is not soft-deleted
+            .Where(r => r.PingActivity.Ping.Visibility == PingVisibility.Public || r.PingActivity.Ping.Visibility == PingVisibility.Friends)
             .OrderByDescending(r => r.CreatedAt);
 
         var count = await query.CountAsync();
@@ -670,7 +633,6 @@ public class ReviewService(
             .Take(pagination.PageSize)
             .ToListAsync();
 
-        // Batch check likes
         var reviewIds = reviews.Select(r => r.Id).ToList();
         var likedReviewIds = new HashSet<int>();
         if (reviewIds.Count > 0)
@@ -681,7 +643,6 @@ public class ReviewService(
                 .ToHashSetAsync();
         }
 
-        // Collect UserIds for profiles
         var userIds = reviews.Select(r => r.UserId).Distinct().ToList();
         var userMap = new Dictionary<string, string?>();
         if (userIds.Count > 0)
@@ -695,14 +656,14 @@ public class ReviewService(
 
         var result = reviews.Select(r => new ExploreReviewDto(
             r.Id,
-            r.PlaceActivityId,
-            r.PlaceActivity.PlaceId,
-            r.PlaceActivity.Place.Name,
-            r.PlaceActivity.Place.Address ?? string.Empty,
-            r.PlaceActivity.Name,
-            r.PlaceActivity.ActivityKind?.Name,
-            r.PlaceActivity.Place.Latitude,
-            r.PlaceActivity.Place.Longitude,
+            r.PingActivityId,
+            r.PingActivity.PingId,
+            r.PingActivity.Ping.Name,
+            r.PingActivity.Ping.Address ?? string.Empty,
+            r.PingActivity.Name,
+            r.PingActivity.Ping.PingGenre?.Name,
+            r.PingActivity.Ping.Latitude,
+            r.PingActivity.Ping.Longitude,
             r.Rating,
             r.Content,
             r.UserId,
@@ -713,7 +674,7 @@ public class ReviewService(
             r.Likes,
             likedReviewIds.Contains(r.Id), 
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
-            r.PlaceActivity.Place.IsDeleted
+            r.PingActivity.Ping.IsDeleted
         )).ToList();
 
         logger.LogInformation("Friends feed fetched for {UserId}: {Count} reviews", userId, result.Count);

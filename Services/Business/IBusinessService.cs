@@ -5,7 +5,7 @@ namespace Ping.Services
 {
     public interface IBusinessService
     {
-        Task<PlaceClaim> SubmitClaimAsync(string userId, CreateClaimDto dto);
+        Task<PingClaim> SubmitClaimAsync(string userId, CreateClaimDto dto);
         Task<List<ClaimDto>> GetPendingClaimsAsync();
         Task ApproveClaimAsync(int claimId, string reviewerId);
         Task RejectClaimAsync(int claimId, string reviewerId);

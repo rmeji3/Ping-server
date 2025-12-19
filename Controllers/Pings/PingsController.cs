@@ -2,35 +2,35 @@ using Ping.Dtos.Activities;
 using Ping.Dtos.Common;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using Ping.Dtos.Places;
-using Ping.Models.Places;
-using Ping.Services.Places;
+using Ping.Dtos.Pings;
+using Ping.Models.Pings;
+using Ping.Services.Pings;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 
-namespace Ping.Controllers.Places
+namespace Ping.Controllers.Pings
 {
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/[controller]")]
     [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize]
-    public class PlacesController(IPlaceService placeService, Ping.Services.Business.IBusinessAnalyticsService analyticsService) : ControllerBase
+    public class PingsController(IPingService pingService, Ping.Services.Business.IBusinessAnalyticsService analyticsService) : ControllerBase
     {
-        // POST /api/places
+        // POST /api/pings
         [HttpPost]
-        public async Task<ActionResult<PlaceDetailsDto>> Create([FromBody] UpsertPlaceDto dto)
+        public async Task<ActionResult<PingDetailsDto>> Create([FromBody] UpsertPingDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Name))
-                return BadRequest("Place name is required.");
+                return BadRequest("Ping name is required.");
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null)
-                return Unauthorized("You must be logged in to create a place.");
+                return Unauthorized("You must be logged in to create a ping.");
 
             try
             {
-                var result = await placeService.CreatePlaceAsync(dto, userId);
+                var result = await pingService.CreatePingAsync(dto, userId);
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (InvalidOperationException ex)
@@ -43,20 +43,20 @@ namespace Ping.Controllers.Places
             }
         }
         
-        // PUT /api/places/{id}
+        // PUT /api/pings/{id}
         [HttpPut("{id:int}")]
-        public async Task<ActionResult<PlaceDetailsDto>> Update(int id, [FromBody] UpsertPlaceDto dto)
+        public async Task<ActionResult<PingDetailsDto>> Update(int id, [FromBody] UpsertPingDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Name))
-                return BadRequest("Place name is required.");
+                return BadRequest("Ping name is required.");
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null)
-                return Unauthorized("You must be logged in to update a place.");
+                return Unauthorized("You must be logged in to update a ping.");
             
             try
             {
-                var result = await placeService.UpdatePlaceAsync(id, dto, userId);
+                var result = await pingService.UpdatePingAsync(id, dto, userId);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -69,57 +69,57 @@ namespace Ping.Controllers.Places
             }
         }
 
-        // GET /api/places/{id}
+        // GET /api/pings/{id}
         [HttpGet("{id:int}")]
-        public async Task<ActionResult<PlaceDetailsDto>> GetById(int id)
+        public async Task<ActionResult<PingDetailsDto>> GetById(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await placeService.GetPlaceByIdAsync(id, userId);
+            var result = await pingService.GetPingByIdAsync(id, userId);
 
             if (result is null) return NotFound();
 
             return Ok(result);
         }
 
-        // POST /api/places/{id}/view
+        // POST /api/pings/{id}/view
         [HttpPost("{id:int}/view")]
-        [AllowAnonymous] // Allow unauthenticated views? "tapping on place". Let's say yes for now, or match controller
+        [AllowAnonymous] 
         public async Task<ActionResult> TrackView(int id)
         {
-            await analyticsService.TrackPlaceViewAsync(id);
+            await analyticsService.TrackPingViewAsync(id);
             return Ok();
         }
 
-        // GET /api/places/nearby?lat=..&lng=..&radiusKm=5&activityName=soccer&activityKind=outdoor&visibility=Public&type=Verified
+        // GET /api/pings/nearby
         [HttpGet("nearby")]
-        public async Task<ActionResult<PaginatedResult<PlaceDetailsDto>>> Nearby(
+        public async Task<ActionResult<PaginatedResult<PingDetailsDto>>> Nearby(
             [FromQuery] double lat,
             [FromQuery] double lng,
             [FromQuery] double radiusKm = 5,
             [FromQuery] string? activityName = null,
-            [FromQuery] string? activityKind = null,
-            [FromQuery] PlaceVisibility? visibility = null,
-            [FromQuery] PlaceType? type = null,
+            [FromQuery] string? pingGenreName = null,
+            [FromQuery] PingVisibility? visibility = null,
+            [FromQuery] PingType? type = null,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await placeService.SearchNearbyAsync(lat, lng, radiusKm, activityName, activityKind, visibility, type, userId, pagination);
+            var result = await pingService.SearchNearbyAsync(lat, lng, radiusKm, activityName, pingGenreName, visibility, type, userId, pagination);
             return Ok(result);
         }
 
-        // POST /api/places/favorited/{id}
+        // POST /api/pings/favorited/{id}
         [HttpPost("favorited/{id:int}")]
         public async Task<ActionResult> AddFavorite(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null)
-                return Unauthorized("You must be logged in to favorite a place.");
+                return Unauthorized("You must be logged in to favorite a ping.");
 
             try
             {
-                await placeService.AddFavoriteAsync(id, userId);
+                await pingService.AddFavoriteAsync(id, userId);
                 return Ok();
             }
             catch (InvalidOperationException ex)
@@ -128,42 +128,42 @@ namespace Ping.Controllers.Places
             }
         }
 
-        // DELETE /api/places/favorited/{id}
+        // DELETE /api/pings/favorited/{id}
         [HttpDelete("favorited/{id:int}")]
         public async Task<ActionResult> Unfavorite(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null)
-                return Unauthorized("You must be logged in to unfavorite a place.");
+                return Unauthorized("You must be logged in to unfavorite a ping.");
 
-            await placeService.UnfavoriteAsync(id, userId);
+            await pingService.UnfavoriteAsync(id, userId);
             return NoContent();
         }
 
-        // GET /api/places/favorited?pageNumber=1&pageSize=20
+        // GET /api/pings/favorited
         [HttpGet("favorited")]
-        public async Task<ActionResult<PaginatedResult<PlaceDetailsDto>>> GetFavorited(
+        public async Task<ActionResult<PaginatedResult<PingDetailsDto>>> GetFavorited(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null)
-                return Unauthorized("You must be logged in to view favorited places.");
+                return Unauthorized("You must be logged in to view favorited pings.");
 
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-            var result = await placeService.GetFavoritedPlacesAsync(userId, pagination);
+            var result = await pingService.GetFavoritedPingsAsync(userId, pagination);
             return Ok(result);
         }
 
-        // POST /api/places/{id}/delete
+        // POST /api/pings/{id}/delete
         [HttpPost("{id:int}/delete")]
         public async Task<ActionResult> Delete(int id)
         {
            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
            if (userId is null)
-               return Unauthorized("You must be logged in to delete a place.");
+               return Unauthorized("You must be logged in to delete a ping.");
 
-           await placeService.DeletePlaceAsync(id, userId);
+           await pingService.DeletePingAsync(id, userId);
            return NoContent();
         }
     }

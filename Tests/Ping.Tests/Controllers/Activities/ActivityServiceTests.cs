@@ -3,8 +3,8 @@ using Xunit.Abstractions;
 using System.Threading.Tasks;
 using System.Net;
 using System.Net.Http.Json;
-using Ping.Dtos.Places;
-using Ping.Models.Places;
+using Ping.Dtos.Pings;
+using Ping.Models.Pings;
 using Ping.Dtos.Activities;
 
 using Microsoft.AspNetCore.TestHost;
@@ -63,32 +63,33 @@ public class ActivityServiceTests : BaseIntegrationTest
         client.DefaultRequestHeaders.Authorization = _client.DefaultRequestHeaders.Authorization;
     
         // 3. Create place first
-        var placeRequest = new UpsertPlaceDto(
+        var placeRequest = new UpsertPingDto(
             "Test Place", 
             "123 Main St", 
             40.7128, 
             -74.0060, 
-            PlaceVisibility.Public, 
-            PlaceType.Verified
+            PingVisibility.Public, 
+            PingType.Verified,
+            null // PingGenreId
             );
         
         // Act
-        var placeResponse = await client.PostAsJsonAsync("/api/places", placeRequest);
-        var place = await placeResponse.Content.ReadFromJsonAsync<PlaceDetailsDto>(options);
+        var placeResponse = await client.PostAsJsonAsync("/api/pings", placeRequest);
+        var place = await placeResponse.Content.ReadFromJsonAsync<PingDetailsDto>(options);
     
         _output.WriteLine($"Place: {place}");
         Assert.NotNull(place);
         Assert.Equal(HttpStatusCode.Created, placeResponse.StatusCode);
 
         // 4. Create "Playing Soccer"
-        var activityRequest1 = new CreateActivityDto(place.Id, "Playing Soccer", null);
-        var activityResponse1 = await client.PostAsJsonAsync("/api/activities", activityRequest1);
-        var activity1 = await activityResponse1.Content.ReadFromJsonAsync<ActivityDetailsDto>(options);
+        var activityRequest1 = new CreatePingActivityDto(place.Id, "Playing Soccer", null);
+        var activityResponse1 = await client.PostAsJsonAsync("/api/ping-activities", activityRequest1);
+        var activity1 = await activityResponse1.Content.ReadFromJsonAsync<PingActivityDetailsDto>(options);
 
         // 5. Create "Soccer" -> Should be identified as duplicate of "Playing Soccer"
-        var activityRequest2 = new CreateActivityDto(place.Id, "Soccer", null);
-        var activityResponse2 = await client.PostAsJsonAsync("/api/activities", activityRequest2);
-        var activity2 = await activityResponse2.Content.ReadFromJsonAsync<ActivityDetailsDto>(options);
+        var activityRequest2 = new CreatePingActivityDto(place.Id, "Soccer", null);
+        var activityResponse2 = await client.PostAsJsonAsync("/api/ping-activities", activityRequest2);
+        var activity2 = await activityResponse2.Content.ReadFromJsonAsync<PingActivityDetailsDto>(options);
 
         // Debug output
         _output.WriteLine($"Activity 1: {activity1}");

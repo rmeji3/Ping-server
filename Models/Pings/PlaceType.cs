@@ -1,4 +1,4 @@
-namespace Ping.Models.Places;
+namespace Ping.Models.Pings;
 
 public enum PlaceType
 {

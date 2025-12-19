@@ -1,17 +1,17 @@
 using System.ComponentModel.DataAnnotations;
-using Ping.Models.Places;
+using Ping.Models.Pings;
 
 namespace Ping.Models.Business
 {
-    public class PlaceClaim
+    public class PingClaim
     {
         public int Id { get; set; }
 
         [MaxLength(100)]
         public required string UserId { get; set; } // Logical FK to AuthDbContext.AppUser
 
-        public int PlaceId { get; set; }
-        public Place Place { get; set; } = null!;
+        public int PingId { get; set; }
+        public Ping.Models.Pings.Ping Ping { get; set; } = null!;
 
         [MaxLength(500)]
         public string Proof { get; set; } = string.Empty; // URL or description

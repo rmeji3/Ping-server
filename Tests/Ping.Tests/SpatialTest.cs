@@ -1,7 +1,7 @@
 using Ping.Data.App;
-using Ping.Dtos.Places;
-using Ping.Models.Places;
-using Ping.Services.Places;
+using Ping.Dtos.Pings;
+using Ping.Models.Pings;
+using Ping.Services.Pings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NetTopologySuite.Geometries;
@@ -20,21 +20,22 @@ public class SpatialTest : BaseIntegrationTest
         // Arrange
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var service = scope.ServiceProvider.GetRequiredService<IPlaceService>();
+        var service = scope.ServiceProvider.GetRequiredService<IPingService>();
         var userId = "test_user_spatial_1";
 
         // Act
-        var created = await service.CreatePlaceAsync(new UpsertPlaceDto(
+        var created = await service.CreatePingAsync(new UpsertPingDto(
             "Central Park Test",
             "Address",
             40.785091, 
             -73.968285,
-            PlaceVisibility.Public,
-            PlaceType.Custom
+            PingVisibility.Public,
+            PingType.Custom,
+            null // PingGenreId
         ), userId);
 
         // Assert
-        var place = await db.Places.FindAsync(created.Id);
+        var place = await db.Pings.FindAsync(created.Id);
         Assert.NotNull(place);
         Assert.NotNull(place.Location);
         Assert.Equal(40.785091, place.Location.Y); // Lat
@@ -49,35 +50,35 @@ public class SpatialTest : BaseIntegrationTest
         // Arrange
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var service = scope.ServiceProvider.GetRequiredService<IPlaceService>();
+        var service = scope.ServiceProvider.GetRequiredService<IPingService>();
         var userId = "test_user_spatial_2";
 
         // Create specific places
         // 1. Target: Times Square
-        var timesSquare = new Place
+        var timesSquare = new Models.Pings.Ping
         {
             Name = "Times Square",
             Latitude = 40.7580,
             Longitude = -73.9855,
             OwnerUserId = userId,
-            Visibility = PlaceVisibility.Public,
-            Type = PlaceType.Custom,
+            Visibility = PingVisibility.Public,
+            Type = PingType.Custom,
             Location = new Point(-73.9855, 40.7580) { SRID = 4326 }
         };
 
         // 2. Far away: London
-        var london = new Place
+        var london = new Models.Pings.Ping
         {
             Name = "London Eye",
             Latitude = 51.5033,
             Longitude = -0.1195,
             OwnerUserId = userId,
-            Visibility = PlaceVisibility.Public,
-            Type = PlaceType.Custom,
+            Visibility = PingVisibility.Public,
+            Type = PingType.Custom,
             Location = new Point(-0.1195, 51.5033) { SRID = 4326 }
         };
 
-        db.Places.AddRange(timesSquare, london);
+        db.Pings.AddRange(timesSquare, london);
         await db.SaveChangesAsync();
 
         // Act

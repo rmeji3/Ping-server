@@ -58,20 +58,21 @@ public class EventService(
             Longitude = dto.Longitude,
             CreatedById = userId,
             CreatedAt = DateTime.UtcNow,
-            PlaceId = dto.PlaceId
+            PingId = dto.PingId,
+            EventGenreId = dto.EventGenreId
         };
         
-        if (dto.PlaceId.HasValue)
+        if (dto.PingId.HasValue)
         {
-            var place = await appDb.Places.FindAsync(dto.PlaceId.Value);
-            if (place == null)
+            var ping = await appDb.Pings.FindAsync(dto.PingId.Value);
+            if (ping == null)
             {
-                throw new ArgumentException($"Place with ID {dto.PlaceId} not found.");
+                throw new ArgumentException($"Ping with ID {dto.PingId} not found.");
             }
-            // Enforce location data from Place
-            ev.Location = place.Name; // Or place.Address? Using Name as "Place Name" seems appropriate for Event.Location
-            ev.Latitude = place.Latitude;
-            ev.Longitude = place.Longitude;
+            // Enforce location data from Ping
+            ev.Location = ping.Name; // Or ping.Address? Using Name as "Ping Name" seems appropriate for Event.Location
+            ev.Latitude = ping.Latitude;
+            ev.Longitude = ping.Longitude;
         }
 
         appDb.Events.Add(ev);
@@ -112,7 +113,9 @@ public class EventService(
             "attending",
             ev.Latitude,
             ev.Longitude,
-            ev.PlaceId
+            ev.PingId,
+            ev.EventGenreId,
+            ev.EventGenre?.Name
         );
     }
 
@@ -181,24 +184,25 @@ public class EventService(
 
         if (dto.Latitude.HasValue) ev.Latitude = dto.Latitude.Value;
         if (dto.Longitude.HasValue) ev.Longitude = dto.Longitude.Value;
+        if (dto.EventGenreId.HasValue) ev.EventGenreId = dto.EventGenreId.Value;
 
-        // Place Linking & Unlinking Logic
-        // Scenario 1: User selected a specific Place (Pin) -> Link it and overwrite location details
-        if (dto.PlaceId.HasValue)
+        // Ping Linking & Unlinking Logic
+        // Scenario 1: User selected a specific Ping (Pin) -> Link it and overwrite location details
+        if (dto.PingId.HasValue)
         {
-            var place = await appDb.Places.FindAsync(dto.PlaceId.Value);
-            if (place == null) throw new ArgumentException($"Place with ID {dto.PlaceId} not found");
+            var ping = await appDb.Pings.FindAsync(dto.PingId.Value);
+            if (ping == null) throw new ArgumentException($"Ping with ID {dto.PingId} not found");
             
-            ev.PlaceId = dto.PlaceId.Value;
-            ev.Location = place.Name;
-            ev.Latitude = place.Latitude;
-            ev.Longitude = place.Longitude;
+            ev.PingId = dto.PingId.Value;
+            ev.Location = ping.Name;
+            ev.Latitude = ping.Latitude;
+            ev.Longitude = ping.Longitude;
         }
-        // Scenario 2: User manually changed location (Location text OR Coords) but did NOT provide a PlaceId
-        // This implies they are moving the pin or typing a custom address, so we must UNLINK the old Place.
+        // Scenario 2: User manually changed location (Location text OR Coords) but did NOT provide a PingId
+        // This implies they are moving the pin or typing a custom address, so we must UNLINK the old Ping.
         else if (dto.Location != null || dto.Latitude.HasValue || dto.Longitude.HasValue)
         {
-            ev.PlaceId = null;
+            ev.PingId = null;
         }
 
         await appDb.SaveChangesAsync();
@@ -324,11 +328,11 @@ public class EventService(
         return true;
     }
 
-    public async Task<PaginatedResult<EventDto>> GetEventsByPlaceAsync(int placeId, string? userId, PaginationParams pagination)
+    public async Task<PaginatedResult<EventDto>> GetEventsByPingAsync(int pingId, string? userId, PaginationParams pagination)
     {
         var query = appDb.Events
             .Include(e => e.Attendees)
-            .Where(e => e.PlaceId == placeId)
+            .Where(e => e.PingId == pingId)
             .Where(e => e.EndTime > DateTime.UtcNow)
             .Where(e => e.IsPublic || 
                         (userId != null && (e.CreatedById == userId || e.Attendees.Any(a => a.UserId == userId))))

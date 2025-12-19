@@ -1,6 +1,5 @@
-using Ping.Models.Activities;
-using Ping.Models.Events;
-using Ping.Models.Places;
+﻿using Ping.Models.Events;
+using Ping.Models.Pings;
 using Microsoft.EntityFrameworkCore;
 using Ping.Models.Reviews;
 using Ping.Models.Reports;
@@ -14,9 +13,10 @@ namespace Ping.Data.App
 {
     public class AppDbContext(DbContextOptions<AppDbContext> opt) : DbContext(opt)
     {
-        public DbSet<Place> Places => Set<Place>();
-        public DbSet<ActivityKind> ActivityKinds => Set<ActivityKind>();
-        public DbSet<PlaceActivity> PlaceActivities => Set<PlaceActivity>();
+        public DbSet<Models.Pings.Ping> Pings => Set<Models.Pings.Ping>();
+        public DbSet<PingGenre> PingGenres => Set<PingGenre>();
+        public DbSet<EventGenre> EventGenres => Set<EventGenre>();
+        public DbSet<PingActivity> PingActivities => Set<PingActivity>();
         public DbSet<Review> Reviews => Set<Review>();
         public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<Tag> Tags => Set<Tag>();
@@ -26,62 +26,85 @@ namespace Ping.Data.App
         public DbSet<Favorited> Favorited => Set<Favorited>();
         public DbSet<ReviewLike> ReviewLikes => Set<ReviewLike>();
         public DbSet<Report> Reports => Set<Report>();
-        public DbSet<PlaceClaim> PlaceClaims => Set<PlaceClaim>();
-        public DbSet<PlaceDailyMetric> PlaceDailyMetrics => Set<PlaceDailyMetric>();
+        public DbSet<PingClaim> PingClaims => Set<PingClaim>();
+        public DbSet<PingDailyMetric> PingDailyMetrics => Set<PingDailyMetric>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
             
             // ---------- Seed data ----------
-            builder.Entity<ActivityKind>().HasData(
-                new ActivityKind { Id = 1, Name = "Sports" },
-                new ActivityKind { Id = 2, Name = "Food" },
-                new ActivityKind { Id = 3, Name = "Outdoors" },
-                new ActivityKind { Id = 4, Name = "Art" },
-                new ActivityKind { Id = 5, Name = "Entertainment" },
-                new ActivityKind { Id = 6, Name = "Shopping" },
-                new ActivityKind { Id = 7, Name = "Wellness" },
-                new ActivityKind { Id = 8, Name = "Nightlife" },
-                new ActivityKind { Id = 9, Name = "Education" },
-                new ActivityKind { Id = 10, Name = "Work" },
-                new ActivityKind { Id = 11, Name = "Travel" },
-                new ActivityKind { Id = 12, Name = "Music" },
-                new ActivityKind { Id = 13, Name = "Tech" },
-                new ActivityKind { Id = 14, Name = "Gaming" },
-                new ActivityKind { Id = 15, Name = "Pets" },
-                new ActivityKind { Id = 16, Name = "Family" },
-                new ActivityKind { Id = 17, Name = "Dating" },
-                new ActivityKind { Id = 18, Name = "Fashion" },
-                new ActivityKind { Id = 19, Name = "Automotive" },
-                new ActivityKind { Id = 20, Name = "Home" }
+            // ---------- Seed data ----------
+            builder.Entity<PingGenre>().HasData(
+                new PingGenre { Id = 1, Name = "Sports" },
+                new PingGenre { Id = 2, Name = "Food" },
+                new PingGenre { Id = 3, Name = "Outdoors" },
+                new PingGenre { Id = 4, Name = "Art" },
+                new PingGenre { Id = 5, Name = "Entertainment" },
+                new PingGenre { Id = 6, Name = "Shopping" },
+                new PingGenre { Id = 7, Name = "Wellness" },
+                new PingGenre { Id = 8, Name = "Nightlife" },
+                new PingGenre { Id = 9, Name = "Education" },
+                new PingGenre { Id = 10, Name = "Work" },
+                new PingGenre { Id = 11, Name = "Travel" },
+                new PingGenre { Id = 12, Name = "Music" },
+                new PingGenre { Id = 13, Name = "Tech" },
+                new PingGenre { Id = 14, Name = "Gaming" },
+                new PingGenre { Id = 15, Name = "Pets" },
+                new PingGenre { Id = 16, Name = "Family" },
+                new PingGenre { Id = 17, Name = "Dating" },
+                new PingGenre { Id = 18, Name = "Fashion" },
+                new PingGenre { Id = 19, Name = "Automotive" },
+                new PingGenre { Id = 20, Name = "Home" }
+            );
+
+            // Seed EventGenres
+            builder.Entity<EventGenre>().HasData(
+                new EventGenre { Id = 1, Name = "Music" },
+                new EventGenre { Id = 2, Name = "Sports" },
+                new EventGenre { Id = 3, Name = "Arts" },
+                new EventGenre { Id = 4, Name = "Nightlife" },
+                new EventGenre { Id = 5, Name = "Networking" },
+                new EventGenre { Id = 6, Name = "Education" },
+                new EventGenre { Id = 7, Name = "Family" },
+                new EventGenre { Id = 8, Name = "Comedy" },
+                new EventGenre { Id = 9, Name = "Technology" },
+                new EventGenre { Id = 10, Name = "Wellness" },
+                new EventGenre { Id = 11, Name = "Food" },
+                new EventGenre { Id = 12, Name = "Other" },
+                new EventGenre { Id = 14, Name = "Cars"}
             );
 
             // ---------- Indexes ----------
 
-            // Place: Spatial index for nearby searches
-             builder.Entity<Place>()
+            // Ping: Spatial index for nearby searches
+             builder.Entity<Models.Pings.Ping>()
                  .HasIndex(p => p.Location);
 
-            // Favorited: unique per user per place
+            // Favorited: unique per user per ping
             builder.Entity<Favorited>()
-                .HasIndex(f => new { f.UserId, f.PlaceId })
+                .HasIndex(f => new { f.UserId, f.PingId })
                 .IsUnique();
 
-            // ActivityKind: unique name (e.g. "Soccer", "Rock climbing")
-            builder.Entity<ActivityKind>()
-                .HasIndex(ak => ak.Name)
+            // PingGenre: unique name
+            builder.Entity<PingGenre>()
+                .HasIndex(pg => pg.Name)
                 .IsUnique();
 
-            // PlaceDailyMetric: unique per place per day
-            builder.Entity<PlaceDailyMetric>()
-                .HasIndex(m => new { m.PlaceId, m.Date })
+            // EventGenre: unique name
+            builder.Entity<EventGenre>()
+                .HasIndex(eg => eg.Name)
                 .IsUnique();
 
-            // PlaceActivity: unique per place by name
-            // (e.g. only one "Pickup soccer" at a given place)
-            builder.Entity<PlaceActivity>()
-                .HasIndex(pa => new { pa.PlaceId, pa.Name })
+            // PingDailyMetric: unique per ping per day
+            builder.Entity<PingDailyMetric>()
+                .HasIndex(m => new { m.PingId, m.Date })
+                .IsUnique();
+
+            // PingActivity: unique per ping by name
+            // (e.g. only one "Pickup soccer" at a given ping)
+            builder.Entity<PingActivity>()
+                .HasIndex(pa => new { pa.PingId, pa.Name })
                 .IsUnique();
 
             // Review: 
@@ -89,7 +112,7 @@ namespace Ping.Data.App
             // - 1-5 rating only
             // - 1000 character limit
             builder.Entity<Review>()
-                .HasIndex(r => new { r.PlaceActivityId, r.UserId });
+                .HasIndex(r => new { r.PingActivityId, r.UserId });
 
             builder.Entity<Review>()
                 .ToTable(t => t.HasCheckConstraint("CK_Review_Rating", "\"Rating\" >= 1 AND \"Rating\" <= 5"));
@@ -109,25 +132,25 @@ namespace Ping.Data.App
 
             // ---------- Relationships ----------
 
-            // Place 1 - * PlaceActivities
-            builder.Entity<PlaceActivity>()
-                .HasOne(pa => pa.Place)
-                .WithMany(p => p.PlaceActivities)
-                .HasForeignKey(pa => pa.PlaceId)
+            // Ping 1 - * PingActivities
+            builder.Entity<PingActivity>()
+                .HasOne(pa => pa.Ping)
+                .WithMany(p => p.PingActivities)
+                .HasForeignKey(pa => pa.PingId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // ActivityKind 1 - * PlaceActivities
-            builder.Entity<PlaceActivity>()
-                .HasOne(pa => pa.ActivityKind)
-                .WithMany(ak => ak.PlaceActivities)
-                .HasForeignKey(pa => pa.ActivityKindId)
+            // PingGenre 1 - * Pings
+            builder.Entity<Models.Pings.Ping>()
+                .HasOne(p => p.PingGenre)
+                .WithMany(pg => pg.Pings)
+                .HasForeignKey(p => p.PingGenreId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // PlaceActivity 1 - * Reviews
+            // PingActivity 1 - * Reviews
             builder.Entity<Review>()
-                .HasOne(r => r.PlaceActivity)
+                .HasOne(r => r.PingActivity)
                 .WithMany(pa => pa.Reviews)
-                .HasForeignKey(r => r.PlaceActivityId)
+                .HasForeignKey(r => r.PingActivityId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Review 1 - * ReviewTags
@@ -144,11 +167,11 @@ namespace Ping.Data.App
                 .HasForeignKey(rt => rt.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Favorited * - 1 Place
+            // Favorited * - 1 Ping
             builder.Entity<Favorited>()
-                .HasOne(f => f.Place)
+                .HasOne(f => f.Ping)
                 .WithMany(p => p.FavoritedList)
-                .HasForeignKey(f => f.PlaceId)
+                .HasForeignKey(f => f.PingId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // ReviewLike * - 1 Review
@@ -195,13 +218,13 @@ namespace Ping.Data.App
             // Only apply when running against Postgres
             if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
             {
-                 // Full-Text Search Vector for Places (Name + Address)
+                 // Full-Text Search Vector for Pings (Name + Address)
                  // We use a shadow property so we don't pollute the domain model
-                 builder.Entity<Place>()
+                 builder.Entity<Models.Pings.Ping>()
                      .Property<NpgsqlTsVector>("SearchVector")
                      .HasComputedColumnSql("to_tsvector('english', coalesce(\"Name\", '') || ' ' || coalesce(\"Address\", ''))", stored: true);
 
-                 builder.Entity<Place>()
+                 builder.Entity<Models.Pings.Ping>()
                      .HasIndex("SearchVector")
                      .HasMethod("GIN");
             }

@@ -7,6 +7,6 @@ public class RecommendationDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public string Source { get; set; } = "Local"; // "Local" or "Google"
-    public int? LocalPlaceId { get; set; } // ID if it's a local place
+    public int? LocalPingId { get; set; } // ID if it's a local ping
 }
 

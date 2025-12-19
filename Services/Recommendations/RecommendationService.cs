@@ -1,5 +1,5 @@
 using Ping.Data.App;
-using Ping.Models.Places;
+using Ping.Models.Pings;
 using Ping.Services.Google;
 using Ping.Dtos.Recommendations;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +11,7 @@ namespace Ping.Services.Recommendations;
 public class RecommendationService(
     Kernel kernel,
     AppDbContext dbContext,
-    IPlaceNameService googlePlacesService,
+    IPingNameService pingNameService,
     ILogger<RecommendationService> logger)
 {
     public async Task<List<RecommendationDto>> GetRecommendationsAsync(string vibe, double lat, double lng, double radiusKm)
@@ -34,7 +34,7 @@ public class RecommendationService(
             Latitude = p.Latitude,
             Longitude = p.Longitude,
             Source = "Local",
-            LocalPlaceId = p.Id
+            LocalPingId = p.Id
         }).ToList();
         
         // If we have enough local results, return them (prioritizing local data)
@@ -50,16 +50,16 @@ public class RecommendationService(
         
         // Use the first (most relevant) search term for the Google query
         var primaryQuery = searchTerms[0]; 
-        var googlePlaces = await googlePlacesService.SearchPlacesAsync(primaryQuery, lat, lng, radiusKm);
+        var googlePings = await pingNameService.SearchPingsAsync(primaryQuery, lat, lng, radiusKm);
         
-        googleResults.AddRange(googlePlaces.Select(g => new RecommendationDto
+        googleResults.AddRange(googlePings.Select(g => new RecommendationDto
         {
             Name = g.Name,
             Address = g.Address,
             Latitude = g.Lat,
             Longitude = g.Lng,
             Source = "Google",
-            LocalPlaceId = null
+            LocalPingId = null
         }));
 
         // Combine results (deduplicate by name roughly)
@@ -78,7 +78,7 @@ public class RecommendationService(
                 Source = "System",
                 Latitude = null,
                 Longitude = null,
-                LocalPlaceId = null
+                LocalPingId = null
             }];
         }
 
@@ -119,7 +119,7 @@ public class RecommendationService(
         }
     }
 
-    private async Task<List<Place>> SearchLocalDatabaseAsync(List<string> searchTerms, double lat, double lng, double radiusKm)
+    private async Task<List<Ping.Models.Pings.Ping>> SearchLocalDatabaseAsync(List<string> searchTerms, double lat, double lng, double radiusKm)
     {
         // Create a point for the center (PostGIS uses Longitude, Latitude order, verify SRID matches)
         var center = new NetTopologySuite.Geometries.Point(lng, lat) { SRID = 4326 };
@@ -128,27 +128,26 @@ public class RecommendationService(
         // Approx conversion: 1 degree ~ 111 km.
         var distanceDegrees = radiusKm / 111.0;
 
-        var query = dbContext.Places
-            .Include(p => p.PlaceActivities)
-                .ThenInclude(pa => pa.ActivityKind)
-            .Include(p => p.PlaceActivities)
+        var query = dbContext.Pings
+            .Include(p => p.PingGenre)
+            .Include(p => p.PingActivities)
                 .ThenInclude(pa => pa.Reviews)
                     .ThenInclude(r => r.ReviewTags)
                         .ThenInclude(rt => rt.Tag)
             .Where(p => p.Location.IsWithinDistance(center, distanceDegrees));
 
-        var nearbyPlaces = await query.ToListAsync();
+        var nearbyPings = await query.ToListAsync();
 
-        var matches = nearbyPlaces
+        var matches = nearbyPings
             .Where(p => searchTerms.Any(term => 
-                // Match Place Name
+                // Match Ping Name
                 p.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
                 // Match Activity Name (e.g. "Pickup Soccer")
-                p.PlaceActivities.Any(pa => pa.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
-                // Match Activity Kind (e.g. "Sports")
-                p.PlaceActivities.Any(pa => pa.ActivityKind?.Name.Contains(term, StringComparison.OrdinalIgnoreCase) == true) ||
+                p.PingActivities.Any(pa => pa.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                // Match Ping Genre (e.g. "Sports")
+                p.PingGenre?.Name.Contains(term, StringComparison.OrdinalIgnoreCase) == true ||
                 // Match Tags on Reviews (e.g. "Cozy", "Crowded")
-                p.PlaceActivities.Any(pa => pa.Reviews.Any(r => r.ReviewTags.Any(rt => rt.Tag.Name.Contains(term, StringComparison.OrdinalIgnoreCase))))
+                p.PingActivities.Any(pa => pa.Reviews.Any(r => r.ReviewTags.Any(rt => rt.Tag.Name.Contains(term, StringComparison.OrdinalIgnoreCase))))
             ))
             .Take(5)
             .ToList();

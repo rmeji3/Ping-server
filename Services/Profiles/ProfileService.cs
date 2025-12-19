@@ -10,11 +10,11 @@ using Ping.Models.Friends; // For FriendshipStatus enum
 using FriendshipStatus = Ping.Dtos.Profiles.FriendshipStatus; // Alias for DTO enum
 using Ping.Services.Storage;
 using Ping.Dtos.Activities; // For ActivitySummaryDto
-using Ping.Dtos.Reviews; // Fix ReviewDto
-using Ping.Dtos.Places;  // Fix PlaceDetailsDto
-using Ping.Dtos.Events; // Logic for events
-using Ping.Services.Events; // For EventMapper
-using Ping.Dtos.Common; // For PaginationParams, PaginatedResult
+using Ping.Dtos.Reviews; 
+using Ping.Dtos.Pings;  
+using Ping.Dtos.Events; 
+using Ping.Services.Events; 
+using Ping.Dtos.Common; 
 using Ping.Services.Profiles;
 using AppUserPrivacy = Ping.Models.AppUsers.PrivacyConstraint; // Alias for Model enum
 
@@ -87,28 +87,28 @@ public class ProfileService(
             ))
             .ToListAsync();
 
-        // Fetch My Places (Created + Visited)
-        // Created Places
-        var createdPlacesQuery = appDb.Places.AsNoTracking()
+        // Fetch My Pings (Created + Visited)
+        // Created Pings
+        var createdPingsQuery = appDb.Pings.AsNoTracking()
             .Where(p => p.OwnerUserId == userId && !p.IsDeleted)
-            .Select(p => new { Place = p, Date = p.CreatedUtc });
+            .Select(p => new { Ping = p, Date = p.CreatedUtc });
 
-        // Visited Places (from Reviews)
-        var visitedPlacesQuery = appDb.Reviews.AsNoTracking()
+        // Visited Pings (from Reviews)
+        var visitedPingsQuery = appDb.Reviews.AsNoTracking()
             .Where(r => r.UserId == userId)
-            .Select(r => new { Place = r.PlaceActivity.Place, Date = r.CreatedAt })
-            .Where(x => !x.Place.IsDeleted);
+            .Select(r => new { Ping = r.PingActivity!.Ping, Date = r.CreatedAt })
+            .Where(x => !x.Ping.IsDeleted);
 
-        var combinedPlaces = await createdPlacesQuery
-            .Union(visitedPlacesQuery)
-            .GroupBy(x => x.Place.Id)
-            .Select(g => g.OrderByDescending(x => x.Date).First().Place)
+        var combinedPings = await createdPingsQuery
+            .Union(visitedPingsQuery)
+            .GroupBy(x => x.Ping.Id)
+            .Select(g => g.OrderByDescending(x => x.Date).First().Ping)
             .ToListAsync();
 
-        var places = new List<PlaceDetailsDto>();
-        foreach (var p in combinedPlaces)
+        var pings = new List<PingDetailsDto>();
+        foreach (var p in combinedPings)
         {
-            places.Add(new PlaceDetailsDto(
+            pings.Add(new PingDetailsDto(
                 p.Id,
                 p.Name,
                 p.Address ?? string.Empty,
@@ -119,7 +119,7 @@ public class ProfileService(
                 p.OwnerUserId == userId, // IsOwner
                 false, // IsFavorited - simpler to skip for "My Profile" summary or fetch if needed. Keeping it false for now as per other endpoints to avoid N+1
                 0, // Favorites count - skipping for summary
-                Array.Empty<ActivitySummaryDto>(),
+                Array.Empty<PingActivitySummaryDto>(),
                 Array.Empty<string>()
             ));
         }
@@ -134,7 +134,7 @@ public class ProfileService(
                 user.ProfileImageUrl,
                 user.Email!,
                 events,
-                places,
+                pings,
                 reviews,
                 roles.ToArray()
             );
@@ -182,7 +182,7 @@ public class ProfileService(
                 0, // EventCount
                 false, // IsFriends
                 u.ReviewsPrivacy,
-                u.PlacesPrivacy,
+                u.PingsPrivacy,
                 u.LikesPrivacy
             ))
             .ToListAsync();
@@ -274,15 +274,15 @@ public class ProfileService(
         // Stats
         var reviewCount = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId);
         var eventCount = await appDb.EventAttendees.CountAsync(ea => ea.UserId == targetUserId);
-        // "Places visited" -> distinct places from reviews + Created Places
-        var placeVisitCount = await appDb.Reviews
+        // "Pings visited" -> distinct pings from reviews + Created Pings
+        var pingVisitCount = await appDb.Reviews
             .Where(r => r.UserId == targetUserId)
-            .Select(r => r.PlaceActivity.PlaceId)
-            .Union(appDb.Places.Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted).Select(p => p.Id))
+            .Select(r => r.PingActivity!.PingId)
+            .Union(appDb.Pings.Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted).Select(p => p.Id))
             .CountAsync();
 
         List<ReviewDto>? reviews = null;
-        List<PlaceDetailsDto>? places = null;
+        List<PingDetailsDto>? pings = null;
 
         // Privacy - Reviews
         bool showReviews = isSelf || 
@@ -318,21 +318,21 @@ public class ProfileService(
                  .ToListAsync();
         }
 
-            // Privacy - Places
-            bool showPlaces = isSelf || 
-                              user.PlacesPrivacy == AppUserPrivacy.Public || 
-                              (user.PlacesPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
+            // Privacy - Pings
+            bool showPings = isSelf || 
+                             user.PingsPrivacy == AppUserPrivacy.Public || 
+                             (user.PingsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
             
-            if (showPlaces)
+            if (showPings)
             {
-                // Fetch Created Places
-                var createdPlacesQuery = appDb.Places.AsNoTracking()
+                // Fetch Created Pings
+                var createdPingsQuery = appDb.Pings.AsNoTracking()
                     .Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted);
 
-                // Fetch Visited Places (Distinct places from reviews)
-                var visitedPlacesQuery = appDb.Reviews.AsNoTracking()
+                // Fetch Visited Pings (Distinct pings from reviews)
+                var visitedPingsQuery = appDb.Reviews.AsNoTracking()
                     .Where(r => r.UserId == targetUserId)
-                    .Select(r => r.PlaceActivity.Place)
+                    .Select(r => r.PingActivity!.Ping)
                     .Where(p => !p.IsDeleted);
 
                 // Combine and Deduplicate
@@ -342,40 +342,40 @@ public class ProfileService(
                 // Or just Concat results in memory? Profiles usually have finite places.
                 // Let's list specific fields needed for DTO to make it lighter.
                 
-                var createdPlaces = await createdPlacesQuery.ToListAsync();
-                var visitedPlaces = await visitedPlacesQuery.ToListAsync();
+                var createdPings = await createdPingsQuery.ToListAsync();
+                var visitedPings = await visitedPingsQuery.ToListAsync();
                 
-                var allPlaces = createdPlaces.Concat(visitedPlaces)
+                var allPings = createdPings.Concat(visitedPings)
                     .GroupBy(p => p.Id)
                     .Select(g => g.First())
                     .ToList();
 
-                var visiblePlaces = new List<PlaceDetailsDto>();
+                var visiblePings = new List<PingDetailsDto>();
 
-                foreach (var p in allPlaces)
+                foreach (var p in allPings)
                 {
-                    bool isPlaceOwner = p.OwnerUserId == currentUserId;
-                    bool isPlaceRefOwner = p.OwnerUserId == targetUserId; // The profile owner owns this place
+                    bool isPingOwner = p.OwnerUserId == currentUserId;
+                    bool isPingRefOwner = p.OwnerUserId == targetUserId; // The profile owner owns this ping
 
                     bool canSee = false;
 
-                    // 1. If I own the place, I see it.
-                    if (isPlaceOwner)
+                    // 1. If I own the ping, I see it.
+                    if (isPingOwner)
                     {
                         canSee = true;
                     }
                     // 2. If it is Public, I see it.
-                    else if (p.Visibility == Models.Places.PlaceVisibility.Public)
+                    else if (p.Visibility == Models.Pings.PingVisibility.Public)
                     {
                         canSee = true;
                     }
                     // 3. If it is Friends only...
-                    else if (p.Visibility == Models.Places.PlaceVisibility.Friends)
+                    else if (p.Visibility == Models.Pings.PingVisibility.Friends)
                     {
-                        // Logic: Viewer must be friend of Place Owner.
-                        if (isPlaceRefOwner)
+                        // Logic: Viewer must be friend of Ping Owner.
+                        if (isPingRefOwner)
                         {
-                            // Place is owned by Profile Owner.
+                            // Ping is owned by Profile Owner.
                             // We already know friendship status with Profile Owner (isFriend).
                             if (isFriend) canSee = true;
                         }
@@ -396,7 +396,7 @@ public class ProfileService(
 
                     if (canSee)
                     {
-                        visiblePlaces.Add(new PlaceDetailsDto(
+                        visiblePings.Add(new PingDetailsDto(
                             p.Id,
                             p.Name,
                             p.Address ?? string.Empty,
@@ -404,16 +404,16 @@ public class ProfileService(
                             p.Longitude,
                             p.Visibility,
                             p.Type,
-                            isPlaceOwner,
+                            isPingOwner,
                             false, // IsFavorited
                             0, // Favorites count
-                            Array.Empty<ActivitySummaryDto>(),
+                            Array.Empty<PingActivitySummaryDto>(),
                             Array.Empty<string>()
                         ));
                     }
                 }
                 
-                places = visiblePlaces;
+                pings = visiblePings;
             }
 
             // Fetch Events (Upcoming)
@@ -460,15 +460,15 @@ public class ProfileService(
             user.LastName,
             user.ProfileImageUrl,
             reviews,
-            places,
+            pings,
             events, // New Field
             friendshipStatus,
             reviewCount,
-            placeVisitCount,
+            pingVisitCount,
             eventCount,
             isFriend,
             user.ReviewsPrivacy,
-            user.PlacesPrivacy,
+            user.PingsPrivacy,
             user.LikesPrivacy
         );
     }
@@ -511,11 +511,11 @@ public class ProfileService(
         // Stats
         var reviewCount = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId);
         var eventCount = await appDb.EventAttendees.CountAsync(ea => ea.UserId == targetUserId);
-        // "Places visited" -> distinct places from reviews + Created Places
-        var placeVisitCount = await appDb.Reviews
+        // "Pings visited" -> distinct pings from reviews + Created Pings
+        var pingVisitCount = await appDb.Reviews
             .Where(r => r.UserId == targetUserId)
-            .Select(r => r.PlaceActivity.PlaceId)
-            .Union(appDb.Places.Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted).Select(p => p.Id))
+            .Select(r => r.PingActivity!.PingId)
+            .Union(appDb.Pings.Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted).Select(p => p.Id))
             .CountAsync();
 
         return new QuickProfileDto(
@@ -526,15 +526,15 @@ public class ProfileService(
             user.ProfileImageUrl,
             friendshipStatus,
             reviewCount,
-            placeVisitCount,
+            pingVisitCount,
             eventCount,
             isFriend,
             user.ReviewsPrivacy,
-            user.PlacesPrivacy,
+            user.PingsPrivacy,
             user.LikesPrivacy
         );
     }
-    public async Task<PaginatedResult<PlaceDetailsDto>> GetUserPlacesAsync(string targetUserId, string currentUserId, PaginationParams pagination)
+    public async Task<PaginatedResult<PingDetailsDto>> GetUserPingsAsync(string targetUserId, string currentUserId, PaginationParams pagination)
     {
         var user = await userManager.FindByIdAsync(targetUserId);
         if (user is null) throw new KeyNotFoundException("User not found.");
@@ -554,64 +554,64 @@ public class ProfileService(
         // If not self, check privacy settings
         if (!isSelf)
         {
-            bool canViewPlaces = user.PlacesPrivacy == AppUserPrivacy.Public ||
-                                 (user.PlacesPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
-            if (!canViewPlaces)
+            bool canViewPings = user.PingsPrivacy == AppUserPrivacy.Public ||
+                                 (user.PingsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
+            if (!canViewPings)
             {
                 // Return empty if privacy restricts access
-                return new PaginatedResult<PlaceDetailsDto>(new List<PlaceDetailsDto>(), 0, pagination.PageNumber, pagination.PageSize);
+                return new PaginatedResult<PingDetailsDto>(new List<PingDetailsDto>(), 0, pagination.PageNumber, pagination.PageSize);
             }
         }
 
-        // Logic: Return {Place, Date} to allow sorting by recency
-        // Created Places
-        var createdQuery = appDb.Places.AsNoTracking()
+        // Logic: Return {Ping, Date} to allow sorting by recency
+        // Created Pings
+        var createdQuery = appDb.Pings.AsNoTracking()
             .Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted)
-            .Select(p => new { Place = p, Date = p.CreatedUtc });
+            .Select(p => new { Ping = p, Date = p.CreatedUtc });
 
-        // Visited Places (from Reviews)
+        // Visited Pings (from Reviews)
         var visitedQuery = appDb.Reviews.AsNoTracking()
             .Where(r => r.UserId == targetUserId)
-            .Select(r => new { Place = r.PlaceActivity.Place, Date = r.CreatedAt })
-            .Where(x => !x.Place.IsDeleted);
+            .Select(r => new { Ping = r.PingActivity!.Ping, Date = r.CreatedAt })
+            .Where(x => !x.Ping.IsDeleted);
 
         var combinedQuery = createdQuery.Union(visitedQuery);
 
-        // Apply Visibility Filters to the combined list (to hide private/friends-only places user shouldn't see)
+        // Apply Visibility Filters to the combined list (to hide private/friends-only pings user shouldn't see)
         // Public: Everyone sees
         // Owner is Me (Viewer): I see
-        // Owner is Target (Profile Owner) AND IsFriend: I see (because of 'friends only' visibility logic on the place + we are friends)
+        // Owner is Target (Profile Owner) AND IsFriend: I see (because of 'friends only' visibility logic on the ping + we are friends)
         // Note: Logic copied from GetProfileByIdAsync but adapted for LINQ
         combinedQuery = combinedQuery.Where(x => 
-            x.Place.Visibility == Models.Places.PlaceVisibility.Public ||
-            x.Place.OwnerUserId == currentUserId ||
-            (x.Place.Visibility == Models.Places.PlaceVisibility.Friends && x.Place.OwnerUserId == targetUserId && isFriend)
-            // Note: We exclude third-party friends-only places if we aren't the owner, as consistent with GetProfile logic
+            x.Ping.Visibility == Models.Pings.PingVisibility.Public ||
+            x.Ping.OwnerUserId == currentUserId ||
+            (x.Ping.Visibility == Models.Pings.PingVisibility.Friends && x.Ping.OwnerUserId == targetUserId && isFriend)
+            // Note: We exclude third-party friends-only pings if we aren't the owner, as consistent with GetProfile logic
         );
 
-        var totalCount = await combinedQuery.Select(x => x.Place.Id).Distinct().CountAsync();
+        var totalCount = await combinedQuery.Select(x => x.Ping.Id).Distinct().CountAsync();
         
-        // Paginate - distinct by Place ID to avoid duplicates if visited + created same place? 
-        // Union handles distinct on the anonymous object {Place, Date}. 
+        // Paginate - distinct by Ping ID to avoid duplicates if visited + created same ping? 
+        // Union handles distinct on the anonymous object {Ping, Date}. 
         // If created and visited at different times, they appear twice? Yes.
-        // We probably want unique Places.
+        // We probably want unique Pings.
         // GroupBy ID and take latest date.
         
         var pagedItems = await combinedQuery
-            .GroupBy(x => x.Place.Id)
+            .GroupBy(x => x.Ping.Id)
             .Select(g => g.OrderByDescending(x => x.Date).First()) // Take most recent interaction
             .OrderByDescending(x => x.Date)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
-            .Select(x => x.Place)
+            .Select(x => x.Ping)
             .ToListAsync();
 
-        var placeDtos = new List<PlaceDetailsDto>();
+        var pingDtos = new List<PingDetailsDto>();
         foreach (var p in pagedItems)
         {
-            bool isPlaceOwner = p.OwnerUserId == currentUserId;
+            bool isPingOwner = p.OwnerUserId == currentUserId;
             // Map
-            placeDtos.Add(new PlaceDetailsDto(
+            pingDtos.Add(new PingDetailsDto(
                 p.Id,
                 p.Name,
                 p.Address ?? string.Empty,
@@ -619,15 +619,15 @@ public class ProfileService(
                 p.Longitude,
                 p.Visibility,
                 p.Type,
-                isPlaceOwner,
+                isPingOwner,
                 false, // IsFavorited - fetching this requires extra query, skipping for list view or need batch check
                 0, // Favorites count
-                Array.Empty<ActivitySummaryDto>(),
+                Array.Empty<PingActivitySummaryDto>(),
                 Array.Empty<string>()
             ));
         }
 
-        return new PaginatedResult<PlaceDetailsDto>(placeDtos, totalCount, pagination.PageNumber, pagination.PageSize);
+        return new PaginatedResult<PingDetailsDto>(pingDtos, totalCount, pagination.PageNumber, pagination.PageSize);
     }
 
     public async Task<PaginatedResult<EventDto>> GetUserEventsAsync(string targetUserId, string currentUserId, PaginationParams pagination)

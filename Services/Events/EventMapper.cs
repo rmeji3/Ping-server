@@ -60,7 +60,9 @@ public static class EventMapper
             status,
             ev.Latitude,
             ev.Longitude,
-            ev.PlaceId
+            ev.PingId,
+            null, // EventGenreId
+            null  // EventGenreName
         );
     }
 }

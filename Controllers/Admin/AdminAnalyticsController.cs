@@ -22,7 +22,7 @@ public class AdminAnalyticsController(IAnalyticsService analytics) : ControllerB
     [HttpGet("trending")]
     public async Task<IActionResult> GetTrendingPlaces()
     {
-        var places = await analytics.GetTrendingPlacesAsync();
+        var places = await analytics.GetTrendingPingsAsync();
         return Ok(places);
     }
 

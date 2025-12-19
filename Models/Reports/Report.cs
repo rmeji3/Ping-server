@@ -4,8 +4,8 @@ namespace Ping.Models.Reports
 {
     public enum ReportTargetType
     {
-        Place,
-        Activity,
+        Ping,
+        PingActivity,
         Review,
         Profile,
         Bug

@@ -2,12 +2,12 @@ using Ping.Models.Business;
 
 namespace Ping.Dtos.Business
 {
-    public record CreateClaimDto(int PlaceId, string Proof);
+    public record CreateClaimDto(int PingId, string Proof);
 
     public record ClaimDto(
         int Id,
-        int PlaceId,
-        string PlaceName,
+        int PingId,
+        string PingName,
         string UserId,
         string UserName, // Populated if we fetch User info
         string Proof,

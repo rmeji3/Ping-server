@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using Ping.Models.Places;
+using Ping.Models.Pings;
 
 namespace Ping.Models.Reviews;
 
@@ -10,8 +10,8 @@ public class Review
     public string UserId { get; init; } = null!;  // FK reference only
     [MaxLength(100)]
     public string UserName { get; init; } = null!;
-    public int PlaceActivityId { get; set; }
-    public PlaceActivity PlaceActivity { get; set; } = null!;
+    public int PingActivityId { get; set; }
+    public PingActivity PingActivity { get; set; } = null!;
     [Range(1, 5, ErrorMessage = "Rating must be between 1 and 5.")]
     public int Rating { get; init; }
     public ReviewType Type { get; set; }

@@ -7,16 +7,16 @@ namespace Ping.Controllers.Activities
 {
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/activities")]
-    [Route("api/v{version:apiVersion}/activities")]
-    public class ActivitiesController(IActivityService activityService) : ControllerBase
+    [Route("api/ping-activities")]
+    [Route("api/v{version:apiVersion}/ping-activities")]
+    public class PingActivitiesController(IPingActivityService activityService) : ControllerBase
     {
         [HttpPost]
-        public async Task<ActionResult<ActivityDetailsDto>> Create([FromBody] CreateActivityDto dto)
+        public async Task<ActionResult<PingActivityDetailsDto>> Create([FromBody] CreatePingActivityDto dto)
         {
             try
             {
-                var result = await activityService.CreateActivityAsync(dto);
+                var result = await activityService.CreatePingActivityAsync(dto);
                 return Ok(result);
             }
             catch (KeyNotFoundException ex)

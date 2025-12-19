@@ -2,31 +2,31 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Ping.Dtos.Activities
 {
-    public record ActivitySummaryDto(
+    public record PingActivitySummaryDto(
         int Id,
         string Name,
-        int? ActivityKindId,
-        string? ActivityKindName
+        int? PingGenreId,
+        string? PingGenreName
     );
-    public record CreateActivityDto(
-        int PlaceId,
+    public record CreatePingActivityDto(
+        int PingId,
         [MaxLength(100)] string Name,
-        int? ActivityKindId
+        int? PingGenreId
     );
 
-    public record ActivityDetailsDto(
+    public record PingActivityDetailsDto(
         int Id,
-        int PlaceId, 
+        int PingId, 
         string Name,
-        int? ActivityKindId,
-        string? ActivityKindName,
+        int? PingGenreId,
+        string? PingGenreName,
         DateTime CreatedUtc,
         string? WarningMessage = null
     );
     
-    public record ActivityKindDto(int Id, string Name);
+    public record PingGenreDto(int Id, string Name);
 
-    public record CreateActivityKindDto(
+    public record CreatePingGenreDto(
         [Required, MaxLength(100)] string Name
     );
 }

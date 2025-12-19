@@ -108,15 +108,15 @@ namespace Ping.Controllers.Events
         }
 
         // GET /api/events/place/{placeId}?pageNumber=1&pageSize=20
-        [HttpGet("place/{placeId:int}")]
-        public async Task<ActionResult<PaginatedResult<EventDto>>> GetByPlace(
-            int placeId,
+        [HttpGet("ping/{pingId:int}")]
+        public async Task<ActionResult<PaginatedResult<EventDto>>> GetByPing(
+            int pingId,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-            var result = await eventService.GetEventsByPlaceAsync(placeId, userId, pagination);
+            var result = await eventService.GetEventsByPingAsync(pingId, userId, pagination);
             return Ok(result);
         }
 

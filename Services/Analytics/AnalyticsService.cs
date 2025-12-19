@@ -9,7 +9,7 @@ using Ping.Models; // For Place, Review, etc.
 using Ping.Models.Reviews;
 using Ping.Models.Reports;
 
-using Ping.Models.Places;
+using Ping.Models.Pings;
 
 namespace Ping.Services.Analytics;
 
@@ -98,19 +98,19 @@ public class AnalyticsService(
         return metrics;
     }
 
-    public async Task<List<TrendingPlaceDto>> GetTrendingPlacesAsync()
+    public async Task<List<TrendingPingDto>> GetTrendingPingsAsync()
     {
-        logger.LogInformation("Fetching trending places");
+        logger.LogInformation("Fetching trending pings");
         
-        // Trending: Places with most Reviews/CheckIns in last 7 days
+        // Trending: Pings with most Reviews/CheckIns in last 7 days
         var cutoff = DateTime.UtcNow.AddDays(-7);
 
         var trending = await appDb.Reviews
-            .Where(r => r.CreatedAt >= cutoff && r.PlaceActivity!.Place.Visibility == PlaceVisibility.Public)
-            .GroupBy(r => r.PlaceActivity!.Place)
+            .Where(r => r.CreatedAt >= cutoff && r.PingActivity!.Ping.Visibility == PingVisibility.Public)
+            .GroupBy(r => r.PingActivity!.Ping)
             .Select(g => new
             {
-                Place = g.Key,
+                Ping = g.Key,
                 Count = g.Count(),
                 Reviews = g.Count(x => x.Type == ReviewType.Review),
                 CheckIns = g.Count(x => x.Type == ReviewType.CheckIn)
@@ -119,11 +119,11 @@ public class AnalyticsService(
             .Take(10)
             .ToListAsync();
 
-        logger.LogDebug("Found {Count} trending places", trending.Count);
+        logger.LogDebug("Found {Count} trending pings", trending.Count);
         
-        return trending.Select(t => new TrendingPlaceDto(
-            t.Place.Id,
-            t.Place.Name,
+        return trending.Select(t => new TrendingPingDto(
+            t.Ping.Id,
+            t.Ping.Name,
             t.Reviews,
             t.CheckIns,
             t.Count

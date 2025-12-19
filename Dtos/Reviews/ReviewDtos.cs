@@ -28,12 +28,12 @@ public record CreateReviewDto(
 
 public record ExploreReviewDto(
     int ReviewId,
-    int PlaceActivityId,
-    int PlaceId,
-    string PlaceName,
-    string PlaceAddress,
+    int PingActivityId,
+    int PingId,
+    string PingName,
+    string PingAddress,
     string ActivityName,
-    string? ActivityKindName,
+    string? PingGenreName,
     double Latitude,
     double Longitude,
     int Rating,
@@ -46,7 +46,7 @@ public record ExploreReviewDto(
     int Likes,
     bool IsLiked,
     List<string> Tags,
-    bool IsPlaceDeleted
+    bool IsPingDeleted
 );
 
 public class ExploreReviewsFilterDto
@@ -55,7 +55,7 @@ public class ExploreReviewsFilterDto
     public double? Longitude { get; set; }
     public double? RadiusKm { get; set; }
     public string? SearchQuery { get; set; }
-    public List<int>? ActivityKindIds { get; set; }
+    public List<int>? PingGenreIds { get; set; }
     public int PageSize { get; set; } = 20;
     public int PageNumber { get; set; } = 1;
 }

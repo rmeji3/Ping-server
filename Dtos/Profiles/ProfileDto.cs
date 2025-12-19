@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Ping.Dtos.Reviews;
-using Ping.Dtos.Places;
+using Ping.Dtos.Pings;
 using Ping.Dtos.Events;
 using Ping.Models.AppUsers;
 
@@ -13,15 +13,15 @@ public record ProfileDto(
     [Required] string LastName,
     string? ProfilePictureUrl,
     List<ReviewDto>? Reviews,
-    List<PlaceDetailsDto>? Places,
+    List<PingDetailsDto>? Pings,
     List<EventDto>? Events,
     FriendshipStatus FriendshipStatus,
     int ReviewCount,
-    int PlaceVisitCount,
+    int PingCount,
     int EventCount,
     bool IsFriends,
     PrivacyConstraint ReviewsPrivacy,
-    PrivacyConstraint PlacesPrivacy,
+    PrivacyConstraint PingsPrivacy,
     PrivacyConstraint LikesPrivacy
 );
 
@@ -41,11 +41,11 @@ public record QuickProfileDto(
     string? ProfilePictureUrl,
     FriendshipStatus FriendshipStatus,
     int ReviewCount,
-    int PlaceVisitCount,
+    int PingCount,
     int EventCount,
     bool IsFriends,
     PrivacyConstraint ReviewsPrivacy,
-    PrivacyConstraint PlacesPrivacy,
+    PrivacyConstraint PingsPrivacy,
     PrivacyConstraint LikesPrivacy
 );
 
@@ -57,7 +57,7 @@ public record PersonalProfileDto(
     string? ProfilePictureUrl,
     [Required] string Email,
     List<EventDto> Events,
-    List<PlaceDetailsDto> Places,
+    List<PingDetailsDto> Pings,
     List<ReviewDto> Reviews,
     string[] Roles
 );

@@ -8,8 +8,8 @@ public record DashboardStatsDto(
     int NewUsersToday
 );
 
-public record TrendingPlaceDto(
-    int PlaceId,
+public record TrendingPingDto(
+    int PingId,
     string Name,
     int ReviewCount,
     int CheckInCount,

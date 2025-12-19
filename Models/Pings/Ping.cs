@@ -1,10 +1,9 @@
 using System.ComponentModel.DataAnnotations;
-using Ping.Models.Activities;
 using Ping.Models.Reviews;
 
-namespace Ping.Models.Places
+namespace Ping.Models.Pings
 {
-    public class Place
+    public class Ping
     {
         public int Id { get; set; }
         [MaxLength(200)]
@@ -36,16 +35,19 @@ namespace Ping.Models.Places
         }
         [MaxLength(100)]
         public string OwnerUserId { get; set; } = null!;
-        public PlaceVisibility Visibility { get; set; } = PlaceVisibility.Private;
-        public PlaceType Type { get; set; }
+        public PingVisibility Visibility { get; set; } = PingVisibility.Private;
+        public PingType Type { get; set; }
         
         public bool IsClaimed { get; set; }
 
-        public ICollection<PlaceActivity> PlaceActivities { get; set; } = new List<PlaceActivity>();
+        public ICollection<PingActivity> PingActivities { get; set; } = new List<PingActivity>();
         public DateTime CreatedUtc { get; init; } = DateTime.UtcNow;
         public bool IsDeleted { get; set; } = false;
         public int Favorites { get; set; } = 0;
         public ICollection<Favorited> FavoritedList { get; set; } = [];
+
+        public int? PingGenreId { get; set; }
+        public PingGenre? PingGenre { get; set; }
     }
 }
 

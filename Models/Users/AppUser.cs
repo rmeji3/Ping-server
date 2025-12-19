@@ -12,7 +12,7 @@ namespace Ping.Models.AppUsers
         public string? ProfileImageUrl { get; set; } // nullable, NOT required
 
         public PrivacyConstraint ReviewsPrivacy { get; set; } = PrivacyConstraint.Public;
-        public PrivacyConstraint PlacesPrivacy { get; set; } = PrivacyConstraint.Public;
+        public PrivacyConstraint PingsPrivacy { get; set; } = PrivacyConstraint.Public;
         public PrivacyConstraint LikesPrivacy { get; set; } = PrivacyConstraint.Public;
 
         // Banning / Moderation

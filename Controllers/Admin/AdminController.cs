@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 using System.Security.Claims;
-using Ping.Services.Places;
+using Ping.Services.Pings;
 using Ping.Services.Reviews;
 using Ping.Services.Events;
 using Ping.Services.Activities;
@@ -22,10 +22,10 @@ namespace Ping.Controllers
     [Route("api/v{version:apiVersion}/admin")]
     [Authorize(Roles = "Admin")]
     public class AdminController(
-        IPlaceService placeService,
+        IPingService pingService,
         IReviewService reviewService,
         IEventService eventService,
-        IActivityService activityService,
+        IPingActivityService activityService,
         ITagService tagService,
         IBanningService banningService,
         IBusinessService businessService,
@@ -38,11 +38,11 @@ namespace Ping.Controllers
         // Resource Deletion
         // ==========================================
 
-        [HttpDelete("places/{id}")]
-        public async Task<IActionResult> DeletePlace(int id)
+        [HttpDelete("pings/{id}")]
+        public async Task<IActionResult> DeletePing(int id)
         {
-            await placeService.DeletePlaceAsAdminAsync(id);
-            return Ok(new { message = $"Place {id} deleted." });
+            await pingService.DeletePingAsAdminAsync(id);
+            return Ok(new { message = $"Ping {id} deleted." });
         }
 
         [HttpDelete("reviews/{id}")]
@@ -62,7 +62,7 @@ namespace Ping.Controllers
         [HttpDelete("activities/{id}")]
         public async Task<IActionResult> DeleteActivity(int id)
         {
-            await activityService.DeleteActivityAsAdminAsync(id);
+            await activityService.DeletePingActivityAsAdminAsync(id);
             return Ok(new { message = $"Activity {id} deleted." });
         }
 

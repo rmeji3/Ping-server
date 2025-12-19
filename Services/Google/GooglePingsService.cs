@@ -4,9 +4,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Ping.Services.Google;
 
-public class GooglePlacesService(HttpClient httpClient, IConfiguration config, ILogger<GooglePlacesService> logger) : IPlaceNameService
+public class GooglePingsService(HttpClient httpClient, IConfiguration config, ILogger<GooglePingsService> logger) : IPingNameService
 {
-    public async Task<string?> GetPlaceNameAsync(double lat, double lng)
+    public async Task<string?> GetPingNameAsync(double lat, double lng)
     {
         var apiKey = config["Google:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -74,7 +74,7 @@ public class GooglePlacesService(HttpClient httpClient, IConfiguration config, I
             return null;
         }
     }
-    public async Task<List<GooglePlaceInfo>> SearchPlacesAsync(string query, double lat, double lng, double radiusKm)
+    public async Task<List<GooglePingInfo>> SearchPingsAsync(string query, double lat, double lng, double radiusKm)
     {
         var apiKey = config["Google:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -136,7 +136,7 @@ public class GooglePlacesService(HttpClient httpClient, IConfiguration config, I
             var json = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
             
-            var results = new List<GooglePlaceInfo>();
+            var results = new List<GooglePingInfo>();
             if (doc.RootElement.TryGetProperty("places", out var places) && places.GetArrayLength() > 0)
             {
                 foreach (var place in places.EnumerateArray())
@@ -164,7 +164,7 @@ public class GooglePlacesService(HttpClient httpClient, IConfiguration config, I
 
                     if (!string.IsNullOrEmpty(name))
                     {
-                        results.Add(new GooglePlaceInfo(name, address, pLat, pLng));
+                        results.Add(new GooglePingInfo(name, address, pLat, pLng));
                     }
                 }
             }

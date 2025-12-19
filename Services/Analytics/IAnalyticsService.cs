@@ -7,7 +7,7 @@ public interface IAnalyticsService
 {
     Task<DashboardStatsDto> GetDashboardStatsAsync();
     Task<List<DailySystemMetric>> GetHistoricalGrowthAsync(string metricType, int days);
-    Task<List<TrendingPlaceDto>> GetTrendingPlacesAsync();
+    Task<List<TrendingPingDto>> GetTrendingPingsAsync();
     Task<ModerationStatsDto> GetModerationStatsAsync();
     Task ComputeDailyMetricsAsync(DateOnly date);
     Task<List<DailySystemMetric>> GetGrowthByRegionAsync(); 

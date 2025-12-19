@@ -27,7 +27,7 @@ Comprehensive internal documentation of the current server codebase. This guide 
 
 ---
 ## 1. Overview
-Ping is an ASP.NET Core API (targeting .NET 9) that manages users, places, activities at places, events, friendships, and reviews. It uses:
+Ping is an ASP.NET Core API (targeting .NET 9) that manages users, pings, activities at pings, events, friendships, and reviews. It uses:
 - ASP.NET Core MVC + minimal hosting model
 - **Service Layer Architecture** ("Thin Controller, Fat Service" pattern)
 - Identity (custom `AppUser`) stored in `AuthDbContext` (SQLite)
@@ -43,7 +43,7 @@ Ping is an ASP.NET Core API (targeting .NET 9) that manages users, places, activ
 ## 2. Project Structure (Key Folders)
 - `Program.cs` – service registration, middleware pipeline, auto-migrations, Redis setup.
 - `Data/Auth/AuthDbContext.cs` – Identity + Friendships + UserBlocks.
-- `Data/App/AppDbContext.cs` – Places, Activities, Reviews, Tags, CheckIns, Events.
+- `Data/App/AppDbContext.cs` – Pings, Activities, Reviews, Tags, CheckIns, Events.
 - `Models/*` – EF Core entity classes.
 - `Dtos/*` – Records/classes exposed via API boundary.
 - `Controllers/*` – Thin orchestrators handling HTTP concerns only.
@@ -61,7 +61,7 @@ Registered services:
 - JWT options bound from `configuration["Jwt"]` (Key, Issuer, Audience, AccessTokenMinutes).
 - **Redis**: `IConnectionMultiplexer` (singleton), distributed cache, `IRedisService` (scoped).
 - **Session**: Distributed session state with Redis backend (30-minute timeout).
-- **Service Layer** (all scoped): `ITokenService`, `IPlaceService`, `IPlaceNameService` (Google Places API), `IEventService`, `IReviewService`, `IActivityService`, `IFriendService`, `IBlockService`, `IProfileService`, `IAuthService`, `IRedisService`, `IModerationService`, `ISemanticService`, `ITagService`, `RecommendationService`, `IBanningService`.
+- **Service Layer** (all scoped): `ITokenService`, `IPingService`, `IPingNameService` (Google Places API), `IEventService`, `IReviewService`, `IPingActivityService`, `IFriendService`, `IBlockService`, `IProfileService`, `IAuthService`, `IRedisService`, `IModerationService`, `ISemanticService`, `ITagService`, `RecommendationService`, `IBanningService`.
 - **Middleware**: `GlobalExceptionHandler` (transient), `RateLimitMiddleware` (scoped), `BanningMiddleware` (scoped).
 - Authentication: JWT Bearer with validation (issuer, audience, lifetime, signing key).
 - Swagger with Bearer security scheme.
@@ -108,7 +108,7 @@ Required `appsettings.json` keys:
     "GlobalLimitPerMinute": 100,
     "AuthenticatedLimitPerMinute": 200,
     "AuthEndpointsLimitPerMinute": 5,
-    "PlaceCreationLimitPerDay": 10
+    "PingCreationLimitPerDay": 10
   }
 }
 ```
@@ -179,27 +179,27 @@ Indexes:
 
 ### AppDbContext
 DbSets:
-- `Places`, `ActivityKinds`, `PlaceActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`
+- `Pings`, `PingGenres`, `PingActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`
 
 Seed Data:
-- `ActivityKind` seeded with ids 1–20 (Sports, Food, Outdoors, Art, etc.).
+- `PingGenre` seeded with ids 1–20 (Sports, Food, Outdoors, Art, etc.).
 
 Indexes:
-- `Place (Location)` Spatial Index. NTS `Point`.
-- **PostgreSQL Only**: `Place (SearchVector)` GIN Index for Full-Text Search.
-- Unique composite `Favorited (UserId, PlaceId)` prevents duplicate favorites.
-- Unique `ActivityKind.Name`.
-- Unique composite `PlaceActivity (PlaceId, Name)`.
+- `Ping (Location)` Spatial Index. NTS `Point`.
+- **PostgreSQL Only**: `Ping (SearchVector)` GIN Index for Full-Text Search.
+- Unique composite `Favorited (UserId, PingId)` prevents duplicate favorites.
+- Unique `PingGenre.Name`.
+- Unique composite `PingActivity (PingId, Name)`.
 - Review uniqueness: No unique constraint (allows multiple reviews/checkins per user).
 - Unique `Tag.Name`.
 - Composite PK `ReviewTag (ReviewId, TagId)`.
 - Composite PK `EventAttendee (EventId, UserId)`.
 
 Relationships & Cascades:
-- `Favorited` → `Place` cascade delete.
-- `PlaceActivity` → `Place` cascade delete.
-- `PlaceActivity` → `ActivityKind` restrict delete.
-- `Review` → `PlaceActivity` cascade.
+- `Favorited` → `Ping` cascade delete.
+- `PingActivity` → `Ping` cascade delete.
+- `PingActivity` → `PingGenre` restrict delete.
+- `Review` → `PingActivity` cascade.
 - `ReviewTag` → `Review` cascade, `ReviewTag` → `Tag` cascade.
 - `EventAttendee` → `Event` cascade.
 
@@ -212,30 +212,30 @@ Property Configuration:
 ## 6. Domain Models (Summaries)
 | Entity        | Key                | Core Fields                                                                                                              | Navigation                             | Notes                                                                                                                 |
 | ------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| AppUser       | `IdentityUser`     | FirstName, LastName, ProfileImageUrl, IsBanned, BanCount, LastIpAddress, BanReason, LastLoginUtc, CreatedUtc |(Friends)                              | Stored in Auth DB; Unverified users deleted after 12h |
+| AppUser       | `IdentityUser`     | FirstName, LastName, ProfileImageUrl, IsBanned, BanCount, LastIpAddress, BanReason, LastLoginUtc, CreatedUtc |(Friends)                              | Stored in Auth DB; Unverified users deleted after 12h; PingsPrivacy/ReviewsPrivacy settings |
 | IpBan         | IpAddress          | Reason, CreatedAt, ExpiresAt                                                                                             | (None)                                 | Stores banned IPs                                                                                                     |
 | Friendship    | (UserId, FriendId) | Status (Pending/Accepted/Blocked), CreatedAt                                                                             | User, Friend                           | Symmetric friendship stored as two Accepted rows after accept                                                         |
-| Place         | Id                 | Name, Address, **Location (Point)**, Latitude*, Longitude*, OwnerUserId, Visibility (Public/Private/Friends), Type (Verified/Custom), CreatedUtc | PlaceActivities                        | OwnerUserId is string (Identity FK); Visibility controls access; Type determines duplicate logic; *Lat/Lon are computed props mapped to Location (SRID 4326) |
-| Favorited     | Id                 | UserId, PlaceId                                                                                                          | Place                                  | Unique per user per place; cascade deletes with Place                                                                 |
-| ActivityKind  | Id                 | Name                                                                                                                     | PlaceActivities                        | Seeded                                                                                                                |
-| PlaceActivity | Id                 | PlaceId, ActivityKindId?, Name, CreatedUtc                                                                               | Place, ActivityKind, Reviews, CheckIns | Unique per place by Name                                                                                              |
-| Review        | Id                 | UserId, UserName, PlaceActivityId, Rating, Type, Content, ImageUrl, CreatedAt, Likes                      | PlaceActivity, ReviewTags              | Rating required; Type (Review/CheckIn); First post is Review, subsequent are CheckIns; ImageUrl required                              |
-| Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, PlaceId?, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee), Place?      | Status computed dynamically; PlaceId links to Place entity (optional)                                                                 |
+| Ping          | Id                 | Name, Address, **Location (Point)**, Latitude*, Longitude*, OwnerUserId, Visibility (Public/Private/Friends), Type (Verified/Custom), CreatedUtc | PingActivities                        | OwnerUserId is string (Identity FK); Visibility controls access; Type determines duplicate logic; *Lat/Lon are computed props mapped to Location (SRID 4326) |
+| Favorited     | Id                 | UserId, PingId                                                                                                          | Ping                                  | Unique per user per ping; cascade deletes with Ping                                                                 |
+| PingGenre     | Id                 | Name                                                                                                                     | PingActivities                         | Seeded                                                                                                                |
+| PingActivity  | Id                 | PingId, PingGenreId?, Name, CreatedUtc                                                                               | Ping, PingGenre, Reviews, CheckIns     | Unique per ping by Name                                                                                              |
+| Review        | Id                 | UserId, UserName, PingActivityId, Rating, Type, Content, ImageUrl, CreatedAt, Likes                      | PingActivity, ReviewTags               | Rating required; Type (Review/CheckIn); First post is Review, subsequent are CheckIns; ImageUrl required                              |
+| Event         | Id                 | Title, Description?, IsPublic, StartTime, EndTime, Location, PingId?, CreatedById, CreatedAt, Latitude, Longitude                 | Attendees (EventAttendee), Ping?       | Status computed dynamically; PingId links to Ping entity (optional)                                                                   |
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
 | Tag           | Id                 | Name, IsApproved, IsBanned, CanonicalTagId                                                                               | ReviewTags                             | Used for categorizing reviews                                                                                         |
 | UserBlock     | (BlockerId, BlockedId) | CreatedAt                                                                                                                | Blocker, Blocked                       | Separation of concern for blocking users; masks content bidirectionally                                               |
-| Report        | Id                 | ReporterId, TargetId, TargetType, Reason, Description, Status, CreatedAt                                                 | (None - Polymorphic)                    | TargetId is string; TargetType enum (Place/Activity/Review/Profile/Bug); Status enum (Pending/Reviewed/Dismissed)         |
-| PlaceClaim    | Id                 | UserId, PlaceId, Proof, Status, CreatedUtc, ReviewedUtc, ReviewerId                                                      | Place                                  | Tracks ownership claim requests; Logic FK to User                                                                     |
+| Report        | Id                 | ReporterId, TargetId, TargetType, Reason, Description, Status, CreatedAt                                                 | (None - Polymorphic)                    | TargetId is string; TargetType enum (Ping/PingActivity/Review/Profile/Bug); Status enum (Pending/Reviewed/Dismissed)      |
+| PingClaim     | Id                 | UserId, PingId, Proof, Status, CreatedUtc, ReviewedUtc, ReviewerId                                                      | Ping                                   | Tracks ownership claim requests; Logic FK to User                                                                     |
 | UserActivityLog | Id               | UserId, Date, LoginCount, LastActivityUtc                                                                                | User                                   | Tracks daily unique logins per user for analytics                                                                     |
 | DailySystemMetric | Id             | Date, MetricType, Value, Dimensions                                                                                      | (None)                                 | Stores historical aggregated stats (DAU, WAU, MAU, etc.)                                                              |
 
 ---
 ## 7. DTO Contracts
 ### Activities
-- `ActivitySummaryDto(Id, Name, ActivityKindId?, ActivityKindName?)`
-- `CreateActivityDto(PlaceId, Name, ActivityKindId?)`
-- `ActivityDetailsDto(Id, PlaceId, Name, ActivityKindId?, ActivityKindName?, CreatedUtc, WarningMessage?)`
-- `ActivityKindDto(Id, Name)` / `CreateActivityKindDto(Name)`
+- `PingActivitySummaryDto(Id, Name, PingGenreId?, PingGenreName?)`
+- `CreatePingActivityDto(PingId, Name, PingGenreId?)`
+- `PingActivityDetailsDto(Id, PingId, Name, PingGenreId?, PingGenreName?, CreatedUtc, WarningMessage?)`
+- `PingGenreDto(Id, Name)` / `CreatePingGenreDto(Name)`
 
 ### Auth
 - `RegisterDto(Email, Password, FirstName, LastName, UserName)`
@@ -250,37 +250,37 @@ Property Configuration:
 - `JwtOptions(Key, Issuer, Audience, AccessTokenMinutes)`
 
 ### Events
-- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PlaceId?, IsAdHoc)`
+- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId?, EventGenreId?, EventGenreName?, IsAdHoc)`
 - `UserSummaryDto(Id, UserName, FirstName, LastName)`
-- `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PlaceId?)`
-- `UpdateEventDto(Title?, Description?, IsPublic?, StartTime?, EndTime?, Location?, Latitude?, Longitude?, PlaceId?)`
+- `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PingId?, EventGenreId?)`
+- `UpdateEventDto(Title?, Description?, IsPublic?, StartTime?, EndTime?, Location?, Latitude?, Longitude?, PingId?, EventGenreId?)`
 
 ### Friends & Blocks
 - `FriendSummaryDto(Id, UserName, FirstName, LastName, ProfileImageUrl?)`
 - `BlockDto(BlockedUserId, BlockedUserName, BlockedAt)`
 
-### Places
-- `PlaceVisibility` enum: `Private = 0`, `Friends = 1`, `Public = 2`
-- `PlaceType` enum: `Custom = 0`, `Verified = 1`
-- `UpsertPlaceDto(Name, Address?, Latitude, Longitude, Visibility, Type)`
-- `PlaceDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Favorites, Activities[ActivitySummaryDto], ActivityKinds[string], ClaimStatus?, IsClaimed)`
+### Pings
+- `PingVisibility` enum: `Private = 0`, `Friends = 1`, `Public = 2`
+- `PingType` enum: `Custom = 0`, `Verified = 1`
+- `UpsertPingDto(Name, Address?, Latitude, Longitude, Visibility, Type)`
+- `PingDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Favorites, Activities[PingActivitySummaryDto], PingGenres[string], ClaimStatus?, IsClaimed)`
 
 ### Profiles
 - `ProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?)`
-- `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl, Email, Events[], Places[], Reviews[], Roles[])`
+- `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl, Email, Events[], Pings[], Reviews[], Roles[])`
 
 ### Reviews
 - `UserReviewsDto(Review, History[])` - Grouped response
 - `ReviewDto(Id, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[])`
 - `CreateReviewDto(Rating, Content?, ImageUrl, Tags[])`
-- `ExploreReviewDto(ReviewId, PlaceActivityId, PlaceId, PlaceName, PlaceAddress, ActivityName, ActivityKindName?, Latitude, Longitude, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[], IsPlaceDeleted)`
-- `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, ActivityKindIds?[], PageSize, PageNumber)`
+- `ExploreReviewDto(ReviewId, PingActivityId, PingId, PingName, PingAddress, ActivityName, PingGenreName?, Latitude, Longitude, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[], IsPingDeleted)`
+- `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, PingGenreIds?[], PageSize, PageNumber)`
 
 ### Tags
 - `TagDto(Id, Name, Count, IsApproved, IsBanned)`
 
 ### Recommendations
-- `RecommendationDto(Name, Address, Latitude?, Longitude?, Source, LocalPlaceId?)`
+- `RecommendationDto(Name, Address, Latitude?, Longitude?, Source, LocalPingId?)`
 
 ### Pagination
 - `PaginationParams(PageNumber=1, PageSize=20)` - Max PageSize 50
@@ -292,17 +292,17 @@ Property Configuration:
 - `Report(Id, ReporterId, TargetId, TargetType, Reason, Description?, CreatedAt, Status)`
 
 ### Business & Claims
-- `CreateClaimDto(PlaceId, Proof)`
-- `ClaimDto(Id, PlaceId, PlaceName, UserId, UserName, Proof, Status, CreatedUtc, ReviewedUtc)`
+- `CreateClaimDto(PingId, Proof)`
+- `ClaimDto(Id, PingId, PingName, UserId, UserName, Proof, Status, CreatedUtc, ReviewedUtc)`
 
 ### Analytics
 - `DashboardStatsDto(Dau, Wau, Mau, TotalUsers, NewUsersToday)`
-- `TrendingPlaceDto(PlaceId, Name, ReviewCount, CheckInCount, TotalInteractions)`
+- `TrendingPingDto(PingId, Name, ReviewCount, CheckInCount, TotalInteractions)`
 - `ModerationStatsDto(PendingReports, BannedUsers, BannedIps, RejectedReviews)`
 
 ### Business Analytics
-- `BusinessPlaceAnalyticsDto(PlaceId, TotalViews, TotalFavorites, TotalReviews, AvgRating, EventCount, ViewsHistory, PeakHours)`
-- `PlaceDailyStatDto(Date, Value)`
+- `BusinessPingAnalyticsDto(PingId, TotalViews, TotalFavorites, TotalReviews, AvgRating, EventCount, ViewsHistory, PeakHours)`
+- `PingDailyStatDto(Date, Value)`
 
 
 
@@ -316,15 +316,15 @@ Property Configuration:
 #### TokenService (`ITokenService`)
 - Generates JWT with configured options, includes roles and identity claims.
 
-#### PlaceService (`IPlaceService`)
-- Manages places, geo-spatial search, favoriting, and visibility rules.
-- **AI Moderation**: Checks Place Name for offensive content (Custom places).
+#### PingService (`IPingService`)
+- Manages pings, geo-spatial search, favoriting, and visibility rules.
+- **AI Moderation**: Checks Ping Name for offensive content (Custom pings).
 
-#### GooglePlacesService (`IPlaceNameService`)
-- Fetches official place names from Google Places API for verified places.
+#### GooglePingsService (`IPingNameService`)
+- Fetches official ping names from Google Places API for verified pings.
 
 #### RecommendationService (`RecommendationService`)
-- Provides AI-powered place recommendations based on "vibe" using Semantic Kernel + Google Places fallback.
+- Provides AI-powered ping recommendations based on "vibe" using Semantic Kernel + Google Pings fallback.
 
 #### EventService (`IEventService`)
 - Manages event lifecycle and attendance.
@@ -339,7 +339,7 @@ Property Configuration:
 - Manages tags and admin moderation.
 - Methods: `GetPopularTagsAsync`, `SearchTagsAsync`, `ApproveTagAsync`, `BanTagAsync`, `MergeTagAsync`.
 
-#### ActivityService (`IActivityService`)
+#### PingActivityService (`IPingActivityService`)
 - Manages activity creation.
 - **AI Moderation**: Checks Activity Name.
 - **Semantic Deduplication**: Uses AI to detect and merge duplicate activities (e.g., "Hoops" -> "Basketball"). Returns `WarningMessage` to frontend.
@@ -374,10 +374,10 @@ Property Configuration:
 #### ReportService (`IReportService`)
 - Manages reporting logic.
 - Methods: `CreateReportAsync` (User), `GetReportsAsync` (Admin).
-- **Polymorphism**: Handles reports for multiple target types (Place, Review, etc.).
+- **Polymorphism**: Handles reports for multiple target types (Ping, Review, etc.).
 
 #### BusinessService (`IBusinessService`)
-- Manages place claim requests.
+- Manages ping claim requests.
 - **Methods**: `SubmitClaimAsync`, `GetPendingClaimsAsync`, `ApproveClaimAsync` (Transfers ownership + adds Role), `RejectClaimAsync`.
 - **BanningService** (`IBanningService`):
   - Manages User and IP bans.
@@ -409,24 +409,24 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
   - **Header**: `X-Api-Version: 1.0`
 - **Compatibility**: The API defaults to v1.0 if no version is specified. Existing routes (e.g., `/api/activities`) function as aliases for v1.0.
 
-### ActivitiesController (`/api/activities`)
+### PingActivitiesController (`/api/ping-activities`)
 | Method | Route           | Auth | Body                | Returns              | Notes                                                |
 | ------ | --------------- | ---- | ------------------- | -------------------- | ---------------------------------------------------- |
-| POST   | /api/activities | A    | `CreateActivityDto` | `ActivityDetailsDto` | Validates place, optional kind, uniqueness per place |
+| POST   | /api/ping-activities | A    | `CreatePingActivityDto` | `PingActivityDetailsDto` | Validates ping, optional genre, uniqueness per ping |
 
-### ActivityKindsController (`/api/activity-kinds`)
+### PingGenresController (`/api/ping-genres`)
 | Method | Route                    | Auth | Body                    | Returns             | Notes                                                 |
 | ------ | ------------------------ | ---- | ----------------------- | ------------------- | ----------------------------------------------------- |
-| GET    | /api/activity-kinds      | A    | —                       | `ActivityKindDto[]` | Ordered by Name                                       |
-| POST   | /api/activity-kinds      | A    | `CreateActivityKindDto` | `ActivityKindDto`   | Enforces unique name (case-insensitive)               |
-| DELETE | /api/activity-kinds/{id} | A    | —                       | 204 NoContent       | Remove kind (restrict prevents cascade on activities) |
+| GET    | /api/ping-genres      | A    | —                       | `PingGenreDto[]` | Ordered by Name                                       |
+| POST   | /api/ping-genres      | A    | `CreatePingGenreDto` | `PingGenreDto`   | Enforces unique name (case-insensitive)               |
+| DELETE | /api/ping-genres/{id} | A    | —                       | 204 NoContent       | Remove genre (restrict prevents cascade on activities) |
 
 ### AdminController (`/api/admin`)
 **Requires `Admin` Role**
 
 | Method | Route                       | Query/Body                      | Returns     | Notes                                   |
 |:-------|:----------------------------|:--------------------------------|:------------|:----------------------------------------|
-| DELETE | /places/{id}               | -                               | Msg         | Soft delete (sets IsDeleted=true)       |
+| DELETE | /pings/{id}               | -                               | Msg         | Soft delete (sets IsDeleted=true)       |
 | DELETE | /reviews/{id}              | -                               | Msg         | Hard delete                             |
 | DELETE | /events/{id}               | -                               | Msg         | Hard delete                             |
 | DELETE | /activities/{id}           | -                               | Msg         | Hard delete                             |
@@ -471,11 +471,11 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 ### BusinessController (`/api/business`)
 | Method | Route                       | Auth | Body | Returns     | Notes                        |
 | ------ | --------------------------- | ---- | ---- | ----------- | ---------------------------- |
-| POST   | /api/business/claim         | A    | `CreateClaimDto` | `PlaceClaim` | Submit claim |
+| POST   | /api/business/claim         | A    | `CreateClaimDto` | `PingClaim` | Submit claim |
 | GET    | /api/business/claims        | Adm  | —    | `ClaimDto[]`| List pending claims |
 | POST   | /api/business/claims/{id}/approve | Adm | — | 200 | Transfers ownership, adds Business role |
 | POST   | /api/business/claims/{id}/reject  | Adm | — | 200 | Rejects claim |
-| GET    | /api/business/analytics/{id}| Bus  | —    | AnalyticsObj| Place Owner/Admin only |
+| GET    | /api/business/analytics/{id}| Bus  | —    | AnalyticsObj| Ping Owner/Admin only |
 
 ### EventsController (`/api/Events`)
 | Method | Route                                            | Auth | Body             | Returns      | Notes                                     |
@@ -499,15 +499,15 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/Friends/requests/incoming (Q: pageNumber, pageSize) | A    | —    | `PaginatedResult<FriendSummaryDto>` | Pending where current user is FriendId                   |
 | POST   | /api/Friends/remove/{username} | A    | —    | 200                  | Deletes both Accepted rows                               |
 
-### PlacesController (`/api/places`)
+### PingsController (`/api/pings`)
 | Method | Route                                                                              | Auth | Body             | Returns             | Notes                                                                                                           |
 | ------ | ---------------------------------------------------------------------------------- | ---- | ---------------- | ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| POST   | /api/places                                                                        | A    | `UpsertPlaceDto` | `PlaceDetailsDto`   | Daily per-user creation limit (10); Verified type requires address; Private/Friends auto-converted to Custom    |
-| GET    | /api/places/{id}                                                                   | A    | —                | `PlaceDetailsDto`   | Respects visibility: Private (owner only), Friends (owner + friends), Public (all)                              |
-| GET    | /api/places/nearby (Q: lat,lng,radiusKm,activityName,activityKind,visibility,type, pageNumber, pageSize) | A    | —                | `PaginatedResult<PlaceDetailsDto>` | Geo-search with optional filters: visibility (Public/Private/Friends), type (Verified/Custom), activity filters |
-| POST   | /api/places/favorited/{id}                                                         | A    | —                | 200 OK              | Adds place to favorites; prevents duplicates, validates place exists                                            |
-| DELETE | /api/places/favorited/{id}                                                         | A    | —                | 204 NoContent       | Removes place from favorites; idempotent                                                                        |
-| GET    | /api/places/favorited (Q: pageNumber, pageSize)                                    | A    | —                | `PaginatedResult<PlaceDetailsDto>` | Returns all favorited places with activities                                                                    |
+| POST   | /api/pings                                                                        | A    | `UpsertPingDto` | `PingDetailsDto`   | Daily per-user creation limit (10); Verified type requires address; Private/Friends auto-converted to Custom    |
+| GET    | /api/pings/{id}                                                                   | A    | —                | `PingDetailsDto`   | Respects visibility: Private (owner only), Friends (owner + friends), Public (all)                              |
+| GET    | /api/pings/nearby (Q: lat,lng,radiusKm,activityName,pingGenre,visibility,type, pageNumber, pageSize) | A    | —                | `PaginatedResult<PingDetailsDto>` | Geo-search with optional filters: visibility (Public/Private/Friends), type (Verified/Custom), activity filters |
+| POST   | /api/pings/favorited/{id}                                                         | A    | —                | 200 OK              | Adds ping to favorites; prevents duplicates, validates ping exists                                            |
+| DELETE | /api/pings/favorited/{id}                                                         | A    | —                | 204 NoContent       | Removes ping from favorites; idempotent                                                                        |
+| GET    | /api/pings/favorited (Q: pageNumber, pageSize)                                    | A    | —                | `PaginatedResult<PingDetailsDto>` | Returns all favorited pings with activities                                                                    |
 
 ### ProfilesController (`/api/profiles`)
 | Method | Route                          | Auth | Body | Returns              | Notes                                               |
@@ -517,7 +517,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | GET    | /api/profiles/search?username= | A    | —    | `ProfileDto[]`       | Prefix search on normalized username; excludes self |
 | GET    | /api/profiles/{id}             | A    | —    | `ProfileDto`         | Full public profile details                         |
 | GET    | /api/profiles/{id}/summary     | A    | —    | `QuickProfileDto`    | Lightweight profile summary for headers/cards       |
-| GET    | /api/profiles/{id}/places      | A    | —    | `PaginatedResult`    | Places created by user (respects privacy)           |
+| GET    | /api/profiles/{id}/pings      | A    | —    | `PaginatedResult`    | Pings created by user (respects privacy)           |
 | GET    | /api/profiles/{id}/reviews     | A    | —    | `PaginatedResult`    | Reviews by user (respects privacy)                  |
 | GET    | /api/profiles/{id}/events      | A    | —    | `PaginatedResult`    | Events created by user (respects privacy)           |
 
@@ -530,8 +530,8 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 ### ReviewsController (`/api/reviews`)
 | Method | Route                                                      | Auth | Body                      | Returns              | Notes                                              |
 | ------ | ---------------------------------------------------------- | ---- | ------------------------- | -------------------- | -------------------------------------------------- |
-| POST   | /api/reviews/{placeActivityId}                             | A    | `CreateReviewDto`         | `ReviewDto`          | Creates review for activity                        |
-| GET    | /api/reviews/{placeActivityId}?scope={mine/friends/global}&pageNumber&pageSize | A    | —                         | `PaginatedResult<UserReviewsDto>`   | Returns reviews grouped by user (Review + History) |
+| POST   | /api/reviews/{pingActivityId}                             | A    | `CreateReviewDto`         | `ReviewDto`          | Creates review for activity                        |
+| GET    | /api/reviews/{pingActivityId}?scope={mine/friends/global}&pageNumber&pageSize | A    | —                         | `PaginatedResult<UserReviewsDto>`   | Returns reviews grouped by user (Review + History) |
 | GET    | /api/reviews/explore                                       | A    | `ExploreReviewsFilterDto` | `PaginatedResult<ExploreReviewDto>` | Paginated review feed with filters                 |
 | POST   | /api/reviews/{reviewId}/like                               | A    | —                         | 200 OK               | Like a review (idempotent)                         |
 | DELETE | /api/reviews/{reviewId}/like                               | A    | —                         | 204 NoContent        | Unlike a review (idempotent)                       |
@@ -566,7 +566,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | Method | Route                       | Auth | Returns                   | Notes                                                |
 | ------ | --------------------------- | ---- | ------------------------- | ---------------------------------------------------- |
 | GET    | /dashboard                  | Adm  | `DashboardStatsDto`       | Real-time stats: DAU, WAU, MAU, Total Users          |
-| GET    | /trending                   | Adm  | `TrendingPlaceDto[]`      | Top 10 places by interactions (Reviews + CheckIns) in last 7 days |
+| GET    | /trending                   | Adm  | `TrendingPingDto[]`      | Top 10 pings by interactions (Reviews + CheckIns) in last 7 days |
 | GET    | /moderation                 | Adm  | `ModerationStatsDto`      | Pending reports, banned user count, banned IP count  |
 | GET    | /growth (Q: type, days)     | Adm  | `DailySystemMetric[]`     | Historical growth data (e.g., DAU over 30 days)      |
 | POST   | /compute-now                | Adm  | String (Msg)              | Manually trigger daily metrics computation           |
@@ -580,34 +580,34 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - JWT tokens expire after configured minutes (default: 60)
 - Account lockout enforced after failed login attempts
 
-### Places
+### Pings
 - Daily creation limit: 10 per user (Redis-backed)
 - Privacy enforcement:
   - **Private**: Only owner can view
   - **Friends**: Owner + accepted friends can view
   - **Public**: Everyone can view
-- Duplicate detection (Public places only):
+- Duplicate detection (Public pings only):
   - Verified: Address match only
   - Custom: Coordinates within ~50m (0.0005 degrees)
   - Private/Friends: No duplicate checking
 
-### PlaceType Business Rules
-- **Verified Places**:
+### PingType Business Rules
+- **Verified Pings**:
   - Must be Public visibility
   - Address is required
-  - Name auto-fetched from Google Places API
+  - Name auto-fetched from Google Pings API
   - Duplicates checked by exact address match only
-  - **Ownership Transfer**: Can be claimed via Business workflows; `PlaceDetailsDto.ClaimStatus` will reflect pending/approved claims for the viewer.
+  - **Ownership Transfer**: Can be claimed via Business workflows; `PingDetailsDto.ClaimStatus` will reflect pending/approved claims for the viewer.
   
-- **Custom Places**:
+- **Custom Pings**:
   - Can be any visibility (Public/Friends/Private)
   - Address is optional
   - User-provided name is used
   - Duplicates checked by coordinate proximity (~50m)
 
 - **Automatic Conversions**:
-  - Private/Friends places → automatically converted to Custom type
-  - Prevents unnecessary Google API calls for non-public places
+  - Private/Friends pings → automatically converted to Custom type
+  - Prevents unnecessary Google API calls for non-public pings
 
 ### Reviews
 - Scope filtering: mine/friends/global
@@ -625,20 +625,20 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - Creators auto-join their events
 - Only creator can delete event
 - Cannot attend own event (creator is already an attendee)
-- **Place Linking**: Events can be optionally linked to a `Place` via `PlaceId`.
-  - If `PlaceId` is provided, the Event inherits `Location`, `Latitude`, and `Longitude` from the Place.
-  - Useful for "Quick Add" workflows where users select an existing place.
-- **IsAdHoc**: Computed flag (`PlaceId == null`). True if the event uses a custom/manual location.
+- **Ping Linking**: Events can be optionally linked to a `Ping` via `PingId`.
+  - If `PingId` is provided, the Event inherits `Location`, `Latitude`, and `Longitude` from the Ping.
+  - Useful for "Quick Add" workflows where users select an existing ping.
+- **IsAdHoc**: Computed flag (`PingId == null`). True if the event uses a custom/manual location.
 - **Update Logic**:
-  - Providing a new `PlaceId` links the event and overwrites location fields.
-  - Providing manual location fields (`Location`, `Latitude`, `Longitude`) WITHOUT a `PlaceId` **unlinks** the event (`PlaceId` becomes null).
-- **Moderation**: `Title`, `Description`, and `Location` (Place Name) are moderated.
+  - Providing a new `PingId` links the event and overwrites location fields.
+  - Providing manual location fields (`Location`, `Latitude`, `Longitude`) WITHOUT a `PingId` **unlinks** the event (`PingId` becomes null).
+- **Moderation**: `Title`, `Description`, and `Location` (Ping Name) are moderated.
   - Violations result in `400 Bad Request` with `ArgumentException`.
 
 ### Activities
-- Name must be unique per place (case-insensitive)
-- ActivityKind is optional
-- Cascade deletes when parent Place is deleted
+- Name must be unique per ping (case-insensitive)
+- PingGenre is optional
+- Cascade deletes when parent Ping is deleted
 - **Moderation**: Content is checked.
 - **Deduplication**: Semantically similar activities are merged (e.g. "Hoops" = "Basketball").
 
@@ -752,7 +752,7 @@ Development settings (`appsettings.Development.json`):
 
 ### Key Naming Conventions
 - Rate limiting: `ratelimit:{clientId}:{timeWindow}`
-- Place creation: `ratelimit:place:create:{userId}:{date}`
+- Place creation: `ratelimit:ping:create:{userId}:{date}`
 - Session data: `Ping:{sessionId}`
 
 ### Health Check
@@ -787,7 +787,7 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
   "GlobalLimitPerMinute": 1000,
   "AuthenticatedLimitPerMinute": 200,
   "AuthEndpointsLimitPerMinute": 5,
-  "PlaceCreationLimitPerDay": 10
+  "PingCreationLimitPerDay": 10
 }
 ```
 
@@ -806,11 +806,11 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 ```
 
 ### Domain-Specific Rate Limiting
-**Place Creation** (`PlaceService.CreatePlaceAsync`):
-- Limit: 10 places per user per day
-- Storage: Redis key `ratelimit:place:create:{userId}:{yyyy-MM-dd}`
+**Ping Creation** (`PingService.CreatePingAsync`):
+- Limit: 10 pings per user per day
+- Storage: Redis key `ratelimit:ping:create:{userId}:{yyyy-MM-dd}`
 - Expiry: 24 hours
-- Error: `InvalidOperationException` with message "You've reached the daily limit for adding places."
+- Error: `InvalidOperationException` with message "You've reached the daily limit for adding pings."
 
 ### Implementation Details
 **Client Identification**:
@@ -832,7 +832,7 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 ## 16. Content Moderation & AI
 
 ### Moderation
-- **Scope**: User-generated text (Reviews, Place Names, Activity Names, Tags).
+- **Scope**: User-generated text (Reviews, Ping Names, Activity Names, Tags).
 - **Service**: OpenAI Moderation API (Free).
 - **Policy**:
   - Hate, Harassment, Self-harm, Violence, Sexual content => Rejected.
@@ -918,7 +918,7 @@ Enriched with: `RequestHost`, `UserAgent`.
 | Layer      | Items                                                           |
 | ---------- | --------------------------------------------------------------- |
 | Auth       | Register, Login, Me, Password flows                             |
-| Places     | Create, GetById, Nearby search, Favorites                       |
+| Pings      | Create, GetById, Nearby search, Favorites                       |
 | Activities | Create activity, CRUD kinds                                     |
 | Events     | Create, View, Manage attendance, Public search                  |
 | Events     | Create, View, Manage attendance, Public search                  |
@@ -964,9 +964,9 @@ All errors follow the ProblemDetails format:
 ```
 
 ### Domain-Specific Error Messages
-- Place creation limit: "You've reached the daily limit for adding places."
-- Verified place without address: "Address is required for verified places."
-- Duplicate place: "A place already exists at this location."
+- Ping creation limit: "You've reached the daily limit for adding pings."
+- Verified ping without address: "Address is required for verified pings."
+- Duplicate ping: "A ping already exists at this location."
 - Event duration: "Event duration must be at least 15 minutes."
 - Self-friend request: "You cannot add yourself as a friend."
 - Content moderation: "Content rejected: Hate/Harassment."
@@ -987,7 +987,7 @@ All errors follow the ProblemDetails format:
 ### 2. Search & Discovery
 - **Enhanced Search**: 
   - Full-text search improvement (Elasticsearch or Postgres Full-Text if migrating).
-  - Hybrid search (Keyword + Semantic) for Places and Events.
+  - Hybrid search (Keyword + Semantic) for Pings and Events.
 - **Geospatial Database**: 
   - Migration to PostGIS (PostgreSQL) or similar for strictly superior spatial querying capabilities (knn, shapes, clustering).
 
@@ -1012,7 +1012,7 @@ When generating or modifying code:
 - Keep new endpoints consistent with the route naming: plural nouns, kebab-case only when explicitly needed.
 - Follow "Thin Controller, Fat Service" architecture pattern.
 - Use Redis for rate limiting and caching where appropriate.
-- Maintain privacy enforcement for all place-related operations.
+- Maintain privacy enforcement for all ping-related operations.
 
 ---
 ## 21. Testing Strategy

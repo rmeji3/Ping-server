@@ -1,7 +1,7 @@
 using Ping.Data.App;
 using Ping.Dtos.Business;
 using Ping.Models.Business;
-using Ping.Models.Places;
+using Ping.Models.Pings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Ping.Models.AppUsers;
@@ -19,39 +19,39 @@ namespace Ping.Services
             _userManager = userManager;
         }
 
-        public async Task<PlaceClaim> SubmitClaimAsync(string userId, CreateClaimDto dto)
+        public async Task<PingClaim> SubmitClaimAsync(string userId, CreateClaimDto dto)
         {
-            var place = await _context.Places.FindAsync(dto.PlaceId);
-            if (place == null)
+            var ping = await _context.Pings.FindAsync(dto.PingId);
+            if (ping == null)
             {
-                throw new ArgumentException("Place not found");
+                throw new ArgumentException("Ping not found");
             }
 
             // Check if already claimed by this user or pending
-            var existing = await _context.PlaceClaims
-                .AnyAsync(c => c.UserId == userId && c.PlaceId == dto.PlaceId && c.Status == ClaimStatus.Pending);
+            var existing = await _context.PingClaims
+                .AnyAsync(c => c.UserId == userId && c.PingId == dto.PingId && c.Status == ClaimStatus.Pending);
             
             if (existing)
             {
-                throw new InvalidOperationException("You already have a pending claim for this place.");
+                throw new InvalidOperationException("You already have a pending claim for this ping.");
             }
 
-            var claim = new PlaceClaim
+            var claim = new PingClaim
             {
                 UserId = userId,
-                PlaceId = dto.PlaceId,
+                PingId = dto.PingId,
                 Proof = dto.Proof
             };
 
-            _context.PlaceClaims.Add(claim);
+            _context.PingClaims.Add(claim);
             await _context.SaveChangesAsync();
             return claim;
         }
 
         public async Task<List<ClaimDto>> GetPendingClaimsAsync()
         {
-            var claims = await _context.PlaceClaims
-                .Include(c => c.Place)
+            var claims = await _context.PingClaims
+                .Include(c => c.Ping)
                 .Where(c => c.Status == ClaimStatus.Pending)
                 .OrderByDescending(c => c.CreatedUtc)
                 .ToListAsync();
@@ -64,8 +64,8 @@ namespace Ping.Services
 
             return claims.Select(c => new ClaimDto(
                 c.Id,
-                c.PlaceId,
-                c.Place.Name,
+                c.PingId,
+                c.Ping.Name,
                 c.UserId,
                 users.ContainsKey(c.UserId) ? users[c.UserId] ?? "Unknown" : "Unknown",
                 c.Proof,
@@ -77,16 +77,16 @@ namespace Ping.Services
 
         public async Task ApproveClaimAsync(int claimId, string reviewerId)
         {
-            var claim = await _context.PlaceClaims
-                .Include(c => c.Place)
+            var claim = await _context.PingClaims
+                .Include(c => c.Ping)
                 .FirstOrDefaultAsync(c => c.Id == claimId);
 
             if (claim == null) throw new ArgumentException("Claim not found");
             if (claim.Status != ClaimStatus.Pending) throw new InvalidOperationException("Claim is not pending");
 
             // 1. Transfer Ownership
-            claim.Place.OwnerUserId = claim.UserId;
-            claim.Place.IsClaimed = true; // Mark as claimed
+            claim.Ping.OwnerUserId = claim.UserId;
+            claim.Ping.IsClaimed = true; // Mark as claimed
             // Optionally set Type? Maybe not needed if logic handles it.
             // Verified places are usually the target.
             
@@ -110,7 +110,7 @@ namespace Ping.Services
 
         public async Task RejectClaimAsync(int claimId, string reviewerId)
         {
-            var claim = await _context.PlaceClaims.FindAsync(claimId);
+            var claim = await _context.PingClaims.FindAsync(claimId);
             if (claim == null) throw new ArgumentException("Claim not found");
             if (claim.Status != ClaimStatus.Pending) throw new InvalidOperationException("Claim is not pending");
 

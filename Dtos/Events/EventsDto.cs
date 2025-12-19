@@ -14,10 +14,12 @@ public record EventDto(
     string Status,
     double latitude,
     double longitude,
-    int? PlaceId
+    int? PingId,
+    int? EventGenreId,
+    string? EventGenreName
 )
 {
-    public bool IsAdHoc => PlaceId == null;
+    public bool IsAdHoc => PingId == null;
 }
 
 public record UserSummaryDto(
@@ -46,7 +48,8 @@ public record CreateEventDto(
     string Location,
     double Latitude,
     double Longitude,
-    int? PlaceId
+    int? PingId,
+    int? EventGenreId
 );
 
 public class UpdateEventDto
@@ -59,6 +62,7 @@ public class UpdateEventDto
     public string? Location { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
-    public int? PlaceId { get; set; }
+    public int? PingId { get; set; }
+    public int? EventGenreId { get; set; }
 }
 

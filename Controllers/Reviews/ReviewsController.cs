@@ -10,12 +10,12 @@ namespace Ping.Controllers.Reviews
 
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/activities/{placeActivityId:int}/[controller]")]
-    [Route("api/v{version:apiVersion}/activities/{placeActivityId:int}/[controller]")]
+    [Route("api/ping-activities/{pingActivityId:int}/[controller]")]
+    [Route("api/v{version:apiVersion}/ping-activities/{pingActivityId:int}/[controller]")]
     public class ReviewsController(IReviewService reviewService, ILogger<ReviewsController> logger) : ControllerBase
     {
         [HttpPost]
-        public async Task<ActionResult<ReviewDto>> CreateReview(int placeActivityId, [FromBody] CreateReviewDto dto)
+        public async Task<ActionResult<ReviewDto>> CreateReview(int pingActivityId, [FromBody] CreateReviewDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var userName = User.Identity?.Name;
@@ -28,8 +28,8 @@ namespace Ping.Controllers.Reviews
 
             try
             {
-                var result = await reviewService.CreateReviewAsync(placeActivityId, dto, userId, userName);
-                return CreatedAtAction(nameof(GetReviews), new { placeActivityId, scope = "mine" }, result);
+                var result = await reviewService.CreateReviewAsync(pingActivityId, dto, userId, userName);
+                return CreatedAtAction(nameof(GetReviews), new { pingActivityId, scope = "mine" }, result);
             }
             catch (KeyNotFoundException ex)
             {
@@ -42,9 +42,9 @@ namespace Ping.Controllers.Reviews
         }
         
 
-        // GET /api/activities/{placeActivityId}/reviews?scope=mine|global|friends&pageNumber=1&pageSize=20
+        // GET /api/ping-activities/{pingActivityId}/reviews?scope=mine|global|friends&pageNumber=1&pageSize=20
         [HttpGet]
-        public async Task<ActionResult<PaginatedResult<UserReviewsDto>>> GetReviews(int placeActivityId,
+        public async Task<ActionResult<PaginatedResult<UserReviewsDto>>> GetReviews(int pingActivityId,
             [FromQuery] string scope = "global",
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
@@ -59,13 +59,13 @@ namespace Ping.Controllers.Reviews
             try
             {
                 var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-                var result = await reviewService.GetReviewsAsync(placeActivityId, scope, userId, pagination);
-                logger.LogInformation("GetReviews: Reviews fetched for Activity {PlaceActivityId} by {UserName}. Scope: {Scope}", placeActivityId, userId, scope);
+                var result = await reviewService.GetReviewsAsync(pingActivityId, scope, userId, pagination);
+                logger.LogInformation("GetReviews: Reviews fetched for Activity {PingActivityId} by {UserName}. Scope: {Scope}", pingActivityId, userId, scope);
                 return Ok(result);
             }
             catch (KeyNotFoundException ex)
             {
-                logger.LogWarning("GetReviews: Activity {PlaceActivityId} not found.", placeActivityId);
+                logger.LogWarning("GetReviews: Activity {PingActivityId} not found.", pingActivityId);
                 return NotFound(ex.Message);
             }
         }

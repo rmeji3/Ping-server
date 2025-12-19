@@ -17,18 +17,18 @@ namespace Ping.Controllers
     {
         private readonly IBusinessService _businessService;
         private readonly IBusinessAnalyticsService _analyticsService;
-        private readonly Ping.Services.Places.IPlaceService _placeService;
-
-        public BusinessController(IBusinessService businessService, IBusinessAnalyticsService analyticsService, Ping.Services.Places.IPlaceService placeService)
+        private readonly Ping.Services.Pings.IPingService _pingService;
+    
+        public BusinessController(IBusinessService businessService, IBusinessAnalyticsService analyticsService, Ping.Services.Pings.IPingService pingService)
         {
             _businessService = businessService;
             _analyticsService = analyticsService;
-            _placeService = placeService;
+            _pingService = pingService;
         }
 
         [HttpPost("claim")]
         [Authorize]
-        public async Task<ActionResult<PlaceClaim>> SubmitClaim([FromBody] CreateClaimDto dto)
+        public async Task<ActionResult<PingClaim>> SubmitClaim([FromBody] CreateClaimDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null) return Unauthorized();
@@ -48,32 +48,32 @@ namespace Ping.Controllers
             }
         }
 
-        [HttpGet("analytics/{placeId}")]
+        [HttpGet("analytics/{pingId}")]
         [Authorize(Roles = "Business,Admin,User")] // User role allowed if they are the owner (logic inside service or check here)
-        public async Task<IActionResult> GetAnalytics(int placeId)
+        public async Task<IActionResult> GetAnalytics(int pingId)
         {
             // Security: In a real app, verify user owns the place.
             // For now, assuming frontend sending correct PlaceId for logged in user.
             try 
             {
-                var stats = await _analyticsService.GetPlaceAnalyticsAsync(placeId);
+                var stats = await _analyticsService.GetPingAnalyticsAsync(pingId);
                 return Ok(stats);
             }
             catch (KeyNotFoundException)
             {
-                return NotFound("Place not found");
+                return NotFound("Ping not found");
             }
         }
 
-        [HttpGet("places")]
+        [HttpGet("pings")]
         [Authorize]
-        public async Task<IActionResult> GetMyPlaces()
+        public async Task<IActionResult> GetMyPings()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null) return Unauthorized();
 
-            var places = await _placeService.GetPlacesByOwnerAsync(userId, onlyClaimed: true);
-            return Ok(places);
+            var pings = await _pingService.GetPingsByOwnerAsync(userId, onlyClaimed: true);
+            return Ok(pings);
         }
     }
 }

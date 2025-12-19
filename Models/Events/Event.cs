@@ -1,4 +1,5 @@
 using Ping.Models.AppUsers;
+using Ping.Models.Pings;
 
 namespace Ping.Models.Events;
 
@@ -11,6 +12,7 @@ public class Event
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public required string Location { get; set; }
+
 
     // FK to Identity user (string because IdentityUser<TKey> uses string by default)
     public required string CreatedById { get; set; }
@@ -26,6 +28,9 @@ public class Event
     public required double Latitude { get; set;  }
     public required double Longitude { get; set;  }
 
-    public int? PlaceId { get; set; }
-    public Ping.Models.Places.Place? Place { get; set; }
+    public int? EventGenreId { get; set; }
+    public EventGenre? EventGenre { get; set; }
+
+    public int? PingId { get; set; }
+    public Ping.Models.Pings.Ping? Ping { get; set; }
 }

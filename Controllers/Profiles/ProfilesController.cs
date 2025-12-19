@@ -4,7 +4,7 @@ using Ping.Services.Profiles;
 using Ping.Services.Reviews;
 using Ping.Dtos.Common;
 using Ping.Dtos.Reviews;
-using Ping.Dtos.Places;
+using Ping.Dtos.Pings;
 using Ping.Dtos.Events;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -137,8 +137,8 @@ namespace Ping.Controllers.Profiles
         }
 
         // GET /api/profiles/{id}/places?pageNumber=1&pageSize=10
-        [HttpGet("{id}/places")]
-        public async Task<ActionResult<PaginatedResult<PlaceDetailsDto>>> GetUserPlaces(string id, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        [HttpGet("{id}/pings")]
+        public async Task<ActionResult<PaginatedResult<PingDetailsDto>>> GetUserPings(string id, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (currentUserId is null) return Unauthorized();
@@ -147,7 +147,7 @@ namespace Ping.Controllers.Profiles
             {
                 // Privacy check is inside the service method
                 var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-                var places = await profileService.GetUserPlacesAsync(id, currentUserId, pagination);
+                var places = await profileService.GetUserPingsAsync(id, currentUserId, pagination);
                 return Ok(places);
             }
             catch (KeyNotFoundException)
