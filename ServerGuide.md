@@ -1051,3 +1051,29 @@ Inherit `BaseIntegrationTest`. The factory ensures a fresh server instance (logi
 ---
 End of guide.
 
+
+---
+## 22. User Verification
+
+### Overview
+Users with at least 500 followers can apply for verification to receive a "Verified" badge. This process is managed manually by admins.
+
+### Workflow
+1. **Application**: User sends `POST /api/verification/apply`. System checks follower count (≥500) and ensures no pending request exists.
+2. **Review**: Admins view pending requests via `GET /api/admin/verification/requests`.
+3. **Decision**:
+   - **Approve**: Admin calls `POST .../approve`. User's `IsVerified` flag is set to `true`. Status becomes `Approved`.
+   - **Reject**: Admin calls `POST .../reject` with a reason. Status becomes `Rejected`.
+
+### Models
+- `VerificationRequest`: links `UserId`, `SubmittedAt`, `Status` (Pending, Approved, Rejected), `AdminComment`.
+- `AppUser`: Added `IsVerified` boolean.
+
+### Endpoints
+- **User**:
+  - `POST /api/verification/apply`
+  - `GET /api/verification/status`
+- **Admin**:
+  - `GET /api/admin/verification/requests`
+  - `POST /api/admin/verification/{id}/approve`
+  - `POST /api/admin/verification/{id}/reject`

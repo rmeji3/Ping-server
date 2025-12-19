@@ -29,6 +29,7 @@ namespace Ping.Data.App
         public DbSet<Report> Reports => Set<Report>();
         public DbSet<PingClaim> PingClaims => Set<PingClaim>();
         public DbSet<PingDailyMetric> PingDailyMetrics => Set<PingDailyMetric>();
+        public DbSet<VerificationRequest> VerificationRequests => Set<VerificationRequest>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {

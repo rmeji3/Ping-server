@@ -27,6 +27,8 @@ namespace Ping.Models.AppUsers
         public DateTimeOffset? LastLoginUtc { get; set; }
 
         public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
+
+        public bool IsVerified { get; set; }
     }
 
     public enum PrivacyConstraint

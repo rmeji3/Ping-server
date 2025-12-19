@@ -29,6 +29,8 @@ namespace Ping.Controllers
         ITagService tagService,
         IBanningService banningService,
         IBusinessService businessService,
+        IBusinessService businessService,
+        IVerificationService verificationService,
         IAuthService authService,
 
         Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager
@@ -287,6 +289,39 @@ namespace Ping.Controllers
         {
             await tagService.MergeTagAsync(id, targetId);
             return Ok();
+        }
+
+        // ==========================================
+        // Verification Requests
+        // ==========================================
+
+        [HttpGet("verification/requests")]
+        public async Task<ActionResult<PaginatedResult<VerificationRequestDto>>> GetVerificationRequests(
+            [FromQuery] int page = 1, 
+            [FromQuery] int limit = 20)
+        {
+            var result = await verificationService.GetPendingRequestsAsync(page, limit);
+            return Ok(result);
+        }
+
+        [HttpPost("verification/{id}/approve")]
+        public async Task<IActionResult> ApproveVerification(int id)
+        {
+            var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (adminId == null) return Unauthorized();
+
+            await verificationService.ApproveRequestAsync(id, adminId);
+            return Ok(new { message = "Request approved." });
+        }
+
+        [HttpPost("verification/{id}/reject")]
+        public async Task<IActionResult> RejectVerification(int id, [FromBody] RejectVerificationDto dto)
+        {
+            var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (adminId == null) return Unauthorized();
+
+            await verificationService.RejectRequestAsync(id, adminId, dto.Reason);
+            return Ok(new { message = "Request rejected." });
         }
     }
 
