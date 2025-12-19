@@ -12,6 +12,9 @@ using Ping.Services;
 using Ping.Services.Auth;
 using Ping.Dtos.Business;
 using Ping.Dtos.Tags;
+using Ping.Dtos.Verification;
+using Ping.Services.Verification;
+using Ping.Dtos.Common;
 using Ping.Models.AppUsers;
 
 namespace Ping.Controllers
@@ -28,7 +31,6 @@ namespace Ping.Controllers
         IPingActivityService activityService,
         ITagService tagService,
         IBanningService banningService,
-        IBusinessService businessService,
         IBusinessService businessService,
         IVerificationService verificationService,
         IAuthService authService,

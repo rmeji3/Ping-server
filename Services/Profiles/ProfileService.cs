@@ -717,5 +717,253 @@ public class ProfileService(
 
         return new PaginatedResult<EventDto>(eventDtos, totalCount, pagination.PageNumber, pagination.PageSize);
     }
+    public async Task<PaginatedResult<PlaceReviewSummaryDto>> GetProfilePlacesAsync(string targetUserId, string currentUserId, PaginationParams pagination)
+    {
+        var user = await userManager.FindByIdAsync(targetUserId);
+        if (user is null) throw new KeyNotFoundException("User not found.");
+
+        // Blocking Check (skip if self, but even self shouldn't see if logic is standard, though usually blocks are for *others*)
+        if (targetUserId != currentUserId)
+        {
+            var isBlocked = await blockService.IsBlockedAsync(currentUserId, targetUserId) ||
+                            await blockService.IsBlockedAsync(targetUserId, currentUserId);
+            if (isBlocked) throw new KeyNotFoundException("User not found.");
+        }
+
+        bool isSelf = targetUserId == currentUserId;
+        bool isFriend = false; // calculated only if needed
+
+        if (!isSelf)
+        {
+            // Calculate friendship for privacy checks
+            var isFollowing = await followService.IsFollowingAsync(currentUserId, targetUserId);
+            var isFollowedBy = await followService.IsFollowingAsync(targetUserId, currentUserId);
+            isFriend = isFollowing && isFollowedBy;
+
+            // Check Profile Privacy
+            bool canViewReviews = user.ReviewsPrivacy == AppUserPrivacy.Public ||
+                                  (user.ReviewsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
+            
+            if (!canViewReviews)
+            {
+                 return new PaginatedResult<PlaceReviewSummaryDto>(new List<PlaceReviewSummaryDto>(), 0, pagination.PageNumber, pagination.PageSize);
+            }
+        }
+
+        // Fetch Reviews with Pings
+        var query = appDb.Reviews.AsNoTracking()
+            .Where(r => r.UserId == targetUserId)
+            .Include(r => r.PingActivity!)
+            .ThenInclude(pa => pa.Ping)
+            .Where(r => !r.PingActivity.Ping.IsDeleted);
+
+        // Group by Ping
+        // Evaluation: We need to filter PINGS based on privacy too.
+        // It's efficient to fetch minimal data first or apply filter in memory if list is small. 
+        // Given a user has < 1000 reviews usually, in-memory grouping after fetching minimal fields is okay.
+        // But let's try to project needed data to minimize transfer.
+
+        var flatList = await query
+            .Select(r => new 
+            {
+                Ping = r.PingActivity!.Ping,
+                Review = new { r.Rating, r.ImageUrl, r.ThumbnailUrl, r.CreatedAt }
+            })
+            .ToListAsync();
+
+        // In-Memory Grouping & Filtering
+        var grouped = flatList
+            .GroupBy(x => x.Ping.Id)
+            .Select(g => new 
+            {
+               Ping = g.First().Ping,
+               Reviews = g.Select(x => x.Review).ToList(),
+               Count = g.Count(),
+               AverageRating = g.Average(x => x.Review.Rating),
+               LatestReviewDate = g.Max(x => x.Review.CreatedAt)
+            });
+            
+        var validGroups = new List<PlaceReviewSummaryDto>();
+
+        foreach (var group in grouped.OrderByDescending(x => x.LatestReviewDate)) // Default sort by recency
+        {
+            // Ping Privacy Check
+            bool canSeePing = false;
+
+            if (isSelf) 
+            {
+                canSeePing = true; // I can see all places I visited
+            }
+            else
+            {
+                // Visibility Logic:
+                // Public: OK
+                // Private: Only Owner (Me) - wait, if I visited a private place, I am not the owner usually?
+                //          If I am listing places I REVIEWED, and the place is Private, 
+                //          it means I reviewed a private place. Who owns it?
+                //          If I own it -> I see it (but I am viewer). 
+                //          The Viewer is NOT the target user here.
+                //          Viewer = CurrentUserId.
+                //          Owner = group.Ping.OwnerUserId.
+                
+                if (group.Ping.Visibility == Models.Pings.PingVisibility.Public)
+                {
+                    canSeePing = true;
+                }
+                else if (group.Ping.OwnerUserId == currentUserId)
+                {
+                    canSeePing = true; // I own this place, so I can see it in their list
+                }
+                else if (group.Ping.Visibility == Models.Pings.PingVisibility.Friends)
+                {
+                    // Visible if Viewer is friend of Ping Owner.
+                    // Case 1: Ping Owner is Target User (the profile being viewed).
+                    if (group.Ping.OwnerUserId == targetUserId)
+                    {
+                        if (isFriend) canSeePing = true;
+                    }
+                    // Case 2: Ping Owner is Third Party.
+                    // Optimization: Skip checking third-party friendship for now to avoid complexity/N+1. 
+                    // Assume hidden unless Public or Owned by Viewer or Owned by Target(Friend).
+                }
+            }
+
+            if (canSeePing)
+            {
+                // Thumbnails: Top 3 most recent with images
+                var thumbnails = group.Reviews
+                 // Using 'Review' anonymous object from above projection.
+                 // Note: 'Review' in `flatList` doesn't have `Review` property, it IS the object.
+                 // Correction: group.Reviews is List of { Rating, ImageUrl, ThumbnailUrl, CreatedAt }
+                    .Where(r => !string.IsNullOrEmpty(r.ThumbnailUrl))
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Take(3)
+                    .Select(r => r.ThumbnailUrl!)
+                    .ToList();
+
+                validGroups.Add(new PlaceReviewSummaryDto(
+                    group.Ping.Id,
+                    group.Ping.Name,
+                    group.Ping.Address ?? "",
+                    Math.Round(group.AverageRating, 1),
+                    group.Count,
+                    thumbnails
+                ));
+            }
+        }
+
+        // Pagination on the resulting list
+        var totalCount = validGroups.Count;
+        var pagedItems = validGroups
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .ToList();
+
+        return new PaginatedResult<PlaceReviewSummaryDto>(pagedItems, totalCount, pagination.PageNumber, pagination.PageSize);
+    }
+
+    public async Task<PaginatedResult<ReviewDto>> GetProfilePlaceReviewsAsync(string targetUserId, int pingId, string currentUserId, PaginationParams pagination)
+    {
+        var user = await userManager.FindByIdAsync(targetUserId);
+        if (user is null) throw new KeyNotFoundException("User not found.");
+
+        if (targetUserId != currentUserId)
+        {
+            var isBlocked = await blockService.IsBlockedAsync(currentUserId, targetUserId) ||
+                            await blockService.IsBlockedAsync(targetUserId, currentUserId);
+            if (isBlocked) throw new KeyNotFoundException("User not found.");
+        }
+
+        bool isSelf = targetUserId == currentUserId;
+        bool isFriend = false;
+
+        // 1. Profile Privacy Check
+        if (!isSelf)
+        {
+            var isFollowing = await followService.IsFollowingAsync(currentUserId, targetUserId);
+            var isFollowedBy = await followService.IsFollowingAsync(targetUserId, currentUserId);
+            isFriend = isFollowing && isFollowedBy;
+
+            bool canViewReviews = user.ReviewsPrivacy == AppUserPrivacy.Public ||
+                                  (user.ReviewsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
+            
+            if (!canViewReviews) throw new KeyNotFoundException("Reviews not found or private.");
+        }
+
+        // 2. Ping Privacy Check
+        // We need the ping to check visibility
+        var ping = await appDb.Pings.AsNoTracking().FirstOrDefaultAsync(p => p.Id == pingId);
+        if (ping == null || ping.IsDeleted) throw new KeyNotFoundException("Place not found.");
+
+        if (!isSelf)
+        {
+             bool canSeePing = false;
+             if (ping.Visibility == Models.Pings.PingVisibility.Public) canSeePing = true;
+             else if (ping.OwnerUserId == currentUserId) canSeePing = true;
+             else if (ping.Visibility == Models.Pings.PingVisibility.Friends && ping.OwnerUserId == targetUserId && isFriend) canSeePing = true;
+             
+             if (!canSeePing) throw new KeyNotFoundException("Place not found or private.");
+        }
+
+        // Fetch Reviews
+        var query = appDb.Reviews.AsNoTracking()
+            .Where(r => r.UserId == targetUserId && r.PingActivity!.PingId == pingId)
+            .Include(r => r.ReviewTags).ThenInclude(rt => rt.Tag)
+            .OrderByDescending(r => r.CreatedAt); // Newest first
+
+        var totalCount = await query.CountAsync();
+        
+        var reviews = await query
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .Select(r => new ReviewDto(
+                r.Id,
+                r.Rating,
+                r.Content,
+                r.UserId,
+                user.UserName!,
+                user.ProfileImageUrl,
+                r.ImageUrl,
+                r.ThumbnailUrl,
+                r.CreatedAt,
+                r.LikesList.Count,
+                r.LikesList.Any(l => l.UserId == currentUserId),
+                r.ReviewTags.Select(rt => rt.Tag.Name).ToList()
+            ))
+            .ToListAsync();
+
+        return new PaginatedResult<ReviewDto>(reviews, totalCount, pagination.PageNumber, pagination.PageSize);
+    }
+
+    public async Task UpdateProfilePrivacyAsync(string userId, PrivacySettingsDto settings)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) throw new KeyNotFoundException("User not found.");
+
+        bool changed = false;
+
+        if (settings.ReviewsPrivacy.HasValue)
+        {
+            user.ReviewsPrivacy = settings.ReviewsPrivacy.Value;
+            changed = true;
+        }
+
+        if (settings.PingsPrivacy.HasValue)
+        {
+            user.PingsPrivacy = settings.PingsPrivacy.Value;
+            changed = true;
+        }
+
+        if (settings.LikesPrivacy.HasValue)
+        {
+            user.LikesPrivacy = settings.LikesPrivacy.Value;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await userManager.UpdateAsync(user);
+        }
+    }
 }
 

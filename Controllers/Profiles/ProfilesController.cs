@@ -197,5 +197,131 @@ namespace Ping.Controllers.Profiles
                 return StatusCode(500, "An error occurred while uploading the image.");
             }
         }
+
+        // GET /api/profiles/{id}/places?pageNumber=1&pageSize=10
+        [HttpGet("{id}/places")]
+        public async Task<ActionResult<PaginatedResult<PlaceReviewSummaryDto>>> GetProfilePlaces(string id, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (currentUserId is null) return Unauthorized();
+
+            try
+            {
+                var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+                var places = await profileService.GetProfilePlacesAsync(id, currentUserId, pagination);
+                return Ok(places);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("User not found.");
+            }
+        }
+
+        // GET /api/profiles/me/places?pageNumber=1&pageSize=10
+        [HttpGet("me/places")]
+        public async Task<ActionResult<PaginatedResult<PlaceReviewSummaryDto>>> GetMyProfilePlaces([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (currentUserId is null) return Unauthorized();
+
+            try
+            {
+                var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+                // Pass currentUserId as both target and viewer to bypass privacy checks
+                var places = await profileService.GetProfilePlacesAsync(currentUserId, currentUserId, pagination);
+                return Ok(places);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("User not found.");
+            }
+        }
+
+        // GET /api/profiles/{id}/places/{placeId}/reviews?pageNumber=1&pageSize=10
+        [HttpGet("{id}/places/{placeId:int}/reviews")]
+        public async Task<ActionResult<PaginatedResult<ReviewDto>>> GetProfilePlaceReviews(string id, int placeId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (currentUserId is null) return Unauthorized();
+
+            try
+            {
+                var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+                var reviews = await profileService.GetProfilePlaceReviewsAsync(id, placeId, currentUserId, pagination);
+                return Ok(reviews);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
+
+        // GET /api/profiles/me/places/{placeId}/reviews?pageNumber=1&pageSize=10
+        [HttpGet("me/places/{placeId:int}/reviews")]
+        public async Task<ActionResult<PaginatedResult<ReviewDto>>> GetMyProfilePlaceReviews(int placeId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (currentUserId is null) return Unauthorized();
+
+            try
+            {
+                var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+                var reviews = await profileService.GetProfilePlaceReviewsAsync(currentUserId, placeId, currentUserId, pagination);
+                return Ok(reviews);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
+
+        // GET /api/profiles/{id}/likes?pageNumber=1&pageSize=10
+        [HttpGet("{id}/likes")]
+        public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetUserLikes(string id, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (currentUserId is null) return Unauthorized();
+
+            try
+            {
+                var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+                var likes = await reviewService.GetUserLikesAsync(id, currentUserId, pagination);
+                return Ok(likes);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("User not found.");
+            }
+        }
+
+        // GET /api/profiles/me/likes?pageNumber=1&pageSize=10
+        [HttpGet("me/likes")]
+        public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetMyLikes([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (currentUserId is null) return Unauthorized();
+
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+            var likes = await reviewService.GetLikedReviewsAsync(currentUserId, pagination);
+            return Ok(likes);
+        }
+
+        // PATCH /api/profiles/me/privacy
+        [HttpPatch("me/privacy")]
+        public async Task<IActionResult> UpdatePrivacy([FromBody] PrivacySettingsDto dto)
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (currentUserId is null) return Unauthorized();
+
+            try
+            {
+                await profileService.UpdateProfilePrivacyAsync(currentUserId, dto);
+                return Ok(new { message = "Privacy settings updated." });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+        }
     }
 }

@@ -434,6 +434,138 @@ public class ReviewService(
         logger.LogInformation("Review {ReviewId} unliked by {UserId}", reviewId, userId);
     }
 
+    public async Task<PaginatedResult<ExploreReviewDto>> GetUserLikesAsync(string targetUserId, string viewerUserId, PaginationParams pagination)
+    {
+        var targetUser = await userManager.FindByIdAsync(targetUserId);
+        if (targetUser == null) throw new KeyNotFoundException("User not found.");
+
+        // 1. Block Check
+        if (targetUserId != viewerUserId)
+        {
+             var isBlocked = await blockService.IsBlockedAsync(viewerUserId, targetUserId) ||
+                            await blockService.IsBlockedAsync(targetUserId, viewerUserId);
+             if (isBlocked) throw new KeyNotFoundException("User not found.");
+        }
+
+        // 2. Privacy Check (LikesPrivacy)
+        bool isSelf = targetUserId == viewerUserId;
+        if (!isSelf)
+        {
+            bool isFriend = false;
+            if (targetUser.LikesPrivacy == PrivacyConstraint.FriendsOnly)
+            {
+                var isFollowing = await followService.IsFollowingAsync(viewerUserId, targetUserId);
+                var isFollowedBy = await followService.IsFollowingAsync(targetUserId, viewerUserId);
+                isFriend = isFollowing && isFollowedBy;
+            }
+
+            bool canSeeLikes = targetUser.LikesPrivacy == PrivacyConstraint.Public ||
+                               (targetUser.LikesPrivacy == PrivacyConstraint.FriendsOnly && isFriend);
+            
+            if (!canSeeLikes) return new PaginatedResult<ExploreReviewDto>(new List<ExploreReviewDto>(), 0, pagination.PageNumber, pagination.PageSize);
+        }
+
+        // 3. Fetch Likes
+        var query = appDb.ReviewLikes
+            .Where(rl => rl.UserId == targetUserId)
+            .Include(rl => rl.Review)
+                .ThenInclude(r => r.PingActivity)
+                    .ThenInclude(pa => pa.Ping)
+                        .ThenInclude(p => p.PingGenre)
+            .Include(rl => rl.Review)
+                .ThenInclude(r => r.ReviewTags)
+                    .ThenInclude(rt => rt.Tag)
+            .AsNoTracking()
+            .Where(rl => !rl.Review.PingActivity.Ping.IsDeleted);
+
+        // 4. Filter by Content Visibility (Ping Visibility)
+        // If viewing someone else's likes, you should ONLY see likes on Public/Visible pings.
+        // You generally shouldn't see that they liked a private ping unless you also have access, 
+        // but typically "Likes" tab is cleaner if restricted to Public pings or heavily filtered.
+        // Let's implement standard visibility check:
+        // Visible if: Ping Public OR Owner is Viewer OR (Ping Friends & Owner Friend of Viewer)
+        // For efficiency, let's filter to Public-Only for now if not self? 
+        // Or do in-memory filter if complex.
+        // Let's do standard filter query.
+
+        if (!isSelf)
+        {
+            // Simplified Visibility for aggregation lists: Public Only usually?
+            // "The 'Likes' list will only show reviews on **Public Pings** or Pings visible to the viewer."
+            
+            // To do this strictly in SQL is hard with friendship logic for every ping owner.
+            // Let's fetch and filter in memory or restrict to Public + OwnedByViewer.
+            // Assuming "Public" covers 90% of cases.
+            
+            // NOTE: We cannot easily check "Is Viewer Friend of Ping Owner" in LINQ efficiently for diverse owners.
+            // So we will restrict to: Public Pings OR Pings Owned by Viewer OR Pings Owned by Target (if Target is Friend).
+            
+            // Let's fetch a slightly larger batch and filter? Or just Public for safety/speed.
+            // Let's go with Public + OwnedByViewer.
+            
+            query = query.Where(rl => 
+                rl.Review.PingActivity.Ping.Visibility == PingVisibility.Public ||
+                rl.Review.PingActivity.Ping.OwnerUserId == viewerUserId
+            );
+        }
+
+        query = query.OrderByDescending(rl => rl.CreatedAt);
+
+        var count = await query.CountAsync();
+        var likedReviews = await query
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .ToListAsync();
+
+        // 5. Build DTOs
+        var reviewIds = likedReviews.Select(r => r.ReviewId).ToList();
+        var viewerLikedIds = new HashSet<int>();
+        if (reviewIds.Count > 0)
+        {
+             viewerLikedIds = await appDb.ReviewLikes
+                .Where(rl => rl.UserId == viewerUserId && reviewIds.Contains(rl.ReviewId))
+                .Select(rl => rl.ReviewId)
+                .ToHashSetAsync();
+        }
+
+        var userIds = likedReviews.Select(r => r.Review.UserId).Distinct().ToList();
+        var userMap = new Dictionary<string, string?>();
+        if (userIds.Count > 0)
+        {
+             var users = await userManager.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.ProfileImageUrl })
+                .ToListAsync();
+             foreach(var u in users) userMap[u.Id] = u.ProfileImageUrl;
+        }
+        
+        var result = likedReviews.Select(rl => new ExploreReviewDto(
+                rl.Review.Id,
+                rl.Review.PingActivityId,
+                rl.Review.PingActivity.PingId,
+                rl.Review.PingActivity.Ping.Name,
+                rl.Review.PingActivity.Ping.Address ?? string.Empty,
+                rl.Review.PingActivity.Name,
+                rl.Review.PingActivity.Ping.PingGenre?.Name,
+                rl.Review.PingActivity.Ping.Latitude,
+                rl.Review.PingActivity.Ping.Longitude,
+                rl.Review.Rating,
+                rl.Review.Content,
+                rl.Review.UserId,
+                rl.Review.UserName,
+                userMap.GetValueOrDefault(rl.Review.UserId),
+                rl.Review.ImageUrl,
+                rl.Review.ThumbnailUrl,
+                rl.Review.CreatedAt,
+                rl.Review.Likes,
+                viewerLikedIds.Contains(rl.Review.Id), // IsLiked by Viewer
+                rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
+                rl.Review.PingActivity.Ping.IsDeleted
+            )).ToList();
+
+        return result.ToPaginatedResult(pagination);
+    }
+
     public async Task<PaginatedResult<ExploreReviewDto>> GetLikedReviewsAsync(string userId, PaginationParams pagination)
     {
         var likedReviews = await appDb.ReviewLikes

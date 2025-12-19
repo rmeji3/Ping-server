@@ -1,5 +1,6 @@
 using Ping.Dtos.Verification;
 using Ping.Dtos.Common;
+using Ping.Models.Users;
 
 namespace Ping.Services.Verification
 {

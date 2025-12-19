@@ -4,6 +4,7 @@ using Asp.Versioning;
 using System.Security.Claims;
 using Ping.Services.Verification;
 using Ping.Dtos.Verification;
+using Ping.Models.Users;
 
 namespace Ping.Controllers.Verification
 {
