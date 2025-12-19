@@ -26,6 +26,7 @@ namespace Ping.Data.App
         public DbSet<EventComment> EventComments => Set<EventComment>();
         public DbSet<Favorited> Favorited => Set<Favorited>();
         public DbSet<ReviewLike> ReviewLikes => Set<ReviewLike>();
+        public DbSet<Reping> Repings => Set<Reping>();
         public DbSet<Report> Reports => Set<Report>();
         public DbSet<PingClaim> PingClaims => Set<PingClaim>();
         public DbSet<PingDailyMetric> PingDailyMetrics => Set<PingDailyMetric>();
@@ -132,6 +133,11 @@ namespace Ping.Data.App
                 .HasKey(rt => new { rt.ReviewId, rt.TagId });
 
 
+            // Reping: unique per user per review
+            builder.Entity<Reping>()
+                .HasIndex(r => new { r.ReviewId, r.UserId })
+                .IsUnique();
+
             // ---------- Relationships ----------
 
             // Ping 1 - * PingActivities
@@ -181,6 +187,13 @@ namespace Ping.Data.App
                 .HasOne(rl => rl.Review)
                 .WithMany(r => r.LikesList)
                 .HasForeignKey(rl => rl.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Reping 1 - * Review
+            builder.Entity<Reping>()
+                .HasOne(r => r.Review)
+                .WithMany()
+                .HasForeignKey(r => r.ReviewId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // ReviewLike: unique per user per review

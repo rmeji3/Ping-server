@@ -180,7 +180,7 @@ Indexes:
 
 ### AppDbContext
 DbSets:
-- `Pings`, `PingGenres`, `PingActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`
+- `Pings`, `PingGenres`, `PingActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`, `Repings`
 
 Seed Data:
 - `PingGenre` seeded with ids 1–20 (Sports, Food, Outdoors, Art, etc.).
@@ -195,6 +195,7 @@ Indexes:
 - Unique `Tag.Name`.
 - Composite PK `ReviewTag (ReviewId, TagId)`.
 - Composite PK `EventAttendee (EventId, UserId)`.
+- Unique composite `Reping (ReviewId, UserId)`.
 
 Relationships & Cascades:
 - `Favorited` → `Ping` cascade delete.
@@ -229,6 +230,7 @@ Property Configuration:
 | PingClaim     | Id                 | UserId, PingId, Proof, Status, CreatedUtc, ReviewedUtc, ReviewerId                                                      | Ping                                   | Tracks ownership claim requests; Logic FK to User                                                                     |
 | UserActivityLog | Id               | UserId, Date, LoginCount, LastActivityUtc                                                                                | User                                   | Tracks daily unique logins per user for analytics                                                                     |
 | DailySystemMetric | Id             | Date, MetricType, Value, Dimensions                                                                                      | (None)                                 | Stores historical aggregated stats (DAU, WAU, MAU, etc.)                                                              |
+| Reping        | Id                 | UserId, ReviewId, CreatedAt, Privacy                                                                                     | Review                                 | Unique per user per review; respects privacy settings                                                                 |
 
 ---
 ## 7. DTO Contracts
@@ -280,6 +282,10 @@ Property Configuration:
 - `ReviewDto(Id, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[])`
 - `CreateReviewDto(Rating, Content?, ImageUrl, Tags[])`
 - `ExploreReviewDto(ReviewId, PingActivityId, PingId, PingName, PingAddress, ActivityName, PingGenreName?, Latitude, Longitude, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[], IsPingDeleted)`
+
+### Repings
+- `RepingDto(Id, ReviewId, UserId, CreatedAt, Privacy, Review(ExploreReviewDto))`
+- `RepostReviewDto(Privacy)`
 - `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, PingGenreIds?[], PageSize, PageNumber)`
 
 ### Tags
@@ -401,6 +407,11 @@ Property Configuration:
 - **Backing**: Amazon SES.
 - **Methods**: `SendEmailAsync(to, subject, body)`.
 - **Rate Limit**: 5 emails per hour per recipient (enforced in `AuthService`).
+
+#### RepingService (`IRepingService`)
+- Manages reposting of reviews.
+- **Methods**: `RepostReviewAsync`, `GetUserRepingsAsync`, `DeleteRepingAsync`, `UpdateRepingPrivacyAsync`.
+- **Privacy**: Respects `Reping.Privacy` and underlying `Ping` visibility.
 
 ---
 ## 9. Controllers & Endpoints
@@ -538,6 +549,14 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | GET    | /api/profiles/{id}/likes       | A    | —    | `PaginatedResult`    | Reviews liked by user (respects privacy)            |
 | GET    | /api/profiles/me/likes         | A    | —    | `PaginatedResult`    | Reviews liked by me                                 |
 | PATCH  | /api/profiles/me/privacy       | A    | `PrivacySettingsDto` | 200 OK | Update privacy (`ReviewsPrivacy`, `PingsPrivacy`, `LikesPrivacy`) |
+
+### RepingsController (`/api/repings`)
+| Method | Route                       | Auth | Body | Returns     | Notes                                           |
+| ------ | --------------------------- | ---- | ---- | ----------- | ----------------------------------------------- |
+| POST   | /api/repings/review/{rId}   | A    | `RepostReviewDto` | `RepingDto` | Repost a review |
+| DELETE | /api/repings/review/{rId}   | A    | —    | 204         | Remove a repost |
+| GET    | /api/repings/user/{uId}     | A    | —    | `PaginatedResult` | Get user's repings (respects privacy) |
+| PATCH  | /api/repings/review/{rId}/privacy | A | `RepostReviewDto` | 204 | Update reping privacy |
 
 ### ImagesController (`/api/images`)
 | Method | Route          | Auth | Body | Returns            | Notes |
@@ -687,6 +706,13 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 ### CheckIns
 - Merged into `Review` model via `ReviewType` enum.
 - **Status**: Fully implemented.
+
+### Repings
+- Users can repost (Reping) reviews.
+- **Privacy**: Repings have their own privacy setting (`Public`, `FriendsOnly`, `Private`).
+- **Visibility**: A reping is only visible if the viewer can see the reping AND has access to the underlying Ping (e.g. they can't see a reping of a private ping they don't own).
+- **Idempotence**: A user can only reping a specific review once.
+- **Mutual Exclusivity**: Removing a reping is separate from unliking or deleting the original review.
 
 ---
 ## 11. Indexes, Seed Data, Performance Notes
@@ -952,6 +978,7 @@ Enriched with: `RequestHost`, `UserAgent`.
 | Reviews    | Create, List by scope, Like/Unlike, Explore Feed (with filters) |
 | Reports    | Create (User), View/Filter (Admin)                              |
 | Tags       | Search, Popular, Moderation                                     |
+| Repings    | Repost, List by user, Update privacy, Remove                    |
 
 ---
 ## 18. Error Response Formats

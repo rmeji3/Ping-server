@@ -62,3 +62,16 @@ public class ExploreReviewsFilterDto
     public int PageSize { get; set; } = 20;
     public int PageNumber { get; set; } = 1;
 }
+
+public record RepingDto(
+    int Id,
+    int ReviewId,
+    string UserId,
+    DateTime CreatedAt,
+    Ping.Models.AppUsers.PrivacyConstraint Privacy,
+    ExploreReviewDto Review
+);
+
+public record RepostReviewDto(
+    Ping.Models.AppUsers.PrivacyConstraint Privacy = Ping.Models.AppUsers.PrivacyConstraint.Public
+);

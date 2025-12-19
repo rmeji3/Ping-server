@@ -233,6 +233,7 @@ builder.Services.AddScoped<IFollowService, FollowService>();
 builder.Services.AddScoped<IPingService, PingService>();
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<IRepingService, RepingService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IPingActivityService, PingActivityService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
