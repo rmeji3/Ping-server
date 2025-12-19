@@ -239,6 +239,7 @@ builder.Services.AddScoped<IPingActivityService, PingActivityService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPingNameService, GooglePingsService>();
+builder.Services.AddScoped<ICollectionService, CollectionService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IBlockService, BlockService>();
 builder.Services.AddScoped<IBusinessService, BusinessService>();

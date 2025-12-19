@@ -11,28 +11,20 @@ public class Event
     public bool IsPublic { get; set; } 
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
-    public required string Location { get; set; }
     public string? ImageUrl { get; set; }
     public string? ThumbnailUrl { get; set; }
     public double? Price { get; set; }
 
-    // FK to Identity user (string because IdentityUser<TKey> uses string by default)
     public required string CreatedById { get; set; }
-
-    // optional: if you decide to map AppUser in AppDbContext too
-    // public AppUser? CreatedBy { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
     // Many-to-many via join entity (recommended)
     public List<EventAttendee> Attendees { get; set; } = new();
     public string Status { get; set;  } = string.Empty;
-    public required double Latitude { get; set;  }
-    public required double Longitude { get; set;  }
 
     public int? EventGenreId { get; set; }
     public EventGenre? EventGenre { get; set; }
 
-    public int? PingId { get; set; }
-    public Ping.Models.Pings.Ping? Ping { get; set; }
+    public int PingId { get; set; }
+    public Ping.Models.Pings.Ping Ping { get; set; } = null!;
 }

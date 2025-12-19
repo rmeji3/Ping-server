@@ -39,13 +39,10 @@ public class EventService(
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(dto.Location))
+        var ping = await appDb.Pings.FindAsync(dto.PingId);
+        if (ping == null)
         {
-            var locCheck = await moderationService.CheckContentAsync(dto.Location);
-            if (locCheck.IsFlagged)
-            {
-                throw new ArgumentException($"Location violates content policy: {locCheck.Reason}");
-            }
+            throw new ArgumentException($"Ping with ID {dto.PingId} not found.");
         }
 
         var ev = new Event
@@ -55,9 +52,6 @@ public class EventService(
             IsPublic = dto.IsPublic,
             StartTime = dto.StartTime,
             EndTime = dto.EndTime,
-            Location = dto.Location,
-            Latitude = dto.Latitude,
-            Longitude = dto.Longitude,
             CreatedById = userId,
             CreatedAt = DateTime.UtcNow,
             PingId = dto.PingId,
@@ -66,19 +60,6 @@ public class EventService(
             ThumbnailUrl = dto.ThumbnailUrl,
             Price = dto.Price
         };
-        
-        if (dto.PingId.HasValue)
-        {
-            var ping = await appDb.Pings.FindAsync(dto.PingId.Value);
-            if (ping == null)
-            {
-                throw new ArgumentException($"Ping with ID {dto.PingId} not found.");
-            }
-            // Enforce location data from Ping
-            ev.Location = ping.Name; // Or ping.Address? Using Name as "Ping Name" seems appropriate for Event.Location
-            ev.Latitude = ping.Latitude;
-            ev.Longitude = ping.Longitude;
-        }
 
         appDb.Events.Add(ev);
         await appDb.SaveChangesAsync();
@@ -108,7 +89,7 @@ public class EventService(
             ev.IsPublic,
             ev.StartTime,
             ev.EndTime,
-            ev.Location,
+            ping.Name,
             creatorSummary,
             ev.CreatedAt,
             new List<EventAttendeeDto> 
@@ -116,8 +97,8 @@ public class EventService(
                 new EventAttendeeDto(creatorSummary.Id, creatorSummary.UserName, creatorSummary.FirstName, creatorSummary.LastName, creatorSummary.ProfilePictureUrl, "attending") 
             },
             "attending",
-            ev.Latitude,
-            ev.Longitude,
+            ping.Latitude,
+            ping.Longitude,
             ev.PingId,
             ev.EventGenreId,
             ev.EventGenre?.Name,
@@ -133,6 +114,7 @@ public class EventService(
     {
         var ev = await appDb.Events
             .Include(e => e.Attendees)
+            .Include(e => e.Ping)
             .FirstOrDefaultAsync(e => e.Id == id);
             
         if (ev == null)
@@ -160,12 +142,6 @@ public class EventService(
             ev.Description = dto.Description;
         }
 
-        if (dto.Location != null)
-        {
-            var check = await moderationService.CheckContentAsync(dto.Location);
-            if (check.IsFlagged) throw new ArgumentException($"Location violates content policy: {check.Reason}");
-            ev.Location = dto.Location;
-        }
         
         // Apply simple fields
         if (dto.IsPublic.HasValue) ev.IsPublic = dto.IsPublic.Value;
@@ -192,8 +168,6 @@ public class EventService(
                 throw new ArgumentException("Event duration must be at least 15 minutes.");
         }
 
-        if (dto.Latitude.HasValue) ev.Latitude = dto.Latitude.Value;
-        if (dto.Longitude.HasValue) ev.Longitude = dto.Longitude.Value;
         if (dto.EventGenreId.HasValue) ev.EventGenreId = dto.EventGenreId.Value;
         
         // Apply new optional fields
@@ -201,23 +175,12 @@ public class EventService(
         if (dto.ThumbnailUrl != null) ev.ThumbnailUrl = dto.ThumbnailUrl;
         if (dto.Price.HasValue) ev.Price = dto.Price.Value;
 
-        // Ping Linking & Unlinking Logic
-        // Scenario 1: User selected a specific Ping (Pin) -> Link it and overwrite location details
         if (dto.PingId.HasValue)
         {
             var ping = await appDb.Pings.FindAsync(dto.PingId.Value);
             if (ping == null) throw new ArgumentException($"Ping with ID {dto.PingId} not found");
             
             ev.PingId = dto.PingId.Value;
-            ev.Location = ping.Name;
-            ev.Latitude = ping.Latitude;
-            ev.Longitude = ping.Longitude;
-        }
-        // Scenario 2: User manually changed location (Location text OR Coords) but did NOT provide a PingId
-        // This implies they are moving the pin or typing a custom address, so we must UNLINK the old Ping.
-        else if (dto.Location != null || dto.Latitude.HasValue || dto.Longitude.HasValue)
-        {
-            ev.PingId = null;
         }
 
         await appDb.SaveChangesAsync();
@@ -245,6 +208,7 @@ public class EventService(
     {
         var ev = await appDb.Events
             .Include(e => e.Attendees)
+            .Include(e => e.Ping)
             .FirstOrDefaultAsync(e => e.Id == id);
 
         if (ev is null) return null;
@@ -275,6 +239,7 @@ public class EventService(
     {
         var query = appDb.Events
             .Include(e => e.Attendees)
+            .Include(e => e.Ping)
             .Where(e => e.CreatedById == userId)
             .OrderByDescending(e => e.StartTime);
 
@@ -289,6 +254,7 @@ public class EventService(
 
         var query = appDb.Events
             .Include(e => e.Attendees)
+            .Include(e => e.Ping)
             .Where(e => eventIdsQuery.Contains(e.Id))
             .OrderByDescending(e => e.StartTime);
 
@@ -355,6 +321,7 @@ public class EventService(
     {
         var query = appDb.Events
             .Include(e => e.Attendees)
+            .Include(e => e.Ping)
             .Where(e => e.PingId == pingId)
             .Where(e => e.EndTime > DateTime.UtcNow)
             .Where(e => e.IsPublic || 
@@ -379,6 +346,7 @@ public class EventService(
     {
         var query = appDb.Events
             .Include(e => e.Attendees)
+            .Include(e => e.Ping)
             .Where(e => e.IsPublic)
             .Where(e => e.EndTime > DateTime.UtcNow)
             .AsQueryable();
@@ -392,8 +360,8 @@ public class EventService(
             var minLng = filter.Longitude.Value - lngDelta;
             var maxLng = filter.Longitude.Value + lngDelta;
 
-            query = query.Where(e => e.Latitude >= minLat && e.Latitude <= maxLat &&
-                                     e.Longitude >= minLng && e.Longitude <= maxLng);
+            query = query.Where(e => e.Ping.Location.Y >= minLat && e.Ping.Location.Y <= maxLat &&
+                                     e.Ping.Location.X >= minLng && e.Ping.Location.X <= maxLng);
         }
 
         // Price Filter
@@ -508,6 +476,7 @@ public class EventService(
         // 1. Get Count and Page Items
         var count = await query.CountAsync();
         var events = await query
+            .Include(e => e.Ping)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
             .ToListAsync();

@@ -46,6 +46,7 @@ public class ProfileService(
             .AsNoTracking()
             .Where(e => e.CreatedById == userId && e.StartTime > DateTime.UtcNow)
             .Include(e => e.Attendees) 
+            .Include(e => e.Ping)
             .OrderBy(e => e.StartTime)
             .ToListAsync();
 
@@ -417,6 +418,7 @@ public class ProfileService(
                            (e.IsPublic || isSelf) && 
                            e.StartTime > DateTime.UtcNow)
                 .Include(e => e.Attendees) // Needed for status check
+                .Include(e => e.Ping)
                 .OrderBy(e => e.StartTime)
                 .ToListAsync();
 
@@ -669,6 +671,7 @@ public class ProfileService(
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
             .Include(e => e.Attendees) // Need attendees for mapping
+            .Include(e => e.Ping)
             .ToListAsync();
 
         var eventDtos = new List<EventDto>();

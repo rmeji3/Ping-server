@@ -240,6 +240,13 @@ Property Configuration:
 - `PingActivityDetailsDto(Id, PingId, Name, PingGenreId?, PingGenreName?, CreatedUtc, WarningMessage?)`
 - `PingGenreDto(Id, Name)` / `CreatePingGenreDto(Name)`
 
+### Collections
+- `CollectionDto(Id, Name, IsPublic, PingCount, ThumbnailUrl, CreatedUtc)`
+- `CreateCollectionDto(Name, IsPublic)`
+- `UpdateCollectionDto(Name?, IsPublic?)`
+- `CollectionDetailsDto(...)`: `CollectionDto` + `List<PingDetailsDto> Pings`
+- `AddPingToCollectionDto(PingId)`
+
 ### Auth
 - `RegisterDto(Email, Password, FirstName, LastName, UserName)`
 - `LoginDto(Email, Password)`
@@ -253,7 +260,7 @@ Property Configuration:
 - `JwtOptions(Key, Issuer, Audience, AccessTokenMinutes)`
 
 ### Events
-- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId?, EventGenreId?, EventGenreName?, IsAdHoc)`
+- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId, EventGenreId?, EventGenreName?)`
 - `UserSummaryDto(Id, UserName, FirstName, LastName)`
 - `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PingId?, EventGenreId?)`
 - `UpdateEventDto(Title?, Description?, IsPublic?, StartTime?, EndTime?, Location?, Latitude?, Longitude?, PingId?, EventGenreId?, ImageUrl?, ThumbnailUrl?, Price?)`
@@ -383,6 +390,13 @@ Property Configuration:
 - **Method**: `FindDuplicateAsync(newItem, existingItems)`.
 - **Backing**: OpenAI Chat Completion (GPT-3.5/4o).
 - **Purpose**: Identifies semantic duplicates for activity merging.
+
+#### CollectionService (`ICollectionService`)
+- Manages user-created collections of pings.
+- **Rules**:
+  - `Private` collections are only visible to the owner.
+  - `Public` collections are visible in the user's public profile.
+  - Collection thumbnail is automatically derived from the most recently added ping in the collection.
 
 #### ReportService (`IReportService`)
 - Manages reporting logic.
@@ -670,7 +684,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - **Ping Linking**: Events can be optionally linked to a `Ping` via `PingId`.
   - If `PingId` is provided, the Event inherits `Location`, `Latitude`, and `Longitude` from the Ping.
   - Useful for "Quick Add" workflows where users select an existing ping.
-- **IsAdHoc**: Computed flag (`PingId == null`). True if the event uses a custom/manual location.
+- **Location/Latitude/Longitude**: Pulled directly from the linked `Ping`.
 - **Update Logic**:
   - Providing a new `PingId` links the event and overwrites location fields.
   - Providing manual location fields (`Location`, `Latitude`, `Longitude`) WITHOUT a `PingId` **unlinks** the event (`PingId` becomes null).
@@ -1111,3 +1125,25 @@ Users with at least 500 followers can apply for verification to receive a "Verif
   - `GET /api/admin/verification/requests`
   - `POST /api/admin/verification/{id}/approve`
   - `POST /api/admin/verification/{id}/reject`
+
+---
+## 23. Collections
+
+### Overview
+Users can organize their "Saved Places" (favorited pings) into named groups called "Collections". Each collection can be either Public (visible to others) or Private (owner-only).
+
+### Logic
+- **Thumbnails**: The collection thumbnail is derived from the `ThumbnailUrl` of the most recently added ping in the collection.
+- **Privacy**: Public collections appear on the user's profile summary. Private collections are only accessible to the owner.
+
+### Endpoints
+- **Management**:
+  - `POST /api/collections`: Create a new collection.
+  - `GET /api/collections/me`: Get my collections (public & private).
+  - `GET /api/collections/user/{userId}`: Get public collections of a user.
+  - `GET /api/collections/{id}`: Get collection details (pings list).
+  - `PATCH /api/collections/{id}`: Update collection name/privacy.
+  - `DELETE /api/collections/{id}`: Delete a collection.
+- **Pings**:
+  - `POST /api/collections/{id}/pings`: Add a ping to a collection.
+  - `DELETE /api/collections/{id}/pings/{pingId}`: Remove a ping from a collection.

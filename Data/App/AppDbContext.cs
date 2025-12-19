@@ -31,6 +31,8 @@ namespace Ping.Data.App
         public DbSet<PingClaim> PingClaims => Set<PingClaim>();
         public DbSet<PingDailyMetric> PingDailyMetrics => Set<PingDailyMetric>();
         public DbSet<VerificationRequest> VerificationRequests => Set<VerificationRequest>();
+        public DbSet<Collection> Collections => Set<Collection>();
+        public DbSet<CollectionPing> CollectionPings => Set<CollectionPing>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -133,10 +135,17 @@ namespace Ping.Data.App
                 .HasKey(rt => new { rt.ReviewId, rt.TagId });
 
 
-            // Reping: unique per user per review
             builder.Entity<Reping>()
                 .HasIndex(r => new { r.ReviewId, r.UserId })
                 .IsUnique();
+
+            // Collection: generic index for user's collections
+            builder.Entity<Collection>()
+                .HasIndex(c => c.UserId);
+
+            // CollectionPing: composite key
+            builder.Entity<CollectionPing>()
+                .HasKey(cp => new { cp.CollectionId, cp.PingId });
 
             // ---------- Relationships ----------
 
@@ -189,11 +198,24 @@ namespace Ping.Data.App
                 .HasForeignKey(rl => rl.ReviewId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Reping 1 - * Review
             builder.Entity<Reping>()
                 .HasOne(r => r.Review)
                 .WithMany()
                 .HasForeignKey(r => r.ReviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Collection 1 - * CollectionPings
+            builder.Entity<CollectionPing>()
+                .HasOne(cp => cp.Collection)
+                .WithMany(c => c.CollectionPings)
+                .HasForeignKey(cp => cp.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Ping 1 - * CollectionPings
+            builder.Entity<CollectionPing>()
+                .HasOne(cp => cp.Ping)
+                .WithMany()
+                .HasForeignKey(cp => cp.PingId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // ReviewLike: unique per user per review

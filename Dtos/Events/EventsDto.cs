@@ -14,7 +14,7 @@ public record EventDto(
     string Status,
     double latitude,
     double longitude,
-    int? PingId,
+    int PingId,
     int? EventGenreId,
     string? EventGenreName,
     string? ImageUrl,
@@ -22,10 +22,7 @@ public record EventDto(
     double? Price,
     bool IsHosting,
     List<string> FriendThumbnails
-)
-{
-    public bool IsAdHoc => PingId == null;
-}
+);
 
 public record UserSummaryDto(
     string Id,
@@ -50,10 +47,7 @@ public record CreateEventDto(
     bool IsPublic,
     DateTime StartTime,
     DateTime EndTime,
-    string Location,
-    double Latitude,
-    double Longitude,
-    int? PingId,
+    int PingId,
     int? EventGenreId,
     string? ImageUrl,
     string? ThumbnailUrl,
@@ -67,9 +61,6 @@ public class UpdateEventDto
     public bool? IsPublic { get; set; }
     public DateTime? StartTime { get; set; }
     public DateTime? EndTime { get; set; }
-    public string? Location { get; set; }
-    public double? Latitude { get; set; }
-    public double? Longitude { get; set; }
     public int? PingId { get; set; }
     public int? EventGenreId { get; set; }
     public string? ImageUrl { get; set; }

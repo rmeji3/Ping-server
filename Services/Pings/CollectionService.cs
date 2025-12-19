@@ -1,0 +1,186 @@
+using Ping.Data.App;
+using Ping.Dtos.Pings;
+using Ping.Models.Pings;
+using Ping.Services.Follows;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace Ping.Services.Pings
+{
+    public class CollectionService(
+        AppDbContext db,
+        IPingService pingService,
+        ILogger<CollectionService> logger) : ICollectionService
+    {
+        public async Task<CollectionDto> CreateCollectionAsync(string userId, CreateCollectionDto dto)
+        {
+            var collection = new Collection
+            {
+                UserId = userId,
+                Name = dto.Name,
+                IsPublic = dto.IsPublic,
+                CreatedUtc = DateTime.UtcNow
+            };
+
+            db.Collections.Add(collection);
+            await db.SaveChangesAsync();
+
+            logger.LogInformation("Collection {CollectionId} created for user {UserId}", collection.Id, userId);
+
+            return MapToDto(collection, 0, null);
+        }
+
+        public async Task<List<CollectionDto>> GetMyCollectionsAsync(string userId)
+        {
+            var collections = await db.Collections
+                .Where(c => c.UserId == userId)
+                .Include(c => c.CollectionPings)
+                    .ThenInclude(cp => cp.Ping)
+                .OrderByDescending(c => c.CreatedUtc)
+                .ToListAsync();
+
+            return collections.Select(c => 
+            {
+                var latestPing = c.CollectionPings.OrderByDescending(cp => cp.AddedUtc).FirstOrDefault()?.Ping;
+                return MapToDto(c, c.CollectionPings.Count, latestPing?.ThumbnailUrl);
+            }).ToList();
+        }
+
+        public async Task<List<CollectionDto>> GetUserPublicCollectionsAsync(string targetUserId, string? currentUserId)
+        {
+            // If viewing someone else, only show public
+            // (Standard rule, though we could add "Friends Only" collections later if needed)
+            var collections = await db.Collections
+                .Where(c => c.UserId == targetUserId && c.IsPublic)
+                .Include(c => c.CollectionPings)
+                    .ThenInclude(cp => cp.Ping)
+                .OrderByDescending(c => c.CreatedUtc)
+                .ToListAsync();
+
+            return collections.Select(c => 
+            {
+                var latestPing = c.CollectionPings.OrderByDescending(cp => cp.AddedUtc).FirstOrDefault()?.Ping;
+                return MapToDto(c, c.CollectionPings.Count, latestPing?.ThumbnailUrl);
+            }).ToList();
+        }
+
+        public async Task<CollectionDetailsDto> GetCollectionDetailsAsync(int collectionId, string? currentUserId)
+        {
+            var collection = await db.Collections
+                .Include(c => c.CollectionPings)
+                    .ThenInclude(cp => cp.Ping)
+                .FirstOrDefaultAsync(c => c.Id == collectionId);
+
+            if (collection == null)
+                throw new KeyNotFoundException("Collection not found.");
+
+            // Privacy check
+            if (!collection.IsPublic && collection.UserId != currentUserId)
+            {
+                // Note: We might allow friends to see private collections if they are tagged/shared?
+                // For now, Private means OWNER only.
+                throw new UnauthorizedAccessException("You do not have permission to view this collection.");
+            }
+
+            var pings = new List<PingDetailsDto>();
+            foreach (var cp in collection.CollectionPings.OrderByDescending(x => x.AddedUtc))
+            {
+                var details = await pingService.GetPingByIdAsync(cp.PingId, currentUserId);
+                if (details != null)
+                {
+                    pings.Add(details);
+                }
+            }
+
+            var latestPingThumb = collection.CollectionPings.OrderByDescending(cp => cp.AddedUtc).FirstOrDefault()?.Ping?.ThumbnailUrl;
+
+            return new CollectionDetailsDto(
+                collection.Id,
+                collection.Name,
+                collection.IsPublic,
+                collection.CollectionPings.Count,
+                latestPingThumb,
+                collection.CreatedUtc,
+                pings
+            );
+        }
+
+        public async Task<CollectionDto> UpdateCollectionAsync(int collectionId, string userId, UpdateCollectionDto dto)
+        {
+            var collection = await db.Collections.FindAsync(collectionId);
+            if (collection == null) throw new KeyNotFoundException("Collection not found.");
+            if (collection.UserId != userId) throw new UnauthorizedAccessException("Not your collection.");
+
+            if (dto.Name != null) collection.Name = dto.Name;
+            if (dto.IsPublic.HasValue) collection.IsPublic = dto.IsPublic.Value;
+
+            await db.SaveChangesAsync();
+            
+            // Re-fetch to get counts/thumbs if needed, or just return basic
+            var count = await db.CollectionPings.CountAsync(cp => cp.CollectionId == collectionId);
+            var latestThumb = await db.CollectionPings
+                .Where(cp => cp.CollectionId == collectionId)
+                .OrderByDescending(cp => cp.AddedUtc)
+                .Select(cp => cp.Ping.ThumbnailUrl)
+                .FirstOrDefaultAsync();
+
+            return MapToDto(collection, count, latestThumb);
+        }
+
+        public async Task DeleteCollectionAsync(int collectionId, string userId)
+        {
+            var collection = await db.Collections.FindAsync(collectionId);
+            if (collection == null) throw new KeyNotFoundException("Collection not found.");
+            if (collection.UserId != userId) throw new UnauthorizedAccessException("Not your collection.");
+
+            db.Collections.Remove(collection);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task AddPingToCollectionAsync(int collectionId, string userId, int pingId)
+        {
+            var collection = await db.Collections.FindAsync(collectionId);
+            if (collection == null) throw new KeyNotFoundException("Collection not found.");
+            if (collection.UserId != userId) throw new UnauthorizedAccessException("Not your collection.");
+
+            var exists = await db.CollectionPings.AnyAsync(cp => cp.CollectionId == collectionId && cp.PingId == pingId);
+            if (exists) return;
+
+            var collectionPing = new CollectionPing
+            {
+                CollectionId = collectionId,
+                PingId = pingId,
+                AddedUtc = DateTime.UtcNow
+            };
+
+            db.CollectionPings.Add(collectionPing);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task RemovePingFromCollectionAsync(int collectionId, string userId, int pingId)
+        {
+            var collection = await db.Collections.FindAsync(collectionId);
+            if (collection == null) throw new KeyNotFoundException("Collection not found.");
+            if (collection.UserId != userId) throw new UnauthorizedAccessException("Not your collection.");
+
+            var cp = await db.CollectionPings.FirstOrDefaultAsync(x => x.CollectionId == collectionId && x.PingId == pingId);
+            if (cp != null)
+            {
+                db.CollectionPings.Remove(cp);
+                await db.SaveChangesAsync();
+            }
+        }
+
+        private static CollectionDto MapToDto(Collection c, int count, string? thumb)
+        {
+            return new CollectionDto(
+                c.Id,
+                c.Name,
+                c.IsPublic,
+                count,
+                thumb,
+                c.CreatedUtc
+            );
+        }
+    }
+}

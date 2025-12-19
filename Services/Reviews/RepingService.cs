@@ -16,18 +16,23 @@ public class RepingService(
     IFollowService followService,
     IBlockService blockService,
     UserManager<AppUser> userManager,
-    IReviewService reviewService,
     ILogger<RepingService> logger) : IRepingService
 {
     public async Task<RepingDto> RepostReviewAsync(int reviewId, string userId, RepostReviewDto dto)
     {
+        logger.LogInformation("User {UserId} starting repost of review {ReviewId}", userId, reviewId);
+        
         var review = await appDb.Reviews
             .AsNoTracking()
             .Include(r => r.PingActivity)
             .ThenInclude(pa => pa.Ping)
             .FirstOrDefaultAsync(r => r.Id == reviewId);
 
-        if (review == null) throw new KeyNotFoundException("Review not found.");
+        if (review == null) 
+        {
+            logger.LogWarning("RepostReview: Review {ReviewId} not found for user {UserId}", reviewId, userId);
+            throw new KeyNotFoundException("Review not found.");
+        }
 
         // Check if already repinged
         var existing = await appDb.Repings
@@ -35,8 +40,7 @@ public class RepingService(
         
         if (existing != null)
         {
-             // Idempotent or Error? Let's go with returning existing or updating privacy?
-             // Usually repost is toggle or fails if exists.
+             logger.LogWarning("RepostReview: User {UserId} already repinged review {ReviewId}", userId, reviewId);
              throw new InvalidOperationException("Review already repinged.");
         }
 
@@ -50,8 +54,8 @@ public class RepingService(
 
         appDb.Repings.Add(reping);
         await appDb.SaveChangesAsync();
-
-        logger.LogInformation("User {UserId} repinged review {ReviewId}", userId, reviewId);
+        
+        logger.LogInformation("RepostReview: Success. User {UserId} repinged review {ReviewId}. Privacy: {Privacy}", userId, reviewId, dto.Privacy);
 
         return await MapToDtoAsync(reping, userId);
     }
@@ -74,6 +78,8 @@ public class RepingService(
             var isFollowedBy = await followService.IsFollowingAsync(targetUserId, currentUserId);
             isFriend = isFollowing && isFollowedBy;
         }
+
+        logger.LogInformation("GetUserRepings: Fetching repings for target {TargetUser} by viewer {ViewerUser}. Friend: {IsFriend}", targetUserId, currentUserId, isFriend);
 
         var query = appDb.Repings
             .AsNoTracking()
@@ -165,31 +171,45 @@ public class RepingService(
             ));
         }
 
+        logger.LogInformation("GetUserRepings: Completed. User {TargetUserId} has {Count} visible repings for viewer {CurrentUserId}", targetUserId, count, currentUserId);
+
         return new PaginatedResult<RepingDto>(dtos, count, pagination.PageNumber, pagination.PageSize);
     }
 
     public async Task DeleteRepingAsync(int reviewId, string userId)
     {
+        logger.LogInformation("User {UserId} removing reping for review {ReviewId}", userId, reviewId);
+
         var reping = await appDb.Repings
             .FirstOrDefaultAsync(r => r.ReviewId == reviewId && r.UserId == userId);
         
-        if (reping == null) throw new KeyNotFoundException("Reping not found.");
+        if (reping == null) 
+        {
+            logger.LogWarning("DeleteReping: Reping not found for Review {ReviewId} and User {UserId}", reviewId, userId);
+            throw new KeyNotFoundException("Reping not found.");
+        }
 
         appDb.Repings.Remove(reping);
         await appDb.SaveChangesAsync();
-        logger.LogInformation("User {UserId} removed reping for review {ReviewId}", userId, reviewId);
+        logger.LogInformation("DeleteReping: Success. User {UserId} removed reping for review {ReviewId}", userId, reviewId);
     }
 
     public async Task UpdateRepingPrivacyAsync(int reviewId, string userId, PrivacyConstraint privacy)
     {
+        logger.LogInformation("User {UserId} updating reping privacy for review {ReviewId} to {Privacy}", userId, reviewId, privacy);
+
         var reping = await appDb.Repings
             .FirstOrDefaultAsync(r => r.ReviewId == reviewId && r.UserId == userId);
         
-        if (reping == null) throw new KeyNotFoundException("Reping not found.");
+        if (reping == null) 
+        {
+            logger.LogWarning("UpdateRepingPrivacy: Reping not found for Review {ReviewId} and User {UserId}", reviewId, userId);
+            throw new KeyNotFoundException("Reping not found.");
+        }
 
         reping.Privacy = privacy;
         await appDb.SaveChangesAsync();
-        logger.LogInformation("User {UserId} updated reping privacy for review {ReviewId} to {Privacy}", userId, reviewId, privacy);
+        logger.LogInformation("UpdateRepingPrivacy: Success. User {UserId} updated privacy for {ReviewId}", userId, reviewId);
     }
 
     private async Task<RepingDto> MapToDtoAsync(Reping reping, string currentUserId)

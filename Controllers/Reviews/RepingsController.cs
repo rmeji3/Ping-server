@@ -12,7 +12,7 @@ namespace Ping.Controllers.Reviews;
 [ApiVersion("1.0")]
 [Route("api/[controller]")]
 [Route("api/v{version:apiVersion}/[controller]")]
-public class RepingsController(IRepingService repingService, ILogger<RepingsController> logger) : ControllerBase
+public class RepingsController(IRepingService repingService) : ControllerBase
 {
     // POST /api/repings/review/{reviewId}
     [HttpPost("review/{reviewId:int}")]
