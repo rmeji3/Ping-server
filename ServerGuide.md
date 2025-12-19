@@ -531,8 +531,8 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | GET    | /api/profiles/{id}/pings      | A    | —    | `PaginatedResult`    | Pings created by user (respects privacy)           |
 | GET    | /api/profiles/{id}/reviews     | A    | —    | `PaginatedResult`    | Reviews by user (respects privacy)                  |
 | GET    | /api/profiles/{id}/events      | A    | —    | `PaginatedResult`    | Events created by user (respects privacy)           |
-| GET    | /api/profiles/{id}/places      | A    | —    | `PaginatedResult<PlaceReviewSummaryDto>` | Grouped places reviewed by user (Strict Privacy)        |
-| GET    | /api/profiles/me/places        | A    | —    | `PaginatedResult<PlaceReviewSummaryDto>` | All places reviewed by current user (No filtering)      |
+| GET    | /api/profiles/{id}/places (Q: sortBy, sortOrder) | A    | —    | `PaginatedResult<PlaceReviewSummaryDto>` | Grouped places reviewed by user (Strict Privacy)        |
+| GET    | /api/profiles/me/places (Q: sortBy, sortOrder)   | A    | —    | `PaginatedResult<PlaceReviewSummaryDto>` | All places reviewed by current user (No filtering)      |
 | GET    | /api/profiles/{id}/places/{pId}/reviews | A | — | `PaginatedResult<ReviewDto>` | Drill down into reviews for a place (Strict Privacy) |
 | GET    | /api/profiles/me/places/{pId}/reviews | A | — | `PaginatedResult<ReviewDto>` | Drill down into own reviews (No filtering) |
 | GET    | /api/profiles/{id}/likes       | A    | —    | `PaginatedResult`    | Reviews liked by user (respects privacy)            |

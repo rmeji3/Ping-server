@@ -200,7 +200,7 @@ namespace Ping.Controllers.Profiles
 
         // GET /api/profiles/{id}/places?pageNumber=1&pageSize=10
         [HttpGet("{id}/places")]
-        public async Task<ActionResult<PaginatedResult<PlaceReviewSummaryDto>>> GetProfilePlaces(string id, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        public async Task<ActionResult<PaginatedResult<PlaceReviewSummaryDto>>> GetProfilePlaces(string id, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, [FromQuery] string? sortBy = null, [FromQuery] string? sortOrder = null)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (currentUserId is null) return Unauthorized();
@@ -208,7 +208,7 @@ namespace Ping.Controllers.Profiles
             try
             {
                 var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-                var places = await profileService.GetProfilePlacesAsync(id, currentUserId, pagination);
+                var places = await profileService.GetProfilePlacesAsync(id, currentUserId, pagination, sortBy, sortOrder);
                 return Ok(places);
             }
             catch (KeyNotFoundException)
@@ -219,7 +219,7 @@ namespace Ping.Controllers.Profiles
 
         // GET /api/profiles/me/places?pageNumber=1&pageSize=10
         [HttpGet("me/places")]
-        public async Task<ActionResult<PaginatedResult<PlaceReviewSummaryDto>>> GetMyProfilePlaces([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        public async Task<ActionResult<PaginatedResult<PlaceReviewSummaryDto>>> GetMyProfilePlaces([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, [FromQuery] string? sortBy = null, [FromQuery] string? sortOrder = null)
         {
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (currentUserId is null) return Unauthorized();
@@ -228,7 +228,7 @@ namespace Ping.Controllers.Profiles
             {
                 var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
                 // Pass currentUserId as both target and viewer to bypass privacy checks
-                var places = await profileService.GetProfilePlacesAsync(currentUserId, currentUserId, pagination);
+                var places = await profileService.GetProfilePlacesAsync(currentUserId, currentUserId, pagination, sortBy, sortOrder);
                 return Ok(places);
             }
             catch (KeyNotFoundException)

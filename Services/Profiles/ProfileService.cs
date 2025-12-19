@@ -717,7 +717,7 @@ public class ProfileService(
 
         return new PaginatedResult<EventDto>(eventDtos, totalCount, pagination.PageNumber, pagination.PageSize);
     }
-    public async Task<PaginatedResult<PlaceReviewSummaryDto>> GetProfilePlacesAsync(string targetUserId, string currentUserId, PaginationParams pagination)
+    public async Task<PaginatedResult<PlaceReviewSummaryDto>> GetProfilePlacesAsync(string targetUserId, string currentUserId, PaginationParams pagination, string? sortBy = null, string? sortOrder = null)
     {
         var user = await userManager.FindByIdAsync(targetUserId);
         if (user is null) throw new KeyNotFoundException("User not found.");
@@ -785,7 +785,12 @@ public class ProfileService(
             
         var validGroups = new List<PlaceReviewSummaryDto>();
 
-        foreach (var group in grouped.OrderByDescending(x => x.LatestReviewDate)) // Default sort by recency
+        bool isAscending = sortOrder?.Equals("Asc", StringComparison.OrdinalIgnoreCase) ?? false;
+        var sortedGroups = string.Equals(sortBy, "Rating", StringComparison.OrdinalIgnoreCase)
+            ? (isAscending ? grouped.OrderBy(x => x.AverageRating) : grouped.OrderByDescending(x => x.AverageRating))
+            : (isAscending ? grouped.OrderBy(x => x.LatestReviewDate) : grouped.OrderByDescending(x => x.LatestReviewDate));
+
+        foreach (var group in sortedGroups) 
         {
             // Ping Privacy Check
             bool canSeePing = false;
