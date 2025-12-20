@@ -5,6 +5,8 @@ using Ping.Services.AI;
 using Ping.Services.Moderation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using Ping.Services.Redis;
 
 namespace Ping.Services.Activities;
 
@@ -14,10 +16,23 @@ public class PingActivityService(
     AppDbContext db, 
     IModerationService moderationService, 
     ISemanticService semanticService,
+    IRedisService redis,
+    IConfiguration config,
     ILogger<PingActivityService> logger) : IPingActivityService
 {
-    public async Task<PingActivityDetailsDto> CreatePingActivityAsync(CreatePingActivityDto dto)
+    public async Task<PingActivityDetailsDto> CreatePingActivityAsync(CreatePingActivityDto dto, string userId)
     {
+        // 0. Rate limiting
+        var limit = config.GetValue<int>("RateLimiting:ActivityCreationLimitPerHour", 10);
+        var key = $"ratelimit:activity:{userId}";
+        var count = await redis.IncrementAsync(key, TimeSpan.FromHours(1));
+
+        if (count > limit)
+        {
+            logger.LogWarning("Activity creation rate limit exceeded for user {UserId}", userId);
+            throw new InvalidOperationException("Too many activities created. Please try again in an hour.");
+        }
+
         // 1. Validate ping
         var ping = await db.Pings
             .Include(p => p.PingGenre)

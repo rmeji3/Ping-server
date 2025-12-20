@@ -701,6 +701,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 - Cascade deletes when parent Ping is deleted
 - **Moderation**: Content is checked.
 - **Deduplication**: Semantically similar activities are merged (e.g. "Hoops" = "Basketball").
+- **Rate Limit**: 10 activities per user per hour (Redis-backed).
 
 ### Followers & Friends
 - **Follow**: Unidirectional. User A can follow User B without approval (unless private, future feature).
@@ -855,7 +856,8 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
   "GlobalLimitPerMinute": 1000,
   "AuthenticatedLimitPerMinute": 200,
   "AuthEndpointsLimitPerMinute": 5,
-  "PingCreationLimitPerDay": 10
+  "PingCreationLimitPerDay": 10,
+  "ActivityCreationLimitPerHour": 10
 }
 ```
 
@@ -874,11 +876,13 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 ```
 
 ### Domain-Specific Rate Limiting
-**Ping Creation** (`PingService.CreatePingAsync`):
-- Limit: 10 pings per user per day
-- Storage: Redis key `ratelimit:ping:create:{userId}:{yyyy-MM-dd}`
-- Expiry: 24 hours
 - Error: `InvalidOperationException` with message "You've reached the daily limit for adding pings."
+
+**Activity Creation** (`PingActivityService.CreatePingActivityAsync`):
+- Limit: 10 activities per user per hour
+- Storage: Redis key `ratelimit:activity:{userId}`
+- Expiry: 1 hour
+- Error: `InvalidOperationException` with message "Too many activities created. Please try again in an hour."
 
 ### Implementation Details
 **Client Identification**:
