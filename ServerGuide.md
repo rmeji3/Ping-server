@@ -631,7 +631,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 ## 10. Validation & Business Rules
 
 ### Authentication
-- Users can login using either their **Email** or their **Username**.
+- Emails are treated as **case-insensitive** for all authentication and verification flows (registration, login, password reset).
 - Username must be unique (case-insensitive)
 - Password flows do not leak account existence (uniform responses for missing users)
 - JWT tokens expire after configured minutes (default: 60)

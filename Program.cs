@@ -249,6 +249,7 @@ builder.Services.AddScoped<IBusinessAnalyticsService, BusinessAnalyticsService>(
 builder.Services.AddScoped<IBanningService, BanningService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<Ping.Services.Verification.IVerificationService, Ping.Services.Verification.VerificationService>();
 builder.Services.AddHostedService<AnalyticsBackgroundJob>();
 builder.Services.AddHostedService<Ping.Services.Background.UnverifiedUserCleanupService>();
 

@@ -94,10 +94,13 @@ public class AdminControllerTests : BaseIntegrationTest
         Assert.Equal(HttpStatusCode.OK, banResponse.StatusCode);
 
         // 3. Try to login as banned user
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new { email = userRequest.Email, password = "Password1!" });
+        _client.DefaultRequestHeaders.Authorization = null;
+        var loginRequest = new LoginDto(userRequest.UserName, "Password1!");
+        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
         Assert.Equal(HttpStatusCode.Unauthorized, loginResponse.StatusCode);
         
-        // 4. check if user is banned
+        // 4. check if user is banned (Re-authenticate as Admin first)
+        Authenticate("adminUser", "Admin");
         var searchBanned = await _client.GetFromJsonAsync<Ping.Dtos.Moderation.BannedUserDto>($"/api/admin/users/banned?username={userRequest.UserName}");
         Assert.NotNull(searchBanned);
         Assert.Equal(userRequest.UserName.ToUpper(), searchBanned.Username.ToUpper()); 
@@ -120,10 +123,13 @@ public class AdminControllerTests : BaseIntegrationTest
         Assert.Equal(HttpStatusCode.OK, banResponse.StatusCode);
 
         // 3. Try to login as banned user
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new { email = userRequest.Email, password = "Password1!" });
+        _client.DefaultRequestHeaders.Authorization = null;
+        var loginRequest = new LoginDto(userRequest.UserName, "Password1!");
+        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
         Assert.Equal(HttpStatusCode.Unauthorized, loginResponse.StatusCode);
         
-        // 4. Unban User2
+        // 4. Unban User2 (Re-authenticate as Admin first)
+        Authenticate("adminUser", "Admin");
         var unbanResponse = await _client.PostAsJsonAsync($"/api/admin/users/unban?username={userRequest.UserName}", new { });
         Assert.Equal(HttpStatusCode.OK, unbanResponse.StatusCode);
         

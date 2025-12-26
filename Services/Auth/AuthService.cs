@@ -27,8 +27,9 @@ public class AuthService(
 {
     public async Task<object> RegisterAsync(RegisterDto dto)
     {
+        var normalizedEmail = dto.Email.ToLowerInvariant();
         var user = new AppUser { 
-            Email = dto.Email,
+            Email = normalizedEmail,
             UserName = dto.UserName,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
@@ -287,7 +288,8 @@ public class AuthService(
 
     public async Task<object> ForgotPasswordAsync(ForgotPasswordDto dto, string scheme, string host)
     {
-        var user = await users.FindByEmailAsync(dto.Email);
+        var normalizedEmail = dto.Email.ToLowerInvariant();
+        var user = await users.FindByEmailAsync(normalizedEmail);
         // Always return success to avoid account enumeration
         if (user == null)
         {
@@ -299,14 +301,14 @@ public class AuthService(
 
         // Generate 6-digit code
         var code = Random.Shared.Next(100000, 999999).ToString();
-        var redisKey = $"password_reset:{dto.Email}";
+        var redisKey = $"password_reset:{normalizedEmail}";
         
         // Store in Redis for 15 minutes
         await redis.SetAsync(redisKey, code, TimeSpan.FromMinutes(15));
         
         // Send email
         await emailService.SendEmailAsync(
-            dto.Email, 
+            normalizedEmail, 
             "Reset your Ping password", 
             $"Your password reset code is: <b>{code}</b>. It expires in 15 minutes."
         );
@@ -327,11 +329,12 @@ public class AuthService(
 
     public async Task<string> ResetPasswordAsync(ResetPasswordDto dto)
     {
-        var user = await users.FindByEmailAsync(dto.Email);
+        var normalizedEmail = dto.Email.ToLowerInvariant();
+        var user = await users.FindByEmailAsync(normalizedEmail);
         // Always return success to avoid account enumeration
         if (user == null) return "Password has been reset if the account exists.";
 
-        var redisKey = $"password_reset:{dto.Email}";
+        var redisKey = $"password_reset:{normalizedEmail}";
         var storedCode = await redis.GetAsync<string>(redisKey);
 
         if (storedCode != dto.Code)
@@ -406,7 +409,8 @@ public class AuthService(
 
     public async Task<AuthResponse> VerifyEmailAsync(VerifyEmailDto dto)
     {
-        var redisKey = $"email_verification:{dto.Email}";
+        var normalizedEmail = dto.Email.ToLowerInvariant();
+        var redisKey = $"email_verification:{normalizedEmail}";
         var storedCode = await redis.GetAsync<string>(redisKey);
 
         if (storedCode != dto.Code)
@@ -414,7 +418,7 @@ public class AuthService(
             throw new ArgumentException("Invalid or expired verification code.");
         }
 
-        var user = await users.FindByEmailAsync(dto.Email);
+        var user = await users.FindByEmailAsync(normalizedEmail);
         if (user == null) throw new KeyNotFoundException("User not found.");
 
         if (user.EmailConfirmed) return await tokens.CreateAuthResponseAsync(user);
@@ -430,7 +434,8 @@ public class AuthService(
 
     public async Task ResendVerificationEmailAsync(string email)
     {
-        var user = await users.FindByEmailAsync(email);
+        var normalizedEmail = email.ToLowerInvariant();
+        var user = await users.FindByEmailAsync(normalizedEmail);
         if (user == null) 
         {
             // Avoid enumeration: do nothing or pretend success
@@ -460,18 +465,20 @@ public class AuthService(
 
     private async Task SendVerificationCodeAsync(AppUser user)
     {
-        await CheckEmailRateLimitAsync(user.Email!);
-        var code = Random.Shared.Next(100000, 999999).ToString();
-        var redisKey = $"email_verification:{user.Email}";
+        var normalizedEmail = user.Email!.ToLowerInvariant();
+        var redisKey = $"email_verification:{normalizedEmail}";
         
-        // Store in Redis for 24 hours
-        await redis.SetAsync(redisKey, code, TimeSpan.FromHours(24));
+        // Generate 6-digit code
+        var code = Random.Shared.Next(100000, 999999).ToString();
+        
+        // Store in Redis for 15 Minutes
+        await redis.SetAsync(redisKey, code, TimeSpan.FromMinutes(15));
         
         // Send email
         await emailService.SendEmailAsync(
             user.Email!, 
             "Verify your Ping account", 
-            $"Your verification code is: <b>{code}</b>. It expires in 24 hours."
+            $"Your verification code is: <b>{code}</b>. It expires in 15 Minutes."
         );
         
         logger.LogInformation("Verification code sent to {Email}", user.Email);
