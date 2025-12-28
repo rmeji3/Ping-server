@@ -399,6 +399,42 @@ public class AuthService(
         logger.LogInformation("Password changed for {UserId}", user.Id);
         return "Password changed.";
     }
+
+    public async Task<AuthResponse> ChangeUsernameAsync(string userId, ChangeUsernameDto dto)
+    {
+        var user = await users.FindByIdAsync(userId);
+        if (user == null) throw new KeyNotFoundException("User not found.");
+
+        if (string.Equals(user.UserName, dto.NewUserName, StringComparison.OrdinalIgnoreCase))
+        {
+            return await tokens.CreateAuthResponseAsync(user);
+        }
+
+        // Moderation
+        var moderationResult = await moderationService.CheckContentAsync(dto.NewUserName);
+        if (moderationResult.IsFlagged)
+        {
+            logger.LogWarning("Username change failed: '{UserName}' is flagged.", dto.NewUserName);
+            throw new ArgumentException($"Username is flagged: {moderationResult.Reason}");
+        }
+
+        // Check if taken (SetUserNameAsync might do this, but explicit check is safer for custom error)
+        var existing = await users.FindByNameAsync(dto.NewUserName);
+        if (existing != null)
+        {
+            throw new InvalidOperationException("Username is already taken.");
+        }
+
+        var result = await users.SetUserNameAsync(user, dto.NewUserName);
+        if (!result.Succeeded)
+        {
+            var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+            throw new ArgumentException(errors);
+        }
+
+        logger.LogInformation("Username changed for {UserId} to {NewName}", userId, dto.NewUserName);
+        return await tokens.CreateAuthResponseAsync(user);
+    }
     public async Task MakeAdminAsync(string email)
     {
         // Development only safety check could go here or in controller

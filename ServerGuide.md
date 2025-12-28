@@ -255,6 +255,7 @@ Property Configuration:
 - `ResendVerificationDto(Email)`
 - `ResetPasswordDto(Email, Code, NewPassword)`
 - `ChangePasswordDto(CurrentPassword, NewPassword)`
+- `ChangeUsernameDto(NewUserName)`
 - `UserDto(Id, Email, DisplayName, FirstName, LastName, ProfileImageUrl, Roles[])`
 - `AuthResponse(AccessToken, ExpiresUtc, User)`
 - `JwtOptions(Key, Issuer, Audience, AccessTokenMinutes)`
@@ -377,7 +378,7 @@ Property Configuration:
 - Manages user profiles and search.
 
 #### AuthService (`IAuthService`)
-- Manages registration, login, and password flows.
+- Manages registration, login, password flows, and account management (Change Username, Delete Account).
 
 #### ModerationService (`IModerationService`)
 - **Implementation**: `OpenAIModerationService`.
@@ -490,6 +491,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/auth/password/forgot | An   | `ForgotPasswordDto` | Dev returns code  | Avoids enumeration (Rate Limit: 5/hr)     |
 | POST   | /api/auth/password/reset  | An   | `ResetPasswordDto`  | 200 status        | Validates code from Redis                 |
 | POST   | /api/auth/password/change | A    | `ChangePasswordDto` | 200 status        | Validates current password                |
+| PATCH  | /api/auth/username        | A    | `ChangeUsernameDto` | `AuthResponse`    | Updates username (Mod + Unique check)     |
 | POST   | /api/auth/google          | An   | `GoogleLoginDto`    | `AuthResponse`    | Google Sign-In (Login or Register)        |
 | POST   | /api/auth/apple           | An   | `AppleLoginDto`     | `AuthResponse`    | Apple Sign-In (Login or Register)         |
 | DELETE | /api/auth/me              | A    | —                   | Msg               | Self-delete account                       |

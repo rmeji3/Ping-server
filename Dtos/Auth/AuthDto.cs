@@ -43,6 +43,10 @@ namespace Ping.Dtos.Auth
         [Required, MinLength(6)] string NewPassword
     );
 
+    public record ChangeUsernameDto(
+        [Required, MaxLength(24), MinLength(3)] string NewUserName
+    );
+
     public interface ITokenService
     {
         Task<AuthResponse> CreateAuthResponseAsync(AppUser user);

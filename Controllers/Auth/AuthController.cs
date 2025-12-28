@@ -194,6 +194,34 @@ namespace Ping.Controllers.Auth
                 return BadRequest(new { errors = ex.Message.Split(", ").Select(e => new { Description = e }) });
             }
         }
+
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+        [HttpPatch("username")]
+        public async Task<ActionResult<AuthResponse>> ChangeUsername([FromBody] ChangeUsernameDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null) return Unauthorized();
+
+            try
+            {
+                var result = await authService.ChangeUsernameAsync(userId, dto);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException)
+            {
+                return Unauthorized();
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Username taken
+                return Conflict(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                // Moderation or Validation failed
+                return BadRequest(new { message = ex.Message });
+            }
+        }
         [HttpPost("dev/make-admin")]
         [AllowAnonymous] // Dev tool, could add secret check if needed
         public async Task<IActionResult> MakeAdmin([FromQuery] string email)
