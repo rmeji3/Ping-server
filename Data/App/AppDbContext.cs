@@ -1,4 +1,4 @@
-﻿using Ping.Models.Events;
+using Ping.Models.Events;
 using Ping.Models.Pings;
 using Microsoft.EntityFrameworkCore;
 using Ping.Models.Reviews;

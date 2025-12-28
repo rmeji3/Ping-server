@@ -468,6 +468,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /users/{id}/unban          | -                               | Msg         | Unban user by ID                        |
 | POST   | /users/unban               | `?username=...`                 | Msg         | Unban user by Username                  |
 | DELETE | /users/{id}                | -                               | Msg         | Delete user account                     |
+| DELETE | /users/by-identifier       | `?identifier=...`               | Msg         | Delete user by Email or Username        |
 | POST   | /users/make-admin          | `?email=...`                    | Msg         | Grant Admin role                        |
 | POST   | /moderation/ip/ban         | `IpBanRequest`                  | Msg         | Ban IP address                          |
 | POST   | /moderation/ip/unban       | `IpUnbanRequest`                | Msg         | Unban IP address                        |

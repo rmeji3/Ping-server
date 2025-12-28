@@ -144,6 +144,23 @@ namespace Ping.Controllers
             }
         }
         
+        [HttpDelete("users/by-identifier")]
+        public async Task<IActionResult> DeleteUserByIdentifier([FromQuery] string identifier)
+        {
+            if (string.IsNullOrWhiteSpace(identifier)) 
+                return BadRequest("Identifier (email or username) is required.");
+
+            try
+            {
+                await authService.DeleteAccountByEmailOrUsernameAsync(identifier);
+                return Ok(new { message = $"User '{identifier}' deleted successfully." });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"User with identifier '{identifier}' not found.");
+            }
+        }
+        
         [HttpPost("users/make-admin")]
         public async Task<IActionResult> MakeAdmin([FromQuery] string email)
         {

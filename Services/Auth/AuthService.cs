@@ -92,7 +92,22 @@ public class AuthService(
         if (!await users.IsEmailConfirmedAsync(user))
         {
             logger.LogWarning("Login failed: User '{Identifier}' not confirmed.", dto.UserNameOrEmail);
-            throw new UnauthorizedAccessException("Please verify your email address.");
+            
+            string errorMsg = "Please verify your email address.";
+            try
+            {
+                await CheckEmailRateLimitAsync(user.Email!);
+                await SendVerificationCodeAsync(user);
+                errorMsg = "Email not verified. We have sent a new code to your email.";
+            }
+            catch (InvalidOperationException)
+            {
+                // Rate limit hit (or other issue), valid. We just don't send a new one.
+                // Keep the default error message.
+                logger.LogInformation("Skipping auto-resend for '{Email}' due to rate limiting.", user.Email);
+            }
+            
+            throw new UnauthorizedAccessException(errorMsg);
         }
 
         var result = await signIn.CheckPasswordSignInAsync(user, dto.Password, lockoutOnFailure: true);
@@ -306,11 +321,21 @@ public class AuthService(
         // Store in Redis for 15 minutes
         await redis.SetAsync(redisKey, code, TimeSpan.FromMinutes(15));
         
+        // Generate Deep Link
+        var clientUrl = config["ClientUrl"];
+        var link = "#";
+        if (!string.IsNullOrEmpty(clientUrl))
+        {
+            var baseUrl = clientUrl.TrimEnd('/');
+            // Route to reset-password page with code pre-filled
+            link = $"{baseUrl}/--/reset-password?code={code}&email={Uri.EscapeDataString(dto.Email)}";
+        }
+        
         // Send email
         await emailService.SendEmailAsync(
             normalizedEmail, 
             "Reset your Ping password", 
-            $"Your password reset code is: <b>{code}</b>. It expires in 15 minutes."
+            $"Your password reset code is: <b>{code}</b>. <br/><br/>You can also tap this link to reset your password: <a href=\"{link}\">Reset Password</a><br/><br/>It expires in 15 minutes."
         );
 
         if (env.IsDevelopment())
@@ -474,11 +499,23 @@ public class AuthService(
         // Store in Redis for 15 Minutes
         await redis.SetAsync(redisKey, code, TimeSpan.FromMinutes(15));
         
+        // Generate Deep Link
+        var clientUrl = config["ClientUrl"];
+        // Default to a placeholder if not set, or handle gracefully
+        var link = "#";
+        if (!string.IsNullOrEmpty(clientUrl))
+        {
+            // Ensure we handle trailing slashes correctly
+            var baseUrl = clientUrl.TrimEnd('/');
+            // Construct link: exp://IP:PORT/--/verify-email-code?code=...&email=...
+            link = $"{baseUrl}/--/verify-email-code?code={code}&email={Uri.EscapeDataString(user.Email!)}";
+        }
+        
         // Send email
         await emailService.SendEmailAsync(
             user.Email!, 
             "Verify your Ping account", 
-            $"Your verification code is: <b>{code}</b>. It expires in 15 Minutes."
+            $"Your verification code is: <b>{code}</b>. <br/><br/>You can also tap this link to verify automatically: <a href=\"{link}\">Verify Email</a><br/><br/>It expires in 15 Minutes."
         );
         
         logger.LogInformation("Verification code sent to {Email}", user.Email);
@@ -499,6 +536,19 @@ public class AuthService(
         }
 
         logger.LogInformation("User account deleted: {UserId}", userId);
+    }
+
+    public async Task DeleteAccountByEmailOrUsernameAsync(string identifier)
+    {
+        var user = await users.FindByEmailAsync(identifier) 
+                   ?? await users.FindByNameAsync(identifier);
+                   
+        if (user == null)
+        {
+            throw new KeyNotFoundException($"User with identifier '{identifier}' not found.");
+        }
+
+        await DeleteAccountAsync(user.Id);
     }
 }
 

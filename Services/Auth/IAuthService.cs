@@ -17,5 +17,6 @@ public interface IAuthService
     Task MakeAdminAsync(string email);
     Task RemoveAdminAsync(string email);
     Task DeleteAccountAsync(string userId);
+    Task DeleteAccountByEmailOrUsernameAsync(string identifier);
 }
 
