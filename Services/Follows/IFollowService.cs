@@ -16,5 +16,7 @@ namespace Ping.Services.Follows
         // For "My Friends" equivalent (Mutuals)
         Task<PaginatedResult<FriendSummaryDto>> GetMutualsAsync(string userId, PaginationParams pagination);
         Task<IReadOnlyList<string>> GetMutualIdsAsync(string userId);
+        Task<int> GetFollowerCountAsync(string userId);
+        Task<int> GetFollowingCountAsync(string userId);
     }
 }

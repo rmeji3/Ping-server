@@ -214,7 +214,7 @@ Property Configuration:
 ## 6. Domain Models (Summaries)
 | Entity        | Key                | Core Fields                                                                                                              | Navigation                             | Notes                                                                                                                 |
 | ------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| AppUser       | `IdentityUser`     | FirstName, LastName, ProfileImageUrl, IsBanned, BanCount, LastIpAddress, BanReason, LastLoginUtc, CreatedUtc |(Friends)                              | Stored in Auth DB; Unverified users deleted after 12h; PingsPrivacy/ReviewsPrivacy settings |
+| AppUser       | `IdentityUser`     | FirstName, LastName, ProfileImageUrl, Bio, IsBanned, BanCount, LastIpAddress, BanReason, LastLoginUtc, CreatedUtc |(Friends)                              | Stored in Auth DB; Unverified users deleted after 12h; PingsPrivacy/ReviewsPrivacy settings |
 | IpBan         | IpAddress          | Reason, CreatedAt, ExpiresAt                                                                                             | (None)                                 | Stores banned IPs                                                                                                     |
 | Follow        | (FollowerId, FolloweeId) | CreatedAt                                                                                                                | Follower, Followee                     | Unidirectional follow. Friendship = Mutual Follow.                                                                    |
 | Ping          | Id                 | Name, Address, **Location (Point)**, Latitude*, Longitude*, OwnerUserId, Visibility (Public/Private/Friends), Type (Verified/Custom), CreatedUtc, GooglePlaceId? | PingActivities                        | OwnerUserId is string (Identity FK); Visibility controls access; Type determines duplicate logic; *Lat/Lon are computed props mapped to Location (SRID 4326) |
@@ -282,8 +282,9 @@ Property Configuration:
 - `PingDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Favorites, Activities[PingActivitySummaryDto], PingGenre?, ClaimStatus?, IsClaimed, GooglePlaceId?)`
 
 ### Profiles
-- `ProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?)`
-- `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl, Email, Events[], Pings[], Reviews[], Roles[])`
+- `ProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?, Bio?, FollowersCount, FollowingCount)`
+- `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl, Bio?, Email, Events[], Pings[], Reviews[], Roles[], FollowersCount, FollowingCount)`
+- `UpdateBioDto(Bio)`
 
 ### Reviews
 - `UserReviewsDto(Review, History[])` - Grouped response
@@ -553,6 +554,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | ------ | ------------------------------ | ---- | ---- | -------------------- | --------------------------------------------------- |
 | GET    | /api/profiles/me               | A    | —    | `PersonalProfileDto` | Current user profile                                |
 | POST   | /api/profiles/me/image         | A    | Form | `{ url: string }`    | Upload profile picture (Multipart/Form-Data)        |
+| PATCH  | /api/profiles/me/bio           | A    | `UpdateBioDto`       | 200 OK               | Update user bio (Moderated)                         |
 | GET    | /api/profiles/search?username= | A    | —    | `ProfileDto[]`       | Prefix search on normalized username; excludes self |
 | GET    | /api/profiles/{id}             | A    | —    | `ProfileDto`         | Full public profile details                         |
 | GET    | /api/profiles/{id}/summary     | A    | —    | `QuickProfileDto`    | Lightweight profile summary for headers/cards       |

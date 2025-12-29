@@ -147,4 +147,13 @@ public class FollowService(
             .Select(f => f.FolloweeId)
             .ToListAsync();
     }
+    public async Task<int> GetFollowerCountAsync(string userId)
+    {
+        return await authDb.Follows.CountAsync(f => f.FolloweeId == userId);
+    }
+
+    public async Task<int> GetFollowingCountAsync(string userId)
+    {
+        return await authDb.Follows.CountAsync(f => f.FollowerId == userId);
+    }
 }

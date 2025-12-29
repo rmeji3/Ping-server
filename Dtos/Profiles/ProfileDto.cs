@@ -12,6 +12,7 @@ public record ProfileDto(
     [Required] string FirstName,
     [Required] string LastName,
     string? ProfilePictureUrl,
+    string? Bio,
     List<ReviewDto>? Reviews,
     List<PingDetailsDto>? Pings,
     List<EventDto>? Events,
@@ -19,6 +20,8 @@ public record ProfileDto(
     int ReviewCount,
     int PingCount,
     int EventCount,
+    int FollowersCount,
+    int FollowingCount,
     bool IsFriends,
     PrivacyConstraint ReviewsPrivacy,
     PrivacyConstraint PingsPrivacy,
@@ -40,10 +43,13 @@ public record QuickProfileDto(
     [Required] string FirstName,
     [Required] string LastName,
     string? ProfilePictureUrl,
+    string? Bio,
     FriendshipStatus FriendshipStatus,
     int ReviewCount,
     int PingCount,
     int EventCount,
+    int FollowersCount,
+    int FollowingCount,
     bool IsFriends,
     PrivacyConstraint ReviewsPrivacy,
     PrivacyConstraint PingsPrivacy,
@@ -56,9 +62,16 @@ public record PersonalProfileDto(
     [Required] string FirstName,
     [Required] string LastName,
     string? ProfilePictureUrl,
+    string? Bio,
     [Required] string Email,
     List<EventDto> Events,
     List<PingDetailsDto> Pings,
     List<ReviewDto> Reviews,
+    int FollowersCount,
+    int FollowingCount,
     string[] Roles
+);
+
+public record UpdateBioDto(
+    [MaxLength(256)] string? Bio
 );

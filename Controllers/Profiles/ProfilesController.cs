@@ -177,6 +177,23 @@ namespace Ping.Controllers.Profiles
             }
         }
         
+        [HttpPatch("me/bio")]
+        public async Task<IActionResult> UpdateBio([FromBody] UpdateBioDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null) return Unauthorized();
+
+            try
+            {
+                await profileService.UpdateBioAsync(userId, dto.Bio);
+                return Ok(new { message = "Bio updated successfully." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpPost("me/image")]
         public async Task<ActionResult<string>> UploadProfileImage(IFormFile file)
         {

@@ -12,6 +12,7 @@ public interface IProfileService
     Task<PaginatedResult<ProfileDto>> SearchProfilesAsync(string query, string currentUserId, PaginationParams pagination);
     Task<PersonalProfileDto> GetMyProfileAsync(string userId);
     Task<string> UpdateProfileImageAsync(string userId, IFormFile file);
+    Task UpdateBioAsync(string userId, string? bio);
     Task<ProfileDto> GetProfileByIdAsync(string targetUserId, string currentUserId);
     Task<QuickProfileDto> GetQuickProfileAsync(string targetUserId, string currentUserId);
     Task<PaginatedResult<PingDetailsDto>> GetUserPingsAsync(string targetUserId, string currentUserId, PaginationParams pagination);

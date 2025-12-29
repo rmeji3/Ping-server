@@ -28,7 +28,8 @@ public class ProfileService(
     Ping.Services.Images.IImageService imageService,
     AppDbContext appDb,
     IFollowService followService,
-    IBlockService blockService) : IProfileService
+    IBlockService blockService,
+    Ping.Services.Moderation.IModerationService moderationService) : IProfileService
 {
     public async Task<PersonalProfileDto> GetMyProfileAsync(string userId)
     {
@@ -134,6 +135,8 @@ public class ProfileService(
         }
 
             var roles = await userManager.GetRolesAsync(user);
+            var followersCount = await followService.GetFollowerCountAsync(userId);
+            var followingCount = await followService.GetFollowingCountAsync(userId);
 
             return new PersonalProfileDto(
                 user.Id,
@@ -141,10 +144,13 @@ public class ProfileService(
                 user.FirstName,
                 user.LastName,
                 user.ProfileImageUrl,
+                user.Bio,
                 user.Email!,
                 events,
                 pings,
                 reviews,
+                followersCount,
+                followingCount,
                 roles.ToArray()
             );
     }
@@ -179,6 +185,7 @@ public class ProfileService(
                 u.FirstName,
                 u.LastName,
                 u.ProfileImageUrl,
+                u.Bio,
                 null, // Reviews
                 null, // Pings
                 null, // Events
@@ -186,6 +193,8 @@ public class ProfileService(
                 0, // ReviewCount
                 0, // PingCount
                 0, // EventCount
+                0, // FollowersCount
+                0, // FollowingCount
                 false, // IsFriends
                 u.ReviewsPrivacy,
                 u.PingsPrivacy,
@@ -220,6 +229,24 @@ public class ProfileService(
         logger.LogInformation("Updated profile image for user {UserId}. Original: {Original}, Thumb: {Thumb}", userId, originalUrl, thumbnailUrl);
 
         return originalUrl;
+    }
+
+    public async Task UpdateBioAsync(string userId, string? bio)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null) throw new KeyNotFoundException("User not found.");
+
+        if (!string.IsNullOrWhiteSpace(bio))
+        {
+            var moderation = await moderationService.CheckContentAsync(bio);
+            if (moderation.IsFlagged)
+            {
+                throw new ArgumentException($"Bio contains restricted content: {moderation.Reason}");
+            }
+        }
+        
+        user.Bio = bio;
+        await userManager.UpdateAsync(user);
     }
 
     public async Task<ProfileDto> GetProfileByIdAsync(string targetUserId, string currentUserId)
@@ -263,6 +290,9 @@ public class ProfileService(
             .Select(r => r.PingActivity!.PingId)
             .Union(appDb.Pings.Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted).Select(p => p.Id))
             .CountAsync();
+
+        var followersCount = await followService.GetFollowerCountAsync(targetUserId);
+        var followingCount = await followService.GetFollowingCountAsync(targetUserId);
 
         List<ReviewDto>? reviews = null;
         List<PingDetailsDto>? pings = null;
@@ -451,6 +481,7 @@ public class ProfileService(
             user.FirstName,
             user.LastName,
             user.ProfileImageUrl,
+            user.Bio,
             reviews,
             pings,
             events, // New Field
@@ -458,6 +489,8 @@ public class ProfileService(
             reviewCount,
             pingVisitCount,
             eventCount,
+            followersCount,
+            followingCount,
             isFriend,
             user.ReviewsPrivacy,
             user.PingsPrivacy,
@@ -504,16 +537,22 @@ public class ProfileService(
             .Union(appDb.Pings.Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted).Select(p => p.Id))
             .CountAsync();
 
+        var followersCount = await followService.GetFollowerCountAsync(targetUserId);
+        var followingCount = await followService.GetFollowingCountAsync(targetUserId);
+
         return new QuickProfileDto(
             user.Id,
             user.UserName!,   
             user.FirstName,
             user.LastName,
             user.ProfileImageUrl,
+            user.Bio,
             friendshipStatus,
             reviewCount,
             pingVisitCount,
             eventCount,
+            followersCount,
+            followingCount,
             isFriend,
             user.ReviewsPrivacy,
             user.PingsPrivacy,
