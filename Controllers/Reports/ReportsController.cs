@@ -6,6 +6,7 @@ using Ping.Dtos.Common;
 using Ping.DTOs.Reports;
 using Ping.Services.Reports;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 
@@ -18,8 +19,13 @@ namespace Ping.Controllers.Reports
     [Authorize]
     public class ReportsController(IReportService reportService) : ControllerBase
     {
+        /// <summary>
+        /// Creates a new report. Supports optional screenshot attachment.
+        /// Use multipart/form-data when uploading a screenshot.
+        /// </summary>
         [HttpPost]
-        public async Task<ActionResult> CreateReport(CreateReportDto dto)
+        [Consumes("multipart/form-data", "application/json")]
+        public async Task<ActionResult> CreateReport([FromForm] CreateReportDto dto, IFormFile? screenshot = null)
         {
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userIdStr is null || !Guid.TryParse(userIdStr, out var userId))
@@ -27,7 +33,7 @@ namespace Ping.Controllers.Reports
                 return Unauthorized();
             }
 
-            var report = await reportService.CreateReportAsync(userId, dto);
+            var report = await reportService.CreateReportAsync(userId, dto, screenshot);
             
             // returning 201 Created
             return StatusCode(201, report);

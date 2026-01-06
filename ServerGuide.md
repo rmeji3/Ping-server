@@ -226,7 +226,7 @@ Property Configuration:
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
 | Tag           | Id                 | Name, IsApproved, IsBanned, CanonicalTagId                                                                               | ReviewTags                             | Used for categorizing reviews                                                                                         |
 | UserBlock     | (BlockerId, BlockedId) | CreatedAt                                                                                                                | Blocker, Blocked                       | Separation of concern for blocking users; masks content bidirectionally                                               |
-| Report        | Id                 | ReporterId, TargetId, TargetType, Reason, Description, Status, CreatedAt                                                 | (None - Polymorphic)                    | TargetId is string; TargetType enum (Ping/PingActivity/Review/Profile/Bug); Status enum (Pending/Reviewed/Dismissed)      |
+| Report        | Id                 | ReporterId, TargetId?, TargetType, Reason, Description?, ScreenshotUrl?, Status, CreatedAt                              | (None - Polymorphic)                    | TargetId is nullable string (null for Bug reports); TargetType enum (Ping/PingActivity/Review/Profile/Bug/Event/EventComment); Status enum (Pending/Reviewed/Dismissed) |
 | PingClaim     | Id                 | UserId, PingId, Proof, Status, CreatedUtc, ReviewedUtc, ReviewerId                                                      | Ping                                   | Tracks ownership claim requests; Logic FK to User                                                                     |
 | UserActivityLog | Id               | UserId, Date, LoginCount, LastActivityUtc                                                                                | User                                   | Tracks daily unique logins per user for analytics                                                                     |
 | DailySystemMetric | Id             | Date, MetricType, Value, Dimensions                                                                                      | (None)                                 | Stores historical aggregated stats (DAU, WAU, MAU, etc.)                                                              |
@@ -309,8 +309,8 @@ Property Configuration:
 - `PaginatedResult<T>(Items[], TotalCount, PageNumber, PageSize, TotalPages)`
 
 ### Reporting
-- `CreateReportDto(TargetId, TargetType, Reason, Description?)` - TargetId is string.
-- `Report(Id, ReporterId, TargetId, TargetType, Reason, Description?, CreatedAt, Status)`
+- `CreateReportDto(TargetId?, TargetType, Reason, Description?)` - TargetId is nullable string. `null` for Bug reports; required for content reports (Ping, Review, Profile, etc.). Screenshot uploaded separately via `IFormFile`.
+- `Report(Id, ReporterId, TargetId?, TargetType, Reason, Description?, ScreenshotUrl?, CreatedAt, Status)`
 
 ### Business & Claims
 - `CreateClaimDto(PingId, Proof)`
@@ -583,10 +583,10 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/images (Q: folder) | A | Form | `{ originalUrl, thumbnailUrl }` | Resize to 500x500 thumbnail. Validates size/type. |
 
 ### ReportsController (`/api/reports`)
-| Method | Route           | Auth | Body               | Returns              | Notes                                               |
-| ------ | --------------- | ---- | ------------------ | -------------------- | --------------------------------------------------- |
-| POST   | /api/reports    | A    | `CreateReportDto`  | `Report`             | Polymorphic (TargetType enum). Returns 201.         |
-| GET    | /api/reports    | Adm  | —                  | `PaginatedResult`    | Admin only. Filters by status/page.                 |
+| Method | Route           | Auth | Body                                   | Returns              | Notes                                               |
+| ------ | --------------- | ---- | -------------------------------------- | -------------------- | --------------------------------------------------- |
+| POST   | /api/reports    | A    | `CreateReportDto` + optional `screenshot` (IFormFile) | `Report`  | Multipart/form-data for screenshot. Polymorphic (TargetType enum). Returns 201. |
+| GET    | /api/reports    | Adm  | —                                      | `PaginatedResult`    | Admin only. Filters by status/page.                 |
 
 ### ReviewsController (`/api/reviews`)
 | Method | Route                                                      | Auth | Body                      | Returns              | Notes                                              |

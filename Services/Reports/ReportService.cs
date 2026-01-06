@@ -1,17 +1,34 @@
 using System;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Ping.Data.App;
 using Ping.Dtos.Common;
 using Ping.DTOs.Reports;
 using Ping.Models.Reports;
+using Ping.Services.Storage;
 
 namespace Ping.Services.Reports
 {
-    public class ReportService(AppDbContext context) : IReportService
+    public class ReportService(AppDbContext context, IStorageService storageService) : IReportService
     {
-        public async Task<Report> CreateReportAsync(Guid reporterId, CreateReportDto dto)
+        public async Task<Report> CreateReportAsync(Guid reporterId, CreateReportDto dto, IFormFile? screenshot = null)
         {
+            // Validate: Bug reports don't need a TargetId, but all other report types do
+            if (dto.TargetType != ReportTargetType.Bug && string.IsNullOrWhiteSpace(dto.TargetId))
+            {
+                throw new ArgumentException("TargetId is required for content reports (Ping, Review, Profile, Event, etc.).");
+            }
+
+            string? screenshotUrl = null;
+
+            // Upload screenshot if provided
+            if (screenshot != null)
+            {
+                var key = $"reports/{reporterId}/{Guid.NewGuid()}{Path.GetExtension(screenshot.FileName)}";
+                screenshotUrl = await storageService.UploadFileAsync(screenshot, key);
+            }
+
             var report = new Report
             {
                 ReporterId = reporterId,
@@ -19,6 +36,7 @@ namespace Ping.Services.Reports
                 TargetType = dto.TargetType,
                 Reason = dto.Reason,
                 Description = dto.Description,
+                ScreenshotUrl = screenshotUrl,
                 CreatedAt = DateTime.UtcNow,
                 Status = ReportStatus.Pending
             };
