@@ -14,6 +14,20 @@ namespace Ping.Services.Pings
     {
         public async Task<CollectionDto> CreateCollectionAsync(string userId, CreateCollectionDto dto)
         {
+            var existing = await db.Collections
+                .FirstOrDefaultAsync(c => c.UserId == userId && c.Name.ToLower() == dto.Name.ToLower());
+            
+            if (existing != null)
+            {
+                // If "All" collection already exists (created by system), just return it
+                if (existing.Name.Equals("All", StringComparison.OrdinalIgnoreCase))
+                {
+                    return MapToDto(existing, existing.CollectionPings.Count, null); // optimized count not here, but acceptable for create return
+                }
+
+                throw new InvalidOperationException($"You already have a collection named '{dto.Name}'.");
+            }
+
             var collection = new Collection
             {
                 UserId = userId,
@@ -111,7 +125,17 @@ namespace Ping.Services.Pings
             if (collection == null) throw new KeyNotFoundException("Collection not found.");
             if (collection.UserId != userId) throw new UnauthorizedAccessException("Not your collection.");
 
-            if (dto.Name != null) collection.Name = dto.Name;
+            if (dto.Name != null) 
+            {
+                // Check name uniqueness if changing name
+                if (!collection.Name.Equals(dto.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                     var existing = await db.Collections
+                        .AnyAsync(c => c.UserId == userId && c.Name.ToLower() == dto.Name.ToLower() && c.Id != collectionId);
+                     if (existing) throw new InvalidOperationException($"You already have a collection named '{dto.Name}'.");
+                }
+                collection.Name = dto.Name;
+            }
             if (dto.IsPublic.HasValue) collection.IsPublic = dto.IsPublic.Value;
 
             await db.SaveChangesAsync();
@@ -132,6 +156,8 @@ namespace Ping.Services.Pings
             var collection = await db.Collections.FindAsync(collectionId);
             if (collection == null) throw new KeyNotFoundException("Collection not found.");
             if (collection.UserId != userId) throw new UnauthorizedAccessException("Not your collection.");
+            
+            if (collection.Name == "All") throw new InvalidOperationException("You cannot delete the 'All' collection.");
 
             db.Collections.Remove(collection);
             await db.SaveChangesAsync();
@@ -144,17 +170,21 @@ namespace Ping.Services.Pings
             if (collection.UserId != userId) throw new UnauthorizedAccessException("Not your collection.");
 
             var exists = await db.CollectionPings.AnyAsync(cp => cp.CollectionId == collectionId && cp.PingId == pingId);
-            if (exists) return;
-
-            var collectionPing = new CollectionPing
+            if (!exists)
             {
-                CollectionId = collectionId,
-                PingId = pingId,
-                AddedUtc = DateTime.UtcNow
-            };
-
-            db.CollectionPings.Add(collectionPing);
-            await db.SaveChangesAsync();
+                var collectionPing = new CollectionPing
+                {
+                    CollectionId = collectionId,
+                    PingId = pingId,
+                    AddedUtc = DateTime.UtcNow
+                };
+                db.CollectionPings.Add(collectionPing);
+                await db.SaveChangesAsync();
+            }
+            
+            // Sync with Global Favorites ("All" collection)
+            // This ensures logic: "Adding to a collection implies Favoriting"
+            await pingService.AddFavoriteAsync(pingId, userId);
         }
 
         public async Task RemovePingFromCollectionAsync(int collectionId, string userId, int pingId)

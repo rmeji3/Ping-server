@@ -479,6 +479,8 @@ public class PingService(
         if (exists)
         {
             logger.LogInformation("Ping {PingId} already favorited by {UserId}", id, userId);
+            // Ensure consistency with "All" collection even if Favorited table has it
+            await EnsurePingInAllCollectionAsync(id, userId);
             return;
         }
         
@@ -501,6 +503,8 @@ public class PingService(
             ping.Favorites++;
         }
 
+        await EnsurePingInAllCollectionAsync(id, userId);
+
         await db.SaveChangesAsync();
 
         logger.LogInformation("Ping {PingId} favorited by {UserId}", id, userId);
@@ -521,8 +525,59 @@ public class PingService(
                 ping.Favorites--;
             }
 
+            // Also remove from "All" collection
+            var allCollection = await db.Collections
+                .FirstOrDefaultAsync(c => c.UserId == userId && c.Name == "All");
+            
+            if (allCollection != null)
+            {
+                var cp = await db.CollectionPings
+                    .FirstOrDefaultAsync(x => x.CollectionId == allCollection.Id && x.PingId == id);
+                
+                if (cp != null)
+                {
+                    db.CollectionPings.Remove(cp);
+                }
+            }
+
             await db.SaveChangesAsync();
             logger.LogInformation("Ping {PingId} unfavorited by {UserId}", id, userId);
+        }
+    }
+
+    private async Task EnsurePingInAllCollectionAsync(int pingId, string userId)
+    {
+        // 1. Get or Create "All" collection
+        var allCollection = await db.Collections
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.Name == "All");
+
+        if (allCollection == null)
+        {
+            allCollection = new Collection
+            {
+                UserId = userId,
+                Name = "All",
+                IsPublic = false, // Private by default
+                CreatedUtc = DateTime.UtcNow
+            };
+            db.Collections.Add(allCollection);
+            await db.SaveChangesAsync(); // Save to get Id
+        }
+
+        // 2. Add Ping to Collection if not present
+        var exists = await db.CollectionPings
+            .AnyAsync(cp => cp.CollectionId == allCollection.Id && cp.PingId == pingId);
+
+        if (!exists)
+        {
+            db.CollectionPings.Add(new CollectionPing 
+            { 
+                CollectionId = allCollection.Id, 
+                PingId = pingId,
+                AddedUtc = DateTime.UtcNow
+            });
+            // We do not call SaveChangesAsync here to allow batching with parent method, 
+            // but parent method calls SaveChangesAsync at the end.
         }
     }
 

@@ -42,117 +42,24 @@ public class ProfileService(
 
         logger.LogDebug("Retrieved profile for {UserName}", user.UserName);
 
-        // Fetch My Upcoming Events (Public + Private)
-        var upcomingEvents = await appDb.Events
-            .AsNoTracking()
-            .Where(e => e.CreatedById == userId && e.StartTime > DateTime.UtcNow)
-            .Include(e => e.Attendees) 
-            .Include(e => e.Ping)
-            .OrderBy(e => e.StartTime)
-            .ToListAsync();
+        // Optimizations: Lists are removed from initial load. Fetched via tabs.
+        
+        var roles = await userManager.GetRolesAsync(user);
+        var followersCount = await followService.GetFollowerCountAsync(userId);
+        var followingCount = await followService.GetFollowingCountAsync(userId);
 
-        var events = new List<EventDto>();
-        if (upcomingEvents.Any())
-        {
-            var creatorSummary = new UserSummaryDto(user.Id, user.UserName!, user.FirstName, user.LastName, user.ProfileImageUrl);
-            
-            var distinctUserIds = upcomingEvents.SelectMany(e => e.Attendees.Select(a => a.UserId)).Distinct().ToList();
-            var attendeeUsers = await userManager.Users
-                .AsNoTracking()
-                .Where(u => distinctUserIds.Contains(u.Id))
-                .ToDictionaryAsync(u => u.Id);
-
-            var friendIds = await followService.GetMutualIdsAsync(userId);
-
-            foreach (var evt in upcomingEvents)
-            {
-                events.Add(EventMapper.MapToDto(evt, creatorSummary, attendeeUsers, userId, friendIds));
-            }
-
-        }
-
-        // Fetch My Reviews
-        var reviews = await appDb.Reviews.AsNoTracking()
-            .Where(r => r.UserId == userId)
-            .Include(r => r.ReviewTags).ThenInclude(rt => rt.Tag)
-            .OrderByDescending(r => r.CreatedAt)
-            .Select(r => new ReviewDto(
-                r.Id,
-                r.Rating,
-                r.Content,
-                r.UserId,
-                user.UserName!,
-                user.ProfileImageUrl,
-                r.ImageUrl,
-                r.ThumbnailUrl,
-                r.CreatedAt,
-                r.LikesList.Count,
-                r.LikesList.Any(l => l.UserId == userId),
-                r.ReviewTags.Select(rt => rt.Tag.Name).ToList()
-            ))
-            .ToListAsync();
-
-        // Fetch My Pings (Created + Visited)
-        // Created Pings
-        var createdPingsQuery = appDb.Pings.AsNoTracking()
-            .Where(p => p.OwnerUserId == userId && !p.IsDeleted)
-            .Select(p => new { Ping = p, Date = p.CreatedUtc });
-
-        // Visited Pings (from Reviews)
-        var visitedPingsQuery = appDb.Reviews.AsNoTracking()
-            .Where(r => r.UserId == userId)
-            .Select(r => new { Ping = r.PingActivity!.Ping, Date = r.CreatedAt })
-            .Where(x => !x.Ping.IsDeleted);
-
-        var combinedPings = await createdPingsQuery
-            .Union(visitedPingsQuery)
-            .GroupBy(x => x.Ping.Id)
-            .Select(g => g.OrderByDescending(x => x.Date).First().Ping)
-            .ToListAsync();
-
-        var pings = new List<PingDetailsDto>();
-        foreach (var p in combinedPings)
-        {
-            pings.Add(new PingDetailsDto(
-                p.Id,
-                p.Name,
-                p.Address ?? string.Empty,
-                p.Latitude,
-                p.Longitude,
-                p.Visibility,
-                p.Type,
-                p.OwnerUserId == userId, // IsOwner
-                false, // IsFavorited - simpler to skip for "My Profile" summary or fetch if needed. Keeping it false for now as per other endpoints to avoid N+1
-                0, // Favorites count - skipping for summary
-                Array.Empty<PingActivitySummaryDto>(),
-                p.PingGenre?.Name,
-                null, // ClaimStatus not loaded here
-                p.IsClaimed,
-                p.PingGenreId,
-                p.PingGenre?.Name,
-                p.GooglePlaceId
-            ));
-        }
-
-            var roles = await userManager.GetRolesAsync(user);
-            var followersCount = await followService.GetFollowerCountAsync(userId);
-            var followingCount = await followService.GetFollowingCountAsync(userId);
-
-            return new PersonalProfileDto(
-                user.Id,
-                user.UserName!,
-                user.FirstName,
-                user.LastName,
-                user.ProfileImageUrl,
-                user.Bio,
-                user.Email!,
-                events,
-                pings,
-                reviews,
-                followersCount,
-                followingCount,
-                roles.ToArray()
-            );
+        return new PersonalProfileDto(
+            user.Id,
+            user.UserName!,
+            user.FirstName,
+            user.LastName,
+            user.ProfileImageUrl,
+            user.Bio,
+            user.Email!,
+            followersCount,
+            followingCount,
+            roles.ToArray()
+        );
     }
 
     public async Task<PaginatedResult<ProfileDto>> SearchProfilesAsync(string query, string currentUserId, PaginationParams pagination)
@@ -186,10 +93,7 @@ public class ProfileService(
                 u.LastName,
                 u.ProfileImageUrl,
                 u.Bio,
-                null, // Reviews
-                null, // Pings
-                null, // Events
-                FriendshipStatus.None, // FriendshipStatus - not calculated for search list yet
+                FriendshipStatus.None, // FriendshipStatus
                 0, // ReviewCount
                 0, // PingCount
                 0, // EventCount
@@ -294,187 +198,6 @@ public class ProfileService(
         var followersCount = await followService.GetFollowerCountAsync(targetUserId);
         var followingCount = await followService.GetFollowingCountAsync(targetUserId);
 
-        List<ReviewDto>? reviews = null;
-        List<PingDetailsDto>? pings = null;
-
-        // Privacy - Reviews
-        bool showReviews = isSelf || 
-                           user.ReviewsPrivacy == AppUserPrivacy.Public || 
-                           (user.ReviewsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
-        
-        if (showReviews) 
-        {
-             // Mapping Review to Dto. Simple mapping.
-             // Note: ReviewDto definition?
-             // public record ReviewDto(int Id, int Rating, string? Content, string UserId, string UserName, DateTime CreatedAt, int Likes, bool IsLiked, List<string> Tags);
-             // We need tags and likes count.
-             // For simplicity, fetching basic info.
-             
-             reviews = await appDb.Reviews.AsNoTracking()
-                 .Where(r => r.UserId == targetUserId)
-                 .Include(r => r.ReviewTags).ThenInclude(rt => rt.Tag)
-                 .OrderByDescending(r => r.CreatedAt)
-                 .Take(5)
-                 .Select(r => new ReviewDto(
-                     r.Id,
-                     r.Rating,
-                     r.Content,
-                     r.UserId,
-                     user.UserName!, // Target user name
-                     user.ProfileImageUrl,
-                     r.ImageUrl,
-                     r.ThumbnailUrl,
-                     r.CreatedAt,
-                     r.LikesList.Count,
-                     r.LikesList.Any(l => l.UserId == currentUserId), // IsLiked
-                     r.ReviewTags.Select(rt => rt.Tag.Name).ToList()
-                 ))
-                 .ToListAsync();
-        }
-
-            // Privacy - Pings
-            bool showPings = isSelf || 
-                             user.PingsPrivacy == AppUserPrivacy.Public || 
-                             (user.PingsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
-            
-            if (showPings)
-            {
-                // Fetch Created Pings
-                var createdPingsQuery = appDb.Pings.AsNoTracking()
-                    .Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted);
-
-                // Fetch Visited Pings (Distinct pings from reviews)
-                var visitedPingsQuery = appDb.Reviews.AsNoTracking()
-                    .Where(r => r.UserId == targetUserId)
-                    .Select(r => r.PingActivity!.Ping)
-                    .Where(p => !p.IsDeleted);
-
-                // Combine and Deduplicate
-                // Note: Union might be heavy if fields differ, but purely on ID/Entity it works for EF.
-                // However, doing Union on queries with different Selects/Sources can be tricky in EF Core versions.
-                // Safest is to fetch IDs or do two list fetches if lists are small, but let's try distinct ID fetch first to be efficient?
-                // Or just Concat results in memory? Profiles usually have finite places.
-                // Let's list specific fields needed for DTO to make it lighter.
-                
-                var createdPings = await createdPingsQuery.ToListAsync();
-                var visitedPings = await visitedPingsQuery.ToListAsync();
-                
-                var allPings = createdPings.Concat(visitedPings)
-                    .GroupBy(p => p.Id)
-                    .Select(g => g.First())
-                    .ToList();
-
-                var visiblePings = new List<PingDetailsDto>();
-
-                foreach (var p in allPings)
-                {
-                    bool isPingOwner = p.OwnerUserId == currentUserId;
-                    bool isPingRefOwner = p.OwnerUserId == targetUserId; // The profile owner owns this ping
-
-                    bool canSee = false;
-
-                    // 1. If I own the ping, I see it.
-                    if (isPingOwner)
-                    {
-                        canSee = true;
-                    }
-                    // 2. If it is Public, I see it.
-                    else if (p.Visibility == Models.Pings.PingVisibility.Public)
-                    {
-                        canSee = true;
-                    }
-                    // 3. If it is Friends only...
-                    else if (p.Visibility == Models.Pings.PingVisibility.Friends)
-                    {
-                        // Logic: Viewer must be friend of Ping Owner.
-                        if (isPingRefOwner)
-                        {
-                            // Ping is owned by Profile Owner.
-                            // We already know friendship status with Profile Owner (isFriend).
-                            if (isFriend) canSee = true;
-                        }
-                        else
-                        {
-                            // Place is owned by someone else (Third Party).
-                            // Viewer must be friend of Third Party.
-                            // This would require checking friendship with p.OwnerUserId.
-                            // To avoid N+1 DB calls for random places, we might SKIP this check or optimize.
-                            // For now, to be safe/strict on privacy:
-                            // If we can't verify friendship easily, assume NO access unless it's the profile owner's place.
-                            // However, arguably if it's in the list, we might want to show it? NO, privacy first.
-                            // Optimization: If `isFriend` (with specific user), we access.
-                            // We'll skip complex check for third party friends for now (assume hidden if not public/owned).
-                        }
-                    }
-                    // 4. Private: Only owner sees (already handled by #1).
-
-                    if (canSee)
-                    {
-                        visiblePings.Add(new PingDetailsDto(
-                            p.Id,
-                            p.Name,
-                            p.Address ?? string.Empty,
-                            p.Latitude,
-                            p.Longitude,
-                            p.Visibility,
-                            p.Type,
-                            isPingOwner,
-                            false, // IsFavorited
-                            0, // Favorites count
-                            Array.Empty<PingActivitySummaryDto>(),
-                            p.PingGenre?.Name,
-                            null,
-                            p.IsClaimed,
-                            p.PingGenreId,
-                            p.PingGenre?.Name,
-                            p.GooglePlaceId
-                        ));
-                    }
-                }
-                
-                pings = visiblePings;
-            }
-
-            // Fetch Events (Upcoming)
-            // Rule: 
-            // - If Owner (isSelf): Show All Upcoming (Public + Private)
-            // - If Visitor: Show Only Public Upcoming
-            var upcomingEvents = await appDb.Events
-                .AsNoTracking()
-                .Where(e => e.CreatedById == targetUserId && 
-                           (e.IsPublic || isSelf) && 
-                           e.StartTime > DateTime.UtcNow)
-                .Include(e => e.Attendees) // Needed for status check
-                .Include(e => e.Ping)
-                .OrderBy(e => e.StartTime)
-                .ToListAsync();
-
-            var events = new List<EventDto>();
-            if (upcomingEvents.Any())
-            {
-                // Prepare Mapper dependencies
-                // 1. Creator Summary (Mock/Reconstruct since we have 'user' object)
-                var creatorSummary = new UserSummaryDto(user.Id, user.UserName!, user.FirstName, user.LastName, user.ProfileImageUrl);
-
-                // 2. Attendee Map (For showing attendees in the event card - EventMapper expects this)
-                // Since fetching all attendees for all events might be heavy, and Profile usually shows a summary...
-                // EventMapper uses `attendeeMap` to populate `Attendees` list in DTO.
-                // Optimally: fetch all attendee user IDs from these events, then fetch AppUsers.
-                var distinctUserIds = upcomingEvents.SelectMany(e => e.Attendees.Select(a => a.UserId)).Distinct().ToList();
-                var attendeeUsers = await userManager.Users
-                    .AsNoTracking()
-                    .Where(u => distinctUserIds.Contains(u.Id))
-                    .ToDictionaryAsync(u => u.Id);
-
-                var friendIds = await followService.GetMutualIdsAsync(currentUserId);
-
-                foreach (var evt in upcomingEvents)
-                {
-                    events.Add(EventMapper.MapToDto(evt, creatorSummary, attendeeUsers, currentUserId, friendIds));
-                }
-            }
-
-
         return new ProfileDto(
             user.Id,
             user.UserName!,   // DisplayName (using UserName for now)
@@ -482,9 +205,6 @@ public class ProfileService(
             user.LastName,
             user.ProfileImageUrl,
             user.Bio,
-            reviews,
-            pings,
-            events, // New Field
             friendshipStatus,
             reviewCount,
             pingVisitCount,

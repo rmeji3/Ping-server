@@ -282,8 +282,8 @@ Property Configuration:
 - `PingDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Favorites, Activities[PingActivitySummaryDto], PingGenre?, ClaimStatus?, IsClaimed, GooglePlaceId?)`
 
 ### Profiles
-- `ProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?, Bio?, FollowersCount, FollowingCount)`
-- `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl, Bio?, Email, Events[], Pings[], Reviews[], Roles[], FollowersCount, FollowingCount)`
+- `ProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?, Bio?, FollowersCount, FollowingCount, FriendshipStatus, ReviewCount, PingCount, EventCount, IsFriends, PrivacySettings)`
+- `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl, Bio?, Email, FollowersCount, FollowingCount, Roles[])`
 - `UpdateBioDto(Bio)`
 
 ### Reviews
@@ -588,6 +588,18 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/reports    | A    | `CreateReportDto` + optional `screenshot` (IFormFile) | `Report`  | Multipart/form-data for screenshot. Polymorphic (TargetType enum). Returns 201. |
 | GET    | /api/reports    | Adm  | —                                      | `PaginatedResult`    | Admin only. Filters by status/page.                 |
 
+### CollectionsController (`/api/collections`)
+| Method | Route                       | Auth | Body                    | Returns             | Notes                                                 |
+| ------ | --------------------------- | ---- | ----------------------- | ------------------- | ----------------------------------------------------- |
+| GET    | /api/collections/me         | A    | —                       | `CollectionDto[]`| Get all my collections (including 'All')              |
+| GET    | /api/collections/user/{id}  | A    | —                       | `CollectionDto[]`| Get user's public collections                         |
+| POST   | /api/collections            | A    | `CreateCollectionDto`   | `CollectionDto`     | Create new collection. Name 'All' returns existing.   |
+| GET    | /api/collections/{id}       | A    | —                       | `CollectionDetails` | Get details (pings). Respects privacy.                |
+| PATCH  | /api/collections/{id}       | A    | `UpdateCollectionDto`   | `CollectionDto`     | Update Name/Privacy.                                  |
+| DELETE | /api/collections/{id}       | A    | —                       | 204                 | Delete collection (cannot delete 'All').              |
+| POST   | /api/collections/{id}/pings | A    | `AddPingToCollectionDto`| 200                 | Add ping to collection (and to Favorites/'All').      |
+| DELETE | /api/collections/{id}/pings/{pId} | A | —                   | 204                 | Remove ping from collection.                          |
+
 ### ReviewsController (`/api/reviews`)
 | Method | Route                                                      | Auth | Body                      | Returns              | Notes                                              |
 | ------ | ---------------------------------------------------------- | ---- | ------------------------- | -------------------- | -------------------------------------------------- |
@@ -596,7 +608,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | GET    | /api/reviews/explore                                       | A    | `ExploreReviewsFilterDto` | `PaginatedResult<ExploreReviewDto>` | Paginated review feed with filters                 |
 | POST   | /api/reviews/{reviewId}/like                               | A    | —                         | 200 OK               | Like a review (idempotent)                         |
 | DELETE | /api/reviews/{reviewId}/like                               | A    | —                         | 204 NoContent        | Unlike a review (idempotent)                       |
-| GET    | /api/reviews/liked (Q: pageNumber, pageSize)               | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's liked reviews                               |
+| GET    | /api/reviews/liked (Q: pageNumber, pageSize)               | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's liked reviews (Alias for profiles/me/likes) |
 | GET    | /api/reviews/my-reviews (Q: pageNumber, pageSize)          | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's own reviews                                 |
 | GET    | /api/reviews/friends (Q: pageNumber, pageSize)             | A    | —                         | `PaginatedResult<ExploreReviewDto>` | Friends' reviews sorted by date                    |
 
@@ -731,6 +743,21 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 ### CheckIns
 - Merged into `Review` model via `ReviewType` enum.
 - **Status**: Fully implemented.
+
+### Collections
+- **System Collections**:
+  - Every user has an **'All'** collection (Private by default, created automatically on first favorite/access).
+  - The **'All'** collection is synchronized with the `Favorited` table.
+  - Adding a ping to ANY collection automatically adds it to the **'All'** collection (and marks it as Favorited).
+  - Removing a ping from a custom collection does NOT remove it from **'All'**.
+  - Removing a ping from **'All'** (Unfavoriting) removes it from **'All'** but does NOT remove it from custom collections (Review this: Should it? Current impl: No).
+  - Users CANNOT delete the **'All'** collection.
+  - Users CANNOT create a duplicate collection named **'All'**.
+- **Privacy**:
+  - Collections can be Public or Private.
+  - Private collections are visible ONLY to the owner.
+  - Public collections are visible to everyone.
+  - **'All'** defaults to Private but can be made Public by the user.
 
 ### Repings
 - Users can repost (Reping) reviews.
