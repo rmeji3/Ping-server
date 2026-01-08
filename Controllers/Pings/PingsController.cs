@@ -111,8 +111,8 @@ namespace Ping.Controllers.Pings
             return Ok(result);
         }
 
-        // POST /api/pings/favorited/{id}
-        [HttpPost("favorited/{id:int}")]
+        // POST /api/pings/favorites/{id}
+        [HttpPost("favorites/{id:int}")]
         public async Task<ActionResult> AddFavorite(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -130,8 +130,8 @@ namespace Ping.Controllers.Pings
             }
         }
 
-        // DELETE /api/pings/favorited/{id}
-        [HttpDelete("favorited/{id:int}")]
+        // DELETE /api/pings/favorites/{id}
+        [HttpDelete("favorites/{id:int}")]
         public async Task<ActionResult> Unfavorite(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -142,8 +142,8 @@ namespace Ping.Controllers.Pings
             return NoContent();
         }
 
-        // GET /api/pings/favorited
-        [HttpGet("favorited")]
+        // GET /api/pings/favorites
+        [HttpGet("favorites")]
         public async Task<ActionResult<PaginatedResult<PingDetailsDto>>> GetFavorited(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)

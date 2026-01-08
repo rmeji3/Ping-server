@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 using Ping.Services.Images;
+using Ping.Services.Moderation;
 using System.Security.Claims;
 
 namespace Ping.Controllers;
@@ -11,7 +12,7 @@ namespace Ping.Controllers;
 [Route("api/[controller]")]
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
-public class ImagesController(IImageService imageService) : ControllerBase
+public class ImagesController(IImageService imageService, IModerationService moderationService) : ControllerBase
 {
     // POST /api/images?folder=events
     [HttpPost]
@@ -26,6 +27,25 @@ public class ImagesController(IImageService imageService) : ControllerBase
         if (!allowedFolders.Contains(folder.ToLower()))
         {
             return BadRequest("Invalid folder. Allowed: events, reviews");
+        }
+
+        // Validate content type before reading
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp", "image/gif" };
+        if (!allowedTypes.Contains(file.ContentType))
+             return BadRequest("Invalid file type.");
+
+        // Moderate Image
+        using (var ms = new MemoryStream())
+        {
+            await file.CopyToAsync(ms);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+            var dataUrl = $"data:{file.ContentType};base64,{base64}";
+            
+            var moderation = await moderationService.CheckImageAsync(dataUrl);
+            if (moderation.IsFlagged)
+            {
+                return BadRequest($"Image rejected by moderation: {moderation.Reason}");
+            }
         }
 
         try

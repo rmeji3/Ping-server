@@ -73,6 +73,82 @@ public class OpenAIModerationService(HttpClient http, IConfiguration config, ILo
         }
     }
 
+    public async Task<ModerationResult> CheckImageAsync(string base64Image)
+    {
+        if (string.IsNullOrWhiteSpace(base64Image))
+            return new ModerationResult(false, null);
+
+        var apiKey = config["OPENAI_API_KEY"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            logger.LogWarning("OPENAI_API_KEY is missing. Image moderation failing open.");
+            return new ModerationResult(false, null);
+        }
+
+        try
+        {
+            var requestBody = new
+            {
+                model = "omni-moderation-latest",
+                input = new object[]
+                {
+                    new
+                    {
+                        type = "image_url",
+                        image_url = new
+                        {
+                            url = base64Image
+                        }
+                    }
+                }
+            };
+            var json = JsonSerializer.Serialize(requestBody);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, Endpoint);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Content = content;
+
+            var response = await http.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                logger.LogError("Moderation API failed: {StatusCode} - {Body}", response.StatusCode, errorBody);
+                return new ModerationResult(false, null); // Fail open on API error
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            var result = JsonSerializer.Deserialize<ModerationResponse>(responseJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (result?.Results != null && result.Results.Count > 0)
+            {
+                var first = result.Results[0];
+                if (first.Flagged)
+                {
+                    // Find triggered categories
+                    var reasons = new List<string>();
+                    foreach (var prop in typeof(Categories).GetProperties())
+                    {
+                        if (prop.PropertyType == typeof(bool) && (bool)prop.GetValue(first.Categories)!)
+                        {
+                            reasons.Add(prop.Name);
+                        }
+                    }
+                    var reasonStr = reasons.Count > 0 ? string.Join(", ", reasons) : "Content violation";
+                    return new ModerationResult(true, reasonStr);
+                }
+            }
+
+            return new ModerationResult(false, null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Image moderation service exception");
+            return new ModerationResult(false, null); // Fail open
+        }
+    }
+
     // Response models
     private class ModerationResponse
     {

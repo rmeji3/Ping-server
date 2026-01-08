@@ -383,8 +383,10 @@ Property Configuration:
 
 #### ModerationService (`IModerationService`)
 - **Implementation**: `OpenAIModerationService`.
-- **Method**: `CheckContentAsync(text)`.
-- **Backing**: OpenAI Free Moderation API (`v1/moderations`).
+- **Methods**: 
+  - `CheckContentAsync(text)`: Checks text content.
+  - `CheckImageAsync(base64Image)`: Checks image content (supporting Base64 data URIs).
+- **Backing**: OpenAI Moderation API (`omni-moderation-latest`).
 - **Behavior**: Returns `ModerationResult(IsFlagged, Reason)`. Rejects offensive content with `ArgumentException`.
 
 #### SemanticService (`ISemanticService`)
@@ -545,9 +547,9 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/pings                                                                        | A    | `UpsertPingDto` | `PingDetailsDto`   | Daily per-user creation limit (10); Verified type requires address; Private/Friends auto-converted to Custom    |
 | GET    | /api/pings/{id}                                                                   | A    | —                | `PingDetailsDto`   | Respects visibility: Private (owner only), Friends (owner + friends), Public (all)                              |
 | GET    | /api/pings/nearby (Q: lat,lng,radiusKm,activityName,pingGenre,visibility,type, pageNumber, pageSize) | A    | —                | `PaginatedResult<PingDetailsDto>` | Geo-search with optional filters: visibility (Public/Private/Friends), type (Verified/Custom), activity filters |
-| POST   | /api/pings/favorited/{id}                                                         | A    | —                | 200 OK              | Adds ping to favorites; prevents duplicates, validates ping exists                                            |
-| DELETE | /api/pings/favorited/{id}                                                         | A    | —                | 204 NoContent       | Removes ping from favorites; idempotent                                                                        |
-| GET    | /api/pings/favorited (Q: pageNumber, pageSize)                                    | A    | —                | `PaginatedResult<PingDetailsDto>` | Returns all favorited pings with activities                                                                    |
+| POST   | /api/pings/favorites/{id}                                          | A    | —                | 200 OK              | Adds ping to favorites; prevents duplicates, validates ping exists                                            |
+| DELETE | /api/pings/favorites/{id}                                          | A    | —                | 204 NoContent       | Removes ping from favorites; idempotent                                                                        |
+| GET    | /api/pings/favorites (Q: pageNumber, pageSize)                                    | A    | —                | `PaginatedResult<PingDetailsDto>` | Returns all favorited pings with activities                                                                    |
 
 ### ProfilesController (`/api/profiles`)
 | Method | Route                          | Auth | Body | Returns              | Notes                                               |
@@ -942,8 +944,8 @@ Multi-layered rate limiting protects API from abuse and ensures fair resource al
 ## 16. Content Moderation & AI
 
 ### Moderation
-- **Scope**: User-generated text (Reviews, Ping Names, Activity Names, Tags).
-- **Service**: OpenAI Moderation API (Free).
+- **Scope**: User-generated text (Reviews, Ping Names, Activity Names, Tags) and **Images** (General Uploads, Profile Pictures).
+- **Service**: OpenAI Moderation API (`omni-moderation-latest` for images).
 - **Policy**:
   - Hate, Harassment, Self-harm, Violence, Sexual content => Rejected.
   - Error: 400 Bad Request with "Content rejected: Reason".

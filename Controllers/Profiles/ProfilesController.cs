@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Ping.Dtos.Profiles;
 using Ping.Services.Profiles;
 using Ping.Services.Reviews;
+using Ping.Services.Moderation;
 using Ping.Dtos.Common;
 using Ping.Dtos.Reviews;
 using Ping.Dtos.Pings;
@@ -19,7 +20,7 @@ namespace Ping.Controllers.Profiles
     [Route("api/[controller]")]
     [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize]
-    public class ProfilesController(IProfileService profileService, IReviewService reviewService) : ControllerBase
+    public class ProfilesController(IProfileService profileService, IReviewService reviewService, IModerationService moderationService) : ControllerBase
     {
         // GET /api/profiles/me
         [HttpGet("me")]
@@ -199,6 +200,19 @@ namespace Ping.Controllers.Profiles
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null) return Unauthorized();
+
+            if (file == null || file.Length == 0) return BadRequest("File is empty.");
+
+            // Moderate Image
+            using (var ms = new MemoryStream())
+            {
+                await file.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                var dataUrl = $"data:{file.ContentType};base64,{base64}";
+                var moderation = await moderationService.CheckImageAsync(dataUrl);
+                if (moderation.IsFlagged)
+                    return BadRequest($"Image rejected by moderation: {moderation.Reason}");
+            }
 
             try
             {
