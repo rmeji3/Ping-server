@@ -235,6 +235,7 @@ public class ReviewService(
 
     public async Task<PaginatedResult<ExploreReviewDto>> GetExploreReviewsAsync(ExploreReviewsFilterDto filter, string? userId, PaginationParams pagination)
     {
+        var scope = filter.Scope?.ToLowerInvariant() ?? "global";
 
         var query = appDb.Reviews
             .AsNoTracking()
@@ -244,8 +245,24 @@ public class ReviewService(
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
             .Where(r => !r.PingActivity.Ping.IsDeleted)
-            .Where(r => r.PingActivity.Ping.Visibility == PingVisibility.Public)
             .AsQueryable();
+
+        if (scope == "friends" && userId != null)
+        {
+            var following = await followService.GetFollowingAsync(userId, new PaginationParams { PageNumber = 1, PageSize = 1000 });
+            var friendIds = following.Items.Select(f => f.Id).ToHashSet();
+            
+            query = query.Where(r => friendIds.Contains(r.UserId));
+            // For friends feed, we show Public pings OR Friends-only pings 
+            // (Note: This is a simplified check; strict friendship with Ping Owner is usually checked at specific access, 
+            // but for feed consistency with GetFriendsFeedAsync, we allow Public/Friends visibility here)
+            query = query.Where(r => r.PingActivity.Ping.Visibility == PingVisibility.Public || r.PingActivity.Ping.Visibility == PingVisibility.Friends);
+        }
+        else
+        {
+            // Global scope: Only Public pings
+            query = query.Where(r => r.PingActivity.Ping.Visibility == PingVisibility.Public);
+        }
 
         if (userId != null)
         {
@@ -254,6 +271,16 @@ public class ReviewService(
             {
                 query = query.Where(r => !blacklistedIds.Contains(r.UserId));
             }
+        }
+
+        // Filter by Search Query
+        if (!string.IsNullOrWhiteSpace(filter.SearchQuery))
+        {
+            var search = filter.SearchQuery.Trim().ToLower();
+            query = query.Where(r => 
+                (r.Content != null && r.Content.ToLower().Contains(search)) ||
+                r.PingActivity.Name.ToLower().Contains(search) ||
+                r.PingActivity.Ping.Name.ToLower().Contains(search));
         }
 
         // Filter by PingGenre
@@ -299,7 +326,14 @@ public class ReviewService(
                                      r.PingActivity.Ping.Longitude >= minLon && r.PingActivity.Ping.Longitude <= maxLon);
         }
 
-        query = query.OrderByDescending(r => r.Likes);
+        if (scope == "friends")
+        {
+            query = query.OrderByDescending(r => r.CreatedAt);
+        }
+        else
+        {
+            query = query.OrderByDescending(r => r.Likes);
+        }
 
         var count = await query.CountAsync();
         var reviews = await query

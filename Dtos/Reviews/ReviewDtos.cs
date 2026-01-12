@@ -57,8 +57,10 @@ public class ExploreReviewsFilterDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public double? RadiusKm { get; set; }
+    public string? SearchQuery { get; set; }
     public List<string>? Tags { get; set; }
     public List<int>? PingGenreIds { get; set; }
+    public string Scope { get; set; } = "global";
     public int PageSize { get; set; } = 20;
     public int PageNumber { get; set; } = 1;
 }

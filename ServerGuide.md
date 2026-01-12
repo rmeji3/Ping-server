@@ -295,7 +295,7 @@ Property Configuration:
 ### Repings
 - `RepingDto(Id, ReviewId, UserId, CreatedAt, Privacy, Review(ExploreReviewDto))`
 - `RepostReviewDto(Privacy)`
-- `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, PingGenreIds?[], PageSize, PageNumber)`
+- `ExploreReviewsFilterDto(Latitude?, Longitude?, RadiusKm?, SearchQuery?, PingGenreIds?[], Scope? ["global"/"friends"], PageSize, PageNumber)`
 
 ### Tags
 - `TagDto(Id, Name, Count, IsApproved, IsBanned)`
@@ -605,13 +605,14 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 ### ReviewsController (`/api/reviews`)
 | Method | Route                                                      | Auth | Body                      | Returns              | Notes                                              |
 | ------ | ---------------------------------------------------------- | ---- | ------------------------- | -------------------- | -------------------------------------------------- |
-| POST   | /api/reviews/{pingActivityId}                             | A    | `CreateReviewDto`         | `ReviewDto`          | Creates review for activity                        |
-| GET    | /api/reviews/{pingActivityId}?scope={mine/friends/global}&pageNumber&pageSize | A    | —                         | `PaginatedResult<UserReviewsDto>`   | Returns reviews grouped by user (Review + History) |
-| GET    | /api/reviews/explore                                       | A    | `ExploreReviewsFilterDto` | `PaginatedResult<ExploreReviewDto>` | Paginated review feed with filters                 |
+| POST   | /api/ping-activities/{id}/reviews                         | A    | `CreateReviewDto`         | `ReviewDto`          | Creates review for activity                        |
+| GET    | /api/ping-activities/{id}/reviews?scope={mine/friends/global}&pageNumber&pageSize | A | — | `PaginatedResult<UserReviewsDto>` | Returns reviews grouped by user (Review + History) |
+| GET    | /api/reviews/explore                                       | A    | `ExploreReviewsFilterDto` | `PaginatedResult<ExploreReviewDto>` | Review feed. Scope: 'global' (Trending) or 'friends' (Recent). |
 | POST   | /api/reviews/{reviewId}/like                               | A    | —                         | 200 OK               | Like a review (idempotent)                         |
 | DELETE | /api/reviews/{reviewId}/like                               | A    | —                         | 204 NoContent        | Unlike a review (idempotent)                       |
+| POST   | /api/reviews/{reviewId}/unlike                             | A    | —                         | 204 NoContent        | Unlike a review (Legacy compatibility)             |
 | GET    | /api/reviews/liked (Q: pageNumber, pageSize)               | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's liked reviews (Alias for profiles/me/likes) |
-| GET    | /api/reviews/my-reviews (Q: pageNumber, pageSize)          | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's own reviews                                 |
+| GET    | /api/reviews/me (Q: pageNumber, pageSize)                  | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's own reviews                                 |
 | GET    | /api/reviews/friends (Q: pageNumber, pageSize)             | A    | —                         | `PaginatedResult<ExploreReviewDto>` | Friends' reviews sorted by date                    |
 
 ### TagsController (`/api/tags`)

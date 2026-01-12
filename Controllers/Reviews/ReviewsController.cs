@@ -72,6 +72,7 @@ namespace Ping.Controllers.Reviews
 
         // GET /api/reviews/explore
         [HttpGet("/api/reviews/explore")]
+        [HttpGet("/api/v{version:apiVersion}/reviews/explore")]
         public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetExploreReviews(
             [FromQuery] ExploreReviewsFilterDto filter,
             [FromQuery] int pageNumber = 1,
@@ -84,7 +85,8 @@ namespace Ping.Controllers.Reviews
         }
 
         // POST /api/reviews/{reviewId}/like
-        [HttpPost("{reviewId:int}/like")]
+        [HttpPost("/api/reviews/{reviewId:int}/like")]
+        [HttpPost("/api/v{version:apiVersion}/reviews/{reviewId:int}/like")]
         public async Task<IActionResult> LikeReview(int reviewId)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -107,8 +109,11 @@ namespace Ping.Controllers.Reviews
             }
         }
 
-        // POST /api/reviews/{reviewId}/unlike
-        [HttpPost("{reviewId:int}/unlike")]
+        // DELETE /api/reviews/{reviewId}/like
+        [HttpDelete("/api/reviews/{reviewId:int}/like")]
+        [HttpDelete("/api/v{version:apiVersion}/reviews/{reviewId:int}/like")]
+        [HttpPost("/api/reviews/{reviewId:int}/unlike")] // Backward compatibility
+        [HttpPost("/api/v{version:apiVersion}/reviews/{reviewId:int}/unlike")]
         public async Task<IActionResult> UnlikeReview(int reviewId)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -131,8 +136,9 @@ namespace Ping.Controllers.Reviews
             }
         }
 
-        // GET /api/reviews/liked?pageNumber=1&pageSize=20
+        // GET /api/reviews/liked
         [HttpGet("/api/reviews/liked")]
+        [HttpGet("/api/v{version:apiVersion}/reviews/liked")]
         public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetLikedReviews(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
@@ -150,8 +156,9 @@ namespace Ping.Controllers.Reviews
             return Ok(reviews);
         }
 
-        // GET /api/reviews/me?pageNumber=1&pageSize=20
+        // GET /api/reviews/me
         [HttpGet("/api/reviews/me")]
+        [HttpGet("/api/v{version:apiVersion}/reviews/me")]
         public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetMyReviews(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
@@ -168,7 +175,9 @@ namespace Ping.Controllers.Reviews
             logger.LogInformation("GetMyReviews: Reviews fetched for {UserId}", userId);
             return Ok(reviews);
         }
+        // GET /api/reviews/friends
         [HttpGet("/api/reviews/friends")]
+        [HttpGet("/api/v{version:apiVersion}/reviews/friends")]
         public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetFriendsFeed(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
