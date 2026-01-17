@@ -5,6 +5,7 @@ using Ping.Models.Reviews;
 using Ping.Models.Reports;
 using Ping.Models.Users;
 using Ping.Models.Business;
+using Ping.Models.Search;
 using Ping.Models;
 using NpgsqlTypes; // For NpgsqlTsVector
 using Npgsql.EntityFrameworkCore.PostgreSQL; // For HasGeneratedTsVectorColumn extensions
@@ -33,6 +34,7 @@ namespace Ping.Data.App
         public DbSet<VerificationRequest> VerificationRequests => Set<VerificationRequest>();
         public DbSet<Collection> Collections => Set<Collection>();
         public DbSet<CollectionPing> CollectionPings => Set<CollectionPing>();
+        public DbSet<SearchHistory> SearchHistories => Set<SearchHistory>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -146,6 +148,10 @@ namespace Ping.Data.App
             // CollectionPing: composite key
             builder.Entity<CollectionPing>()
                 .HasKey(cp => new { cp.CollectionId, cp.PingId });
+
+            // SearchHistory: Index on UserId
+            builder.Entity<SearchHistory>()
+                .HasIndex(sh => sh.UserId);
 
             // ---------- Relationships ----------
 

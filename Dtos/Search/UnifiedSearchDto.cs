@@ -1,7 +1,7 @@
 using Ping.Dtos.Common;
 using Ping.Dtos.Profiles;
 using Ping.Dtos.Pings;
-using Ping.Dtos.Events;
+
 using System.ComponentModel.DataAnnotations;
 
 namespace Ping.Dtos.Search;
@@ -15,12 +15,6 @@ public record UnifiedSearchFilterDto(
     double? Latitude = null,
     double? Longitude = null,
     double? RadiusKm = null,
-    // Event specific
-    int? EventGenreId = null,
-    double? MinPrice = null,
-    double? MaxPrice = null,
-    DateTime? FromDate = null,
-    DateTime? ToDate = null,
     // Ping specific
     int? PingGenreId = null,
     string[]? Tags = null
@@ -28,6 +22,5 @@ public record UnifiedSearchFilterDto(
 
 public record UnifiedSearchResultDto(
     PaginatedResult<ProfileDto> Profiles,
-    PaginatedResult<PingDetailsDto> Pings,
-    PaginatedResult<EventDto> Events
+    PaginatedResult<PingDetailsDto> Pings
 );

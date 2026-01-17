@@ -180,7 +180,7 @@ Indexes:
 
 ### AppDbContext
 DbSets:
-- `Pings`, `PingGenres`, `PingActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`, `Repings`
+- `Pings`, `PingGenres`, `PingActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`, `Repings`, `SearchHistories`
 
 Seed Data:
 - `PingGenre` seeded with ids 1–20 (Sports, Food, Outdoors, Art, etc.).
@@ -196,6 +196,7 @@ Indexes:
 - Composite PK `ReviewTag (ReviewId, TagId)`.
 - Composite PK `EventAttendee (EventId, UserId)`.
 - Unique composite `Reping (ReviewId, UserId)`.
+- Index `SearchHistory.UserId` for fetching history.
 
 Relationships & Cascades:
 - `Favorited` → `Ping` cascade delete.
@@ -231,6 +232,7 @@ Property Configuration:
 | UserActivityLog | Id               | UserId, Date, LoginCount, LastActivityUtc                                                                                | User                                   | Tracks daily unique logins per user for analytics                                                                     |
 | DailySystemMetric | Id             | Date, MetricType, Value, Dimensions                                                                                      | (None)                                 | Stores historical aggregated stats (DAU, WAU, MAU, etc.)                                                              |
 | Reping        | Id                 | UserId, ReviewId, CreatedAt, Privacy                                                                                     | Review                                 | Unique per user per review; respects privacy settings                                                                 |
+| SearchHistory | Id                 | UserId, Query, Type, TargetId?, ImageUrl?, CreatedAt                                                                     | (None)                                 | Stores user search history. Type: Term/User/Ping.                                                                     |
 
 ---
 ## 7. DTO Contracts
@@ -299,6 +301,11 @@ Property Configuration:
 
 ### Tags
 - `TagDto(Id, Name, Count, IsApproved, IsBanned)`
+
+### Search History
+- `SearchHistoryDto(Id, Query, Type, TargetId?, ImageUrl, CreatedAt)`
+- `CreateSearchHistoryDto(Query, Type, TargetId?, ImageUrl)`
+
 
 ### Recommendations
 - `RecommendationDto(Name, Address, Latitude?, Longitude?, Source, LocalPingId?)`
@@ -1201,20 +1208,35 @@ Users can organize their "Saved Places" (favorited pings) into named groups call
 ## 24. Unified Search
 
 ### Overview
-The Unified Search endpoint allows users to search across multiple entity types (Profiles, Pings, and Events) in a single request. It supports various filters and provides paginated results for each category.
+The Unified Search endpoint allows users to search across multiple entity types (Profiles and Pings) in a single request. It supports various filters and provides paginated results for each category.
 
 ### Features
-- **Keyword Search**: Searches usernames (Profiles), names/addresses (Pings), and titles/descriptions (Events).
-- **Geospatial Filtering**: Optional coordinates and radius for Pings and Events.
+- **Keyword Search**: Searches usernames (Profiles) and names/addresses (Pings).
+- **Geospatial Filtering**: Optional coordinates and radius for Pings.
 - **Tag Search**: Filter Pings based on tags present in their reviews.
-- **Event Filtering**: Specific filters for event genre, price range, and date range.
 - **Pagination**: Independent pagination for each result category within the response.
 
 ### DTOs
 - `UnifiedSearchFilterDto`: Input parameters for search and filtering.
 - `UnifiedSearchResultDto`: Grouped paginated results.
+- `SearchHistoryDto`: User's search history item (Query, Type, TargetId, ImageUrl).
+- `CreateSearchHistoryDto`: Input to add history item.
 
 ### Endpoints
 - `GET /api/search` or `GET /api/v1/search`:
-  - **Parameters**: `Query`, `Latitude`, `Longitude`, `RadiusKm`, `PageNumber`, `PageSize`, `EventGenreId`, `MinPrice`, `MaxPrice`, `FromDate`, `ToDate`, `PingGenreId`, `Tags`.
-  - **Return**: `UnifiedSearchResultDto` containing `Profiles`, `Pings`, and `Events`.
+  - **Parameters**: `Query`, `Latitude`, `Longitude`, `RadiusKm`, `PageNumber`, `PageSize`, `PingGenreId`, `Tags`.
+  - **Return**: `UnifiedSearchResultDto` containing `Profiles` and `Pings`.
+- `GET /api/search/history`: Get recent history (Default 20).
+- `POST /api/search/history`: Add history item.
+- `DELETE /api/search/history/{id}`: Delete specific item.
+- `DELETE /api/search/history`: Clear all history.
+
+### Frontend Workflow & Best Practices
+**Important**: The `UnifiedSearch` endpoint does **not** automatically save search history. This is by design to prevent "jitter" from debounced keystrokes (e.g., saving "t", "te", "tes", "test" as separate entries).
+
+**Recommended Flow**:
+1. **Live Search**: Call `UnifiedSearch` as the user types (debounced). Do not save history here.
+2. **Interaction**:
+   - If the user **Clicks a Result** (e.g., a Profile): Call `POST /api/search/history` with `Type: User`, `TargetId`, and `Query/Name`.
+   - If the user **Presses Enter** (Submit): Call `POST /api/search/history` with `Type: Term` and the `Query` string.
+3. **Display**: fetching `GET /api/search/history` allows you to show "Recent Searches" before the user starts typing.
