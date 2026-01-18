@@ -118,6 +118,7 @@ public class EventService(
             ev.ThumbnailUrl ?? null,
             ev.Price ?? null,
             true, // IsHosting (creator)
+            true, // IsAttending (creator auto-joins)
             new List<string>(), // FriendThumbnails (no other attendees)
             ping.Address
         );

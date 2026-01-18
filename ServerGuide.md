@@ -263,7 +263,7 @@ Property Configuration:
 - `JwtOptions(Key, Issuer, Audience, AccessTokenMinutes)`
 
 ### Events
-- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId, EventGenreId?, EventGenreName?, ImageUrl?, ThumbnailUrl?, Price?, IsHosting, FriendThumbnails, Address?)`
+- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId, EventGenreId?, EventGenreName?, ImageUrl?, ThumbnailUrl?, Price?, IsHosting, IsAttending, FriendThumbnails, Address?)`
 - `UserSummaryDto(Id, UserName, ProfilePictureUrl)`
 - `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PingId?, EventGenreId?)`
 - `UpdateEventDto(Title?, Description?, IsPublic?, StartTime?, EndTime?, Location?, Latitude?, Longitude?, PingId?, EventGenreId?, ImageUrl?, ThumbnailUrl?, Price?)`

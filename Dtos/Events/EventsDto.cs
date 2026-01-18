@@ -23,6 +23,7 @@ public record EventDto(
     string? ThumbnailUrl,
     double? Price,
     bool IsHosting,
+    bool IsAttending,
     List<string> FriendThumbnails,
     string? Address
 );

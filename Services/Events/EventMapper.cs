@@ -67,6 +67,16 @@ public static class EventMapper
             status = "not-attending";
         }
 
+        bool isAttending = false;
+        if (currentUserId != null && ev.Attendees != null)
+        {
+             var userAttendee = ev.Attendees.FirstOrDefault(a => a.UserId == currentUserId);
+             if (userAttendee != null && userAttendee.Status == AttendeeStatus.Attending)
+             {
+                 isAttending = true;
+             }
+        }
+
         return new EventDto(
             ev.Id,
             ev.Title,
@@ -88,6 +98,7 @@ public static class EventMapper
             ev.ThumbnailUrl,
             ev.Price,
             isHosting,
+            isAttending,
             friendThumbnails,
             ev.Ping.Address
         );
