@@ -51,8 +51,6 @@ public class ProfileService(
         return new PersonalProfileDto(
             user.Id,
             user.UserName!,
-            user.FirstName,
-            user.LastName,
             user.ProfileImageUrl,
             user.Bio,
             user.Email!,
@@ -89,8 +87,6 @@ public class ProfileService(
             .Select(u => new ProfileDto(
                 u.Id,
                 u.UserName!,
-                u.FirstName,
-                u.LastName,
                 u.ProfileImageUrl,
                 u.Bio,
                 FriendshipStatus.None, // FriendshipStatus
@@ -201,8 +197,6 @@ public class ProfileService(
         return new ProfileDto(
             user.Id,
             user.UserName!,   // DisplayName (using UserName for now)
-            user.FirstName,
-            user.LastName,
             user.ProfileImageUrl,
             user.Bio,
             friendshipStatus,
@@ -263,8 +257,6 @@ public class ProfileService(
         return new QuickProfileDto(
             user.Id,
             user.UserName!,   
-            user.FirstName,
-            user.LastName,
             user.ProfileImageUrl,
             user.Bio,
             friendshipStatus,
@@ -457,7 +449,7 @@ public class ProfileService(
             {
                 if (creators.TryGetValue(evt.CreatedById, out var creator))
                 {
-                    var creatorSummary = new UserSummaryDto(creator.Id, creator.UserName!, creator.FirstName, creator.LastName, creator.ProfileImageUrl);
+                    var creatorSummary = new UserSummaryDto(creator.Id, creator.UserName!, creator.ProfileImageUrl);
                     eventDtos.Add(EventMapper.MapToDto(evt, creatorSummary, attendeesMap, currentUserId, friendIds));
                 }
             }

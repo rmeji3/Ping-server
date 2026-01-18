@@ -258,23 +258,24 @@ Property Configuration:
 - `ResetPasswordDto(Email, Code, NewPassword)`
 - `ChangePasswordDto(CurrentPassword, NewPassword)`
 - `ChangeUsernameDto(NewUserName)`
-- `UserDto(Id, Email, DisplayName, FirstName, LastName, ProfileImageUrl, Roles[])`
+- `UserDto(Id, Email, DisplayName, ProfileImageUrl, Roles[])`
 - `AuthResponse(AccessToken, ExpiresUtc, User)`
 - `JwtOptions(Key, Issuer, Audience, AccessTokenMinutes)`
 
 ### Events
-- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId, EventGenreId?, EventGenreName?)`
-- `UserSummaryDto(Id, UserName, FirstName, LastName)`
+- `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId, EventGenreId?, EventGenreName?, ImageUrl?, ThumbnailUrl?, Price?, IsHosting, FriendThumbnails, Address?)`
+- `UserSummaryDto(Id, UserName, ProfilePictureUrl)`
 - `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PingId?, EventGenreId?)`
 - `UpdateEventDto(Title?, Description?, IsPublic?, StartTime?, EndTime?, Location?, Latitude?, Longitude?, PingId?, EventGenreId?, ImageUrl?, ThumbnailUrl?, Price?)`
 - `EventFilterDto(MinPrice?, MaxPrice?, FromDate?, ToDate?, GenreId?, Latitude, Longitude, RadiusKm)`
 - `EventCommentDto(Id, Content, CreatedAt, UserId, UserName, UserProfileImageUrl, UserProfileThumbnailUrl)`
 - `CreateEventCommentDto(Content)`
-- `CreateEventDto` also includes fields: `ImageUrl, ThumbnailUrl, Price`.
+- `FriendInviteDto(Id, UserName, ProfileImageUrl, RequestStatus)`
+- `CreateEventDto` also includes fields: `ImageUrl, ThumbnailUrl, Price`. Note: `Title` max 100 chars, `Description` max 500 chars.
 - `ReviewDto`, `AppUser`, `EventDto` include `ThumbnailUrl`. `EventDto` includes `IsHosting`, `FriendThumbnails`, `Price`, `ImageUrl`.
 
 ### Friends & Blocks
-- `FriendSummaryDto(Id, UserName, FirstName, LastName, ProfileImageUrl?)`
+- `FriendSummaryDto(Id, UserName, ProfileImageUrl?)`
 - `BlockDto(BlockedUserId, BlockedUserName, BlockedAt)`
 
 ### Pings
@@ -284,8 +285,8 @@ Property Configuration:
 - `PingDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Favorites, Activities[PingActivitySummaryDto], PingGenre?, ClaimStatus?, IsClaimed, GooglePlaceId?)`
 
 ### Profiles
-- `ProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl?, Bio?, FollowersCount, FollowingCount, FriendshipStatus, ReviewCount, PingCount, EventCount, IsFriends, PrivacySettings)`
-- `PersonalProfileDto(Id, DisplayName, FirstName, LastName, ProfilePictureUrl, Bio?, Email, FollowersCount, FollowingCount, Roles[])`
+- `ProfileDto(Id, DisplayName, ProfilePictureUrl?, Bio?, FollowersCount, FollowingCount, FriendshipStatus, ReviewCount, PingCount, EventCount, IsFriends, PrivacySettings)`
+- `PersonalProfileDto(Id, DisplayName, ProfilePictureUrl, Bio?, Email, FollowersCount, FollowingCount, Roles[])`
 - `UpdateBioDto(Bio)`
 
 ### Reviews

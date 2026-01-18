@@ -248,6 +248,14 @@ namespace Ping.Data.App
 
 
             // ---------- Events / Attendees ----------
+            builder.Entity<Event>()
+                .Property(e => e.Title)
+                .HasMaxLength(100);
+
+            builder.Entity<Event>()
+                .Property(e => e.Description)
+                .HasMaxLength(500);
+
             builder.Entity<EventAttendee>()
                 .HasKey(ea => new { ea.EventId, ea.UserId });
 

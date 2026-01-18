@@ -85,8 +85,6 @@ public class FollowService(
             {
                 Id = f.Follower.Id,
                 UserName = f.Follower.UserName!,
-                FirstName = f.Follower.FirstName,
-                LastName = f.Follower.LastName,
                 ProfileImageUrl = f.Follower.ProfileImageUrl
             });
 
@@ -103,8 +101,6 @@ public class FollowService(
             {
                 Id = f.Followee.Id,
                 UserName = f.Followee.UserName!,
-                FirstName = f.Followee.FirstName,
-                LastName = f.Followee.LastName,
                 ProfileImageUrl = f.Followee.ProfileImageUrl
             });
 
@@ -130,8 +126,6 @@ public class FollowService(
             {
                 Id = f.Followee.Id,
                 UserName = f.Followee.UserName!,
-                FirstName = f.Followee.FirstName,
-                LastName = f.Followee.LastName,
                 ProfileImageUrl = f.Followee.ProfileImageUrl
             });
 

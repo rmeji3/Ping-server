@@ -20,8 +20,6 @@ public static class EventMapper
                     attendeeSummaries.Add(new EventAttendeeDto(
                         u.Id,
                         u.UserName!,
-                        u.FirstName,
-                        u.LastName,
                         u.ProfileImageUrl,
                         att.Status.ToString().ToLower()
                     ));
@@ -90,7 +88,8 @@ public static class EventMapper
             ev.ThumbnailUrl,
             ev.Price,
             isHosting,
-            friendThumbnails
+            friendThumbnails,
+            ev.Ping.Address
         );
     }
 }

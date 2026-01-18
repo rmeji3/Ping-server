@@ -92,7 +92,7 @@ public class EventService(
         // Return DTO
         // For a fresh event, we know the creator is the only attendee
         var user = await userManager.FindByIdAsync(userId);
-        var creatorSummary = new UserSummaryDto(user!.Id, user.UserName!, user.FirstName, user.LastName, user.ProfileImageUrl);
+        var creatorSummary = new UserSummaryDto(user!.Id, user.UserName!, user.ProfileImageUrl);
         
         return new EventDto(
             ev.Id,
@@ -106,7 +106,7 @@ public class EventService(
             ev.CreatedAt,
             new List<EventAttendeeDto> 
             { 
-                new EventAttendeeDto(creatorSummary.Id, creatorSummary.UserName, creatorSummary.FirstName, creatorSummary.LastName, creatorSummary.ProfilePictureUrl, "attending") 
+                new EventAttendeeDto(creatorSummary.Id, creatorSummary.UserName, creatorSummary.ProfilePictureUrl, "attending") 
             },
             "attending",
             ping.Latitude,
@@ -118,7 +118,8 @@ public class EventService(
             ev.ThumbnailUrl ?? null,
             ev.Price ?? null,
             true, // IsHosting (creator)
-            new List<string>() // FriendThumbnails (no other attendees)
+            new List<string>(), // FriendThumbnails (no other attendees)
+            ping.Address
         );
     }
 
@@ -214,8 +215,8 @@ public class EventService(
         // Return updated DTO
         var creatorUser = await userManager.FindByIdAsync(ev.CreatedById);
         var creatorSummary = creatorUser != null
-            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.FirstName, creatorUser.LastName, creatorUser.ProfileImageUrl)
-            : new UserSummaryDto("?", "Unknown", null, null, null);
+            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.ProfileImageUrl)
+            : new UserSummaryDto("?", "Unknown", null);
             
         // Get attendees
         var attendeeIds = ev.Attendees.Select(a => a.UserId).Distinct().ToList();
@@ -239,8 +240,8 @@ public class EventService(
         // Load users for creator + attendees
         var creatorUser = await userManager.FindByIdAsync(ev.CreatedById);
         var creatorSummary = creatorUser != null
-            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.FirstName, creatorUser.LastName, creatorUser.ProfileImageUrl)
-            : new UserSummaryDto("?", "Unknown", null, null, null);
+            ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.ProfileImageUrl)
+            : new UserSummaryDto("?", "Unknown", null);
 
         var attendeeIds = ev.Attendees.Select(a => a.UserId).Distinct().ToList();
         var attendeeUsers = await userManager.Users
@@ -542,7 +543,7 @@ public class EventService(
             {
                 creator = new AppUser { Id = ev.CreatedById, UserName = "Unknown", FirstName = "Unknown", LastName = "User" };
             }
-            var creatorSummary = new UserSummaryDto(creator.Id, creator.UserName!, creator.FirstName, creator.LastName, creator.ProfileImageUrl);
+            var creatorSummary = new UserSummaryDto(creator.Id, creator.UserName!, creator.ProfileImageUrl);
 
             dtos.Add(EventMapper.MapToDto(ev, creatorSummary, usersById, currentUserId, friendIds));
         }
@@ -704,7 +705,7 @@ public class EventService(
                 status = attStatus.ToString(); 
             }
             
-            return new FriendInviteDto(f.Id, f.UserName!, f.FirstName, f.LastName, f.ProfileImageUrl, status);
+            return new FriendInviteDto(f.Id, f.UserName!, f.ProfileImageUrl, status);
         }).ToList();
 
         return new PaginatedResult<FriendInviteDto>(dtos, totalCount, pagination.PageNumber, pagination.PageSize);

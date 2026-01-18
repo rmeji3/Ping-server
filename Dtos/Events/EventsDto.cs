@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Ping.Dtos.Events;
 
 public record EventDto(
@@ -21,29 +23,26 @@ public record EventDto(
     string? ThumbnailUrl,
     double? Price,
     bool IsHosting,
-    List<string> FriendThumbnails
+    List<string> FriendThumbnails,
+    string? Address
 );
 
 public record UserSummaryDto(
     string Id,
     string UserName,
-    string? FirstName,
-    string? LastName,
     string? ProfilePictureUrl
 );
 
 public record EventAttendeeDto(
     string Id,
     string UserName,
-    string? FirstName,
-    string? LastName,
     string? ProfilePictureUrl,
     string Status
 );
 
 public record CreateEventDto(
-    string Title,
-    string? Description,
+    [Required, MaxLength(100)] string Title,
+    [MaxLength(500)] string? Description,
     bool IsPublic,
     DateTime StartTime,
     DateTime EndTime,
@@ -56,8 +55,8 @@ public record CreateEventDto(
 
 public class UpdateEventDto
 {
-    public string? Title { get; set; }
-    public string? Description { get; set; }
+    [MaxLength(100)] public string? Title { get; set; }
+    [MaxLength(500)] public string? Description { get; set; }
     public bool? IsPublic { get; set; }
     public DateTime? StartTime { get; set; }
     public DateTime? EndTime { get; set; }

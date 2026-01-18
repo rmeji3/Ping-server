@@ -40,7 +40,7 @@ namespace Ping.Features.Auth
             );
 
             var jwt = new JwtSecurityTokenHandler().WriteToken(token);
-            var userDto = new UserDto(user.Id, user.Email ?? "", user.UserName!, user.FirstName, user.LastName, user.ProfileImageUrl, roles.ToArray());
+            var userDto = new UserDto(user.Id, user.Email ?? "", user.UserName!, user.ProfileImageUrl, roles.ToArray());
             return new AuthResponse(jwt, expires, userDto);
         }
     }

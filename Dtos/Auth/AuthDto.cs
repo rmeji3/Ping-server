@@ -56,8 +56,6 @@ namespace Ping.Dtos.Auth
         string Id, 
         string Email, 
         string? DisplayName, 
-        string FirstName, 
-        string LastName,
         string? ProfileImageUrl,
         string[] Roles
     );

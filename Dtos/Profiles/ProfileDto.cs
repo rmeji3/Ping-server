@@ -9,8 +9,6 @@ namespace Ping.Dtos.Profiles;
 public record ProfileDto(
     [Required] string Id,
     [Required] string DisplayName,
-    [Required] string FirstName,
-    [Required] string LastName,
     string? ProfilePictureUrl,
     string? Bio,
     FriendshipStatus FriendshipStatus,
@@ -37,8 +35,6 @@ public enum FriendshipStatus
 public record QuickProfileDto(
     [Required] string Id,
     [Required] string DisplayName,
-    [Required] string FirstName,
-    [Required] string LastName,
     string? ProfilePictureUrl,
     string? Bio,
     FriendshipStatus FriendshipStatus,
@@ -56,8 +52,6 @@ public record QuickProfileDto(
 public record PersonalProfileDto(
     [Required] string Id,
     [Required] string DisplayName,
-    [Required] string FirstName,
-    [Required] string LastName,
     string? ProfilePictureUrl,
     string? Bio,
     [Required] string Email,
