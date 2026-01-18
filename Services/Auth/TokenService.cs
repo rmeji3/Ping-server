@@ -40,6 +40,10 @@ namespace Ping.Features.Auth
             );
 
             var jwt = new JwtSecurityTokenHandler().WriteToken(token);
+            
+            // Debug logging for expiration
+            Console.WriteLine($"[TokenService] Generating token. Configured Minutes: {_opts.AccessTokenMinutes}. Expires (UTC): {expires}. Current (UTC): {DateTime.UtcNow}");
+            
             var userDto = new UserDto(user.Id, user.Email ?? "", user.UserName!, user.ProfileImageUrl, roles.ToArray());
             return new AuthResponse(jwt, expires, userDto);
         }
