@@ -21,7 +21,7 @@ public record EventDto(
     string? EventGenreName,
     string? ImageUrl,
     string? ThumbnailUrl,
-    double? Price,
+    decimal? Price,
     bool IsHosting,
     bool IsAttending,
     List<string> FriendThumbnails,
@@ -51,7 +51,9 @@ public record CreateEventDto(
     int? EventGenreId,
     string? ImageUrl,
     string? ThumbnailUrl,
-    double? Price
+    [Range(0, 999.99)]
+    [RegularExpression(@"^\d+(\.\d{1,2})?$", ErrorMessage = "Price can have at most 2 decimal places")]
+    decimal? Price
 );
 
 public class UpdateEventDto
@@ -65,6 +67,8 @@ public class UpdateEventDto
     public int? EventGenreId { get; set; }
     public string? ImageUrl { get; set; }
     public string? ThumbnailUrl { get; set; }
-    public double? Price { get; set; }
+    [Range(0, 999.99)]
+    [RegularExpression(@"^\d+(\.\d{1,2})?$", ErrorMessage = "Price can have at most 2 decimal places")]
+    public decimal? Price { get; set; }
 }
 

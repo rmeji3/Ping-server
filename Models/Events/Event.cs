@@ -13,7 +13,7 @@ public class Event
     public DateTime EndTime { get; set; }
     public string? ImageUrl { get; set; }
     public string? ThumbnailUrl { get; set; }
-    public double? Price { get; set; }
+    public decimal? Price { get; set; }
 
     public required string CreatedById { get; set; }
     public DateTime CreatedAt { get; set; }

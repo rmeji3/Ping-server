@@ -255,6 +255,10 @@ namespace Ping.Data.App
             builder.Entity<Event>()
                 .Property(e => e.Description)
                 .HasMaxLength(500);
+            
+            builder.Entity<Event>()
+                .Property(e => e.Price)
+                .HasColumnType("decimal(5,2)");
 
             builder.Entity<EventAttendee>()
                 .HasKey(ea => new { ea.EventId, ea.UserId });
