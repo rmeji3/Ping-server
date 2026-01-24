@@ -153,6 +153,21 @@ namespace Ping.Data.App
             builder.Entity<SearchHistory>()
                 .HasIndex(sh => sh.UserId);
 
+            builder.Entity<SearchHistory>(entity =>
+            {
+                entity.Property(sh => sh.Query).HasMaxLength(100);
+                entity.Property(sh => sh.TargetId).HasMaxLength(256);
+                entity.Property(sh => sh.ImageUrl).HasMaxLength(2048);
+            });
+
+            // PingClaim
+            builder.Entity<PingClaim>()
+                .Property(pc => pc.Proof).HasMaxLength(2048);
+
+            // VerificationRequest
+            builder.Entity<VerificationRequest>()
+                .Property(vr => vr.AdminComment).HasMaxLength(500);
+
             // ---------- Relationships ----------
 
             // Ping 1 - * PingActivities
@@ -231,6 +246,30 @@ namespace Ping.Data.App
 
 
             // ---------- Property config ----------
+            
+            // Pings
+            builder.Entity<Models.Pings.Ping>(entity =>
+            {
+                entity.Property(p => p.Name).HasMaxLength(100);
+                entity.Property(p => p.Address).HasMaxLength(256);
+                entity.Property(p => p.GooglePlaceId).HasMaxLength(256);
+            });
+
+            // Ping Activities
+            builder.Entity<PingActivity>()
+                .Property(pa => pa.Name)
+                .HasMaxLength(100);
+
+            // Ping Genres
+            builder.Entity<PingGenre>()
+                .Property(pg => pg.Name)
+                .HasMaxLength(100);
+
+            // Collections
+            builder.Entity<Collection>(entity =>
+            {
+                entity.Property(c => c.Name).HasMaxLength(100);
+            });
 
             // Review content + timestamps
             builder.Entity<Review>()
@@ -255,10 +294,33 @@ namespace Ping.Data.App
             builder.Entity<Event>()
                 .Property(e => e.Description)
                 .HasMaxLength(500);
+
+            builder.Entity<Event>()
+                .Property(e => e.ImageUrl)
+                .HasMaxLength(2048);
+
+            builder.Entity<Event>()
+                .Property(e => e.ThumbnailUrl)
+                .HasMaxLength(2048);
+
+            builder.Entity<Event>()
+                .Property(e => e.Status)
+                .HasMaxLength(50);
             
             builder.Entity<Event>()
                 .Property(e => e.Price)
                 .HasColumnType("decimal(5,2)");
+
+            builder.Entity<EventComment>()
+                .Property(ec => ec.Content)
+                .HasMaxLength(500);
+
+            builder.Entity<Report>(entity =>
+            {
+                entity.Property(r => r.Reason).HasMaxLength(100);
+                entity.Property(r => r.Description).HasMaxLength(1000);
+                entity.Property(r => r.TargetId).HasMaxLength(256);
+            });
 
             builder.Entity<EventAttendee>()
                 .HasKey(ea => new { ea.EventId, ea.UserId });

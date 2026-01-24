@@ -22,8 +22,9 @@ public record CreateReviewDto(
     int Rating,
     [MaxLength(1000, ErrorMessage = "Content must be at most 1000 characters.")]
     string? Content,
-    [Required]
+    [Required, MaxLength(2048)]
     string? ImageUrl,
+    [MaxLength(2048)]
     string? ThumbnailUrl,
     List<string>? Tags = null
 );

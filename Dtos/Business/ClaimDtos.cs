@@ -1,8 +1,9 @@
 using Ping.Models.Business;
+using System.ComponentModel.DataAnnotations;
 
 namespace Ping.Dtos.Business
 {
-    public record CreateClaimDto(int PingId, string Proof);
+    public record CreateClaimDto(int PingId, [Required, MaxLength(2048)] string Proof);
 
     public record ClaimDto(
         int Id,

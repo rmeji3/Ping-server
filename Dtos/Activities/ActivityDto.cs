@@ -10,7 +10,7 @@ namespace Ping.Dtos.Activities
     );
     public record CreatePingActivityDto(
         int PingId,
-        [MaxLength(100)] string Name,
+        [Required, MaxLength(100)] string Name,
         int? PingGenreId
     );
 

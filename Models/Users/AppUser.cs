@@ -5,12 +5,14 @@ namespace Ping.Models.AppUsers
 {
     public class AppUser : IdentityUser
     {
+        [MaxLength(24)]
         public required string FirstName { get; set; }
+        [MaxLength(24)]
         public required string LastName { get; set; }
 
-        [MaxLength(512)]
+        [MaxLength(2048)]
         public string? ProfileImageUrl { get; set; } // nullable, NOT required
-        [MaxLength(512)]
+        [MaxLength(2048)]
         public string? ProfileThumbnailUrl { get; set; }
 
         [MaxLength(256)]

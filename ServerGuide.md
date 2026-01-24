@@ -210,6 +210,16 @@ Property Configuration:
 - `Review.Content` max length 1000.
 - Timestamp defaults via `CURRENT_TIMESTAMP` for `Review.CreatedAt`.
 - `Tag.Name` max 30.
+- `Event.Title` max 100, `Description` max 500, `ImageUrl`/`ThumbnailUrl` max 2048, `Status` max 50.
+- `EventComment.Content` max 500.
+- `AppUser`: `FirstName`/`LastName` max 24, `ProfileImageUrl`/`ThumbnailUrl` max 2048, `Bio` max 256.
+- `Ping`: `Name` max 100, `Address` max 256, `GooglePlaceId` max 256.
+- `PingActivity.Name`, `PingGenre.Name`: max 100.
+- `Collection.Name` max 100, `ThumbnailUrl` max 2048.
+- `Report`: `Reason` max 100, `Description` max 1000, `TargetId` max 256.
+- `SearchHistory`: `Query` max 100, `ImageUrl` max 2048.
+- `PingClaim.Proof` max 2048.
+- `VerificationRequest.AdminComment` max 500.
 
 ---
 ## 6. Domain Models (Summaries)
@@ -265,13 +275,14 @@ Property Configuration:
 ### Events
 - `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId, EventGenreId?, EventGenreName?, ImageUrl?, ThumbnailUrl?, Price?, IsHosting, IsAttending, FriendThumbnails, Address?)`
 - `UserSummaryDto(Id, UserName, ProfilePictureUrl)`
-- `CreateEventDto(Title, Description?, IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PingId?, EventGenreId?)`
-- `UpdateEventDto(Title?, Description?, IsPublic?, StartTime?, EndTime?, Location?, Latitude?, Longitude?, PingId?, EventGenreId?, ImageUrl?, ThumbnailUrl?, Price?)`
-- `EventFilterDto(MinPrice?, MaxPrice?, FromDate?, ToDate?, GenreId?, Latitude, Longitude, RadiusKm)`
+- `CreateEventDto(Title [100], Description? [500], IsPublic, StartTime, EndTime, Location, Latitude, Longitude, PingId?, EventGenreId?, ImageUrl? [2048], ThumbnailUrl? [2048], Price?)`
+- `UpdateEventDto(Title? [100], Description? [500], IsPublic?, StartTime?, EndTime?, Location?, Latitude?, Longitude?, PingId?, EventGenreId?, ImageUrl? [2048], ThumbnailUrl? [2048], Price?)`
+- `EventFilterDto(MinPrice?, MaxPrice?, FromDate?, ToDate?, GenreId?, Latitude, Longitude, RadiusKm, Query? [100])`
 - `EventCommentDto(Id, Content, CreatedAt, UserId, UserName, UserProfileImageUrl, UserProfileThumbnailUrl)`
-- `CreateEventCommentDto(Content)`
+- `CreateEventCommentDto(Content [500])`
+- `UpdateEventCommentDto(Content [500])`
 - `FriendInviteDto(Id, UserName, ProfileImageUrl, RequestStatus)`
-- `CreateEventDto` also includes fields: `ImageUrl, ThumbnailUrl, Price`. Note: `Title` max 100 chars, `Description` max 500 chars.
+- `CreateEventDto` also includes fields: `ImageUrl, ThumbnailUrl, Price`. Note: `Title` max 100 chars, `Description` max 500 chars, URLs max 2048 chars.
 - `ReviewDto`, `AppUser`, `EventDto` include `ThumbnailUrl`. `EventDto` includes `IsHosting`, `FriendThumbnails`, `Price`, `ImageUrl`.
 
 ### Friends & Blocks
@@ -657,6 +668,16 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 
 ---
 ## 10. Validation & Business Rules
+### 10.1 Security & Validation Standards
+- **Strict Input**: DTOs enforce `[Required]`, `[MaxLength]`, `[Range]`, and `[RegularExpression]` where applicable.
+- **Max Lengths**:
+  - `Names/Titles`: 100 chars
+  - `Descriptions/Content`: 500-1000 chars
+  - `URLs`: 2048 chars
+  - `Usernames`: 24 chars, Alphanumeric + `_` only.
+  - `Addresses/Ids`: 256 chars
+- **Database Consistency**: `AppDbContext` and `AuthDbContext` enforce strict `HasMaxLength` constraints matching DTOs to prevent truncation errors and overflow attacks.
+
 
 ### Authentication
 - Emails are treated as **case-insensitive** for all authentication and verification flows (registration, login, password reset).

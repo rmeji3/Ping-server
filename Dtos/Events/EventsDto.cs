@@ -49,8 +49,8 @@ public record CreateEventDto(
     DateTime EndTime,
     int PingId,
     int? EventGenreId,
-    string? ImageUrl,
-    string? ThumbnailUrl,
+    [MaxLength(2048)] string? ImageUrl,
+    [MaxLength(2048)] string? ThumbnailUrl,
     [Range(0, 999.99)]
     [RegularExpression(@"^\d+(\.\d{1,2})?$", ErrorMessage = "Price can have at most 2 decimal places")]
     decimal? Price
@@ -65,8 +65,8 @@ public class UpdateEventDto
     public DateTime? EndTime { get; set; }
     public int? PingId { get; set; }
     public int? EventGenreId { get; set; }
-    public string? ImageUrl { get; set; }
-    public string? ThumbnailUrl { get; set; }
+    [MaxLength(2048)] public string? ImageUrl { get; set; }
+    [MaxLength(2048)] public string? ThumbnailUrl { get; set; }
     [Range(0, 999.99)]
     [RegularExpression(@"^\d+(\.\d{1,2})?$", ErrorMessage = "Price can have at most 2 decimal places")]
     public decimal? Price { get; set; }

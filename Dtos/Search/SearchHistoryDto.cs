@@ -1,4 +1,5 @@
 using Ping.Models.Search;
+using System.ComponentModel.DataAnnotations;
 
 namespace Ping.Dtos.Search;
 
@@ -12,8 +13,8 @@ public record SearchHistoryDto(
 );
 
 public record CreateSearchHistoryDto(
-    string Query,
+    [Required, MaxLength(100)] string Query,
     SearchType Type,
-    string? TargetId = null,
-    string? ImageUrl = null
+    [MaxLength(256)] string? TargetId = null,
+    [MaxLength(2048)] string? ImageUrl = null
 );

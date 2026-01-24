@@ -39,6 +39,15 @@ namespace Ping.Data.Auth
                 .HasIndex(u => u.UserName)
                 .IsUnique();
 
+            builder.Entity<AppUser>(entity =>
+            {
+                entity.Property(e => e.FirstName).HasMaxLength(24);
+                entity.Property(e => e.LastName).HasMaxLength(24);
+                entity.Property(e => e.ProfileImageUrl).HasMaxLength(2048);
+                entity.Property(e => e.ProfileThumbnailUrl).HasMaxLength(2048);
+                entity.Property(e => e.Bio).HasMaxLength(256);
+            });
+
             // UserBlock
             builder.Entity<UserBlock>()
                 .HasKey(ub => new { ub.BlockerId, ub.BlockedId });

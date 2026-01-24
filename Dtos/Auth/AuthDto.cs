@@ -15,7 +15,7 @@ namespace Ping.Dtos.Auth
         [Required, MinLength(6)] string Password,
         [Required, MaxLength(24)] string FirstName,
         [Required, MaxLength(24)] string LastName,
-        [Required, MaxLength(24)] string UserName
+        [Required, MaxLength(24), RegularExpression(@"^[a-zA-Z0-9_]+$", ErrorMessage = "Username can only contain letters, numbers, and underscores.")] string UserName
     );
 
     public record LoginDto(
@@ -44,7 +44,7 @@ namespace Ping.Dtos.Auth
     );
 
     public record ChangeUsernameDto(
-        [Required, MaxLength(24), MinLength(3)] string NewUserName
+        [Required, MaxLength(24), MinLength(3), RegularExpression(@"^[a-zA-Z0-9_]+$", ErrorMessage = "Username can only contain letters, numbers, and underscores.")] string NewUserName
     );
 
     public interface ITokenService

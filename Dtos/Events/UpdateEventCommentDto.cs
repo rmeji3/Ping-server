@@ -1,4 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Ping.Dtos.Events
 {
-    public record UpdateEventCommentDto(string Content);
+    public record UpdateEventCommentDto([Required, MaxLength(500)] string Content);
 }

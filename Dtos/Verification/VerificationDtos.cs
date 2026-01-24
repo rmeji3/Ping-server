@@ -1,4 +1,5 @@
 using Ping.Models.Users; // For VerificationStatus enum
+using System.ComponentModel.DataAnnotations;
 
 namespace Ping.Dtos.Verification
 {
@@ -17,6 +18,6 @@ namespace Ping.Dtos.Verification
     );
 
     public record RejectVerificationDto(
-        string Reason
+        [Required, MaxLength(500)] string Reason
     );
 }

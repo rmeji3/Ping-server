@@ -13,12 +13,12 @@ namespace Ping.Dtos.Pings
     );
 
     public record CreateCollectionDto(
-        [Required] string Name,
+        [Required, MaxLength(100)] string Name,
         bool IsPublic
     );
 
     public record UpdateCollectionDto(
-        string? Name,
+        [MaxLength(100)] string? Name,
         bool? IsPublic
     );
 

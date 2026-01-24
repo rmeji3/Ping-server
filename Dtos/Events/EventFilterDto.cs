@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Ping.Dtos.Events;
 
 public record EventFilterDto
@@ -12,5 +14,7 @@ public record EventFilterDto
     public double? Latitude { get; init; }
     public double? Longitude { get; init; }
     public double? RadiusKm { get; init; }
+    
+    [MaxLength(100)]
     public string? Query { get; init; }
 }
