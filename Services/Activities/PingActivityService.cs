@@ -70,9 +70,12 @@ public class PingActivityService(
         {
             logger.LogInformation("CreatePingActivity: Exact match found for '{Name}'. Returning existing ID {Id}.", name, exactMatch.Id);
             // Return existing activity details
+            var reviews = await db.Reviews.Where(r => r.PingActivityId == exactMatch.Id).Select(r => r.Rating).ToListAsync();
+            var avg = reviews.Any() ? reviews.Average() : 0;
             return new PingActivityDetailsDto(
                 exactMatch.Id, exactMatch.PingId, exactMatch.Name, exactMatch.PingId, exactMatch.Ping.PingGenre?.Name, exactMatch.CreatedUtc,
-                WarningMessage: $"Activity '{name}' already exists here."
+                WarningMessage: $"Activity '{name}' already exists here.",
+                AvgRating: avg
             );
         }
 
@@ -85,9 +88,13 @@ public class PingActivityService(
             {
                 var match = existingActivities.First(x => x.Name == semanticMatchName);
                  logger.LogInformation("CreatePingActivity: Semantic duplicate found. '{New}' -> '{Existing}'. Returning ID {Id}.", name, match.Name, match.Id);
+                 // Create DTO for existing match
+                 var reviews = await db.Reviews.Where(r => r.PingActivityId == match.Id).Select(r => r.Rating).ToListAsync();
+                 var avg = reviews.Any() ? reviews.Average() : 0;
                  return new PingActivityDetailsDto(
                     match.Id, match.PingId, match.Name, match.PingId, match.Ping.PingGenre?.Name, match.CreatedUtc,
-                    WarningMessage: $"Merged '{name}' into existing activity '{match.Name}'."
+                    WarningMessage: $"Merged '{name}' into existing activity '{match.Name}'.",
+                    AvgRating: avg
                 );
             }
         }
@@ -111,7 +118,9 @@ public class PingActivityService(
             pa.Name,
             ping.PingGenreId, // Use ping object
             ping.PingGenre?.Name, // Use ping object
-            pa.CreatedUtc
+            pa.CreatedUtc,
+            null,
+            0
         );
 
         logger.LogInformation("Activity created: {ActivityId} at Ping {PingId}", pa.Id, pa.PingId);
@@ -128,6 +137,47 @@ public class PingActivityService(
             await db.SaveChangesAsync();
             logger.LogInformation("Activity deleted by Admin: {ActivityId}", id);
         }
+    }
+
+    public async Task<global::Ping.Dtos.Common.PaginatedResult<PingActivityDetailsDto>> SearchActivitiesAsync(ActivitySearchDto searchDto)
+    {
+        var query = db.PingActivities
+            .AsNoTracking()
+            .Include(pa => pa.Ping)
+            .ThenInclude(p => p.PingGenre)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(searchDto.Query))
+        {
+            var q = searchDto.Query.Trim().ToLower();
+            query = query.Where(pa => pa.Name.ToLower().Contains(q) || 
+                                     (pa.Ping.PingGenre != null && pa.Ping.PingGenre.Name.ToLower().Contains(q)));
+        }
+
+        if (searchDto.PingGenreId.HasValue)
+        {
+            query = query.Where(pa => pa.Ping.PingGenreId == searchDto.PingGenreId.Value);
+        }
+
+        if (searchDto.PingId.HasValue)
+        {
+            query = query.Where(pa => pa.PingId == searchDto.PingId.Value);
+        }
+
+        query = query.OrderByDescending(pa => pa.CreatedUtc);
+
+        var projection = query.Select(pa => new PingActivityDetailsDto(
+            pa.Id,
+            pa.PingId,
+            pa.Name,
+            pa.Ping.PingGenreId,
+            pa.Ping.PingGenre != null ? pa.Ping.PingGenre.Name : null,
+            pa.CreatedUtc,
+            null,
+            pa.Reviews.Any() ? pa.Reviews.Average(r => r.Rating) : 0
+        ));
+
+        return await global::Ping.Dtos.Common.PaginatedResult<PingActivityDetailsDto>.CreateAsync(projection, searchDto.PageNumber, searchDto.PageSize);
     }
 }
 

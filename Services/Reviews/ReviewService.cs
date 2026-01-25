@@ -74,7 +74,7 @@ public class ReviewService(
             Type = hasReview ? ReviewType.CheckIn : ReviewType.Review,
             Content = dto.Content,
             ImageUrl = dto.ImageUrl!,
-            ThumbnailUrl = dto.ThumbnailUrl!,
+            ThumbnailUrl = !string.IsNullOrWhiteSpace(dto.ThumbnailUrl) ? dto.ThumbnailUrl : dto.ImageUrl!,
             CreatedAt = DateTime.UtcNow,
             Likes = 0,
         };

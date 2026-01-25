@@ -249,7 +249,8 @@ Property Configuration:
 ### Activities
 - `PingActivitySummaryDto(Id, Name, PingGenreId?, PingGenreName?)`
 - `CreatePingActivityDto(PingId, Name, PingGenreId?)`
-- `PingActivityDetailsDto(Id, PingId, Name, PingGenreId?, PingGenreName?, CreatedUtc, WarningMessage?)`
+- `PingActivityDetailsDto(Id, PingId, Name, PingGenreId?, PingGenreName?, CreatedUtc, WarningMessage?, AvgRating)`
+- `ActivitySearchDto(Query?, PingGenreId?, PingId?, PageNumber, PageSize)`
 - `PingGenreDto(Id, Name)` / `CreatePingGenreDto(Name)`
 
 ### Collections
@@ -468,6 +469,9 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | Method | Route           | Auth | Body                | Returns              | Notes                                                |
 | ------ | --------------- | ---- | ------------------- | -------------------- | ---------------------------------------------------- |
 | POST   | /api/ping-activities | A    | `CreatePingActivityDto` | `PingActivityDetailsDto` | Validates ping, optional genre, uniqueness per ping |
+| POST   | /api/pings/{id}/activities | A    | `CreatePingActivityDto` | `PingActivityDetailsDto` | Scoped creation |
+| GET    | /api/ping-activities/search (Q: Query, PingGenreId, PingId, PageNumber, PageSize) | A | — | `PaginatedResult<PingActivityDetailsDto>` | Search by name, genre, or ping |
+| GET    | /api/pings/{id}/activities (Q: Query, PingGenreId, PageNumber, PageSize) | A | — | `PaginatedResult<PingActivityDetailsDto>` | Scoped activities for a ping |
 
 ### PingGenresController (`/api/ping-genres`)
 | Method | Route                    | Auth | Body                    | Returns             | Notes                                                 |

@@ -17,6 +17,22 @@ namespace Ping.Controllers.Activities
         [HttpPost]
         public async Task<ActionResult<PingActivityDetailsDto>> Create([FromBody] CreatePingActivityDto dto)
         {
+            return await CreateInternal(dto);
+        }
+
+        [HttpPost("/api/pings/{pingId}/activities")]
+        [HttpPost("/api/v{version:apiVersion}/pings/{pingId}/activities")]
+        public async Task<ActionResult<PingActivityDetailsDto>> CreateForPing(int pingId, [FromBody] CreatePingActivityDto dto)
+        {
+            if (dto.PingId != 0 && dto.PingId != pingId)
+            {
+                return BadRequest("PingId in body does not match PingId in route.");
+            }
+            return await CreateInternal(dto with { PingId = pingId });
+        }
+
+        private async Task<ActionResult<PingActivityDetailsDto>> CreateInternal(CreatePingActivityDto dto)
+        {
             try
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -37,6 +53,22 @@ namespace Ping.Controllers.Activities
             {
                 return BadRequest(new { error = ex.Message });
             }
+        }
+
+        [HttpGet("search")]
+        public async Task<ActionResult<global::Ping.Dtos.Common.PaginatedResult<PingActivityDetailsDto>>> Search([FromQuery] ActivitySearchDto searchDto)
+        {
+            var result = await activityService.SearchActivitiesAsync(searchDto);
+            return Ok(result);
+        }
+
+        [HttpGet("/api/pings/{pingId}/activities")]
+        [HttpGet("/api/v{version:apiVersion}/pings/{pingId}/activities")]
+        public async Task<ActionResult<global::Ping.Dtos.Common.PaginatedResult<PingActivityDetailsDto>>> GetForPing(int pingId, [FromQuery] ActivitySearchDto searchDto)
+        {
+            searchDto.PingId = pingId;
+            var result = await activityService.SearchActivitiesAsync(searchDto);
+            return Ok(result);
         }
     }
 }
