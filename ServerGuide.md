@@ -369,6 +369,7 @@ Property Configuration:
 
 #### EventService (`IEventService`)
 - Manages event lifecycle and attendance.
+- **Methods**: `GetPublicEventsAsync` (Supports `Scope` filter: 'global' or 'friends').
 
 #### ReviewService (`IReviewService`)
 - Manages reviews, check-ins, likes, and feed retrieval.
@@ -550,7 +551,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | DELETE | /api/Events/{id}                                 | A    | —                | 200          | Only creator                              |
 | PATCH  | /api/Events/{id}                                 | A    | `UpdateEventDto` | 200          | Partial updates                           |
 | PATCH  | /api/Events/{id}                                 | A    | `UpdateEventDto` | 200          | Partial updates (incl Price, Image)       |
-| GET    | /api/Events/public (Q: EventFilterDto)           | A    | —                | `PaginatedResult<EventDto>` | Filters: Price, Date, Genre, Location     |
+| GET    | /api/Events (Q: EventFilterDto + scope)          | A    | —                | `PaginatedResult<EventDto>` | Feed/Search. Filters: Price, Date, Genre, Location. Scope: 'global' or 'friends'. |
 | POST   | /api/Events/{id}/comments                        | A    | `CreateEventCommentDto` | `EventCommentDto` | Add comment (Max 100 words, Moderated) |
 | GET    | /api/Events/{id}/comments (Q: pageNumber, pageSize) | A | —               | `PaginatedResult` | Get comments (Newest first)               |
 | DELETE | /api/Events/comments/{id}                        | A    | —                | 204          | Delete comment (Owner only)               |

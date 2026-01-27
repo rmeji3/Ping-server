@@ -17,4 +17,7 @@ public record EventFilterDto
     
     [MaxLength(100)]
     public string? Query { get; init; }
+    
+    [MaxLength(20)]
+    public string? Scope { get; init; } // "global" or "friends"
 }

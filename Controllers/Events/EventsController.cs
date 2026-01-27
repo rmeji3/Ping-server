@@ -73,9 +73,9 @@ namespace Ping.Controllers.Events
             return Ok(result);
         }
 
-        // GET /api/events/public?lat=..&lng=..&radiusKm=..&pageNumber=..&pageSize=..
-        [HttpGet("public")]
-        public async Task<ActionResult<PaginatedResult<EventDto>>> GetPublicEvents(
+        // GET /api/events?scope=global&lat=..&lng=..
+        [HttpGet]
+        public async Task<ActionResult<PaginatedResult<EventDto>>> GetEvents(
             [FromQuery] double? lat,
             [FromQuery] double? lng,
             [FromQuery] double? radiusKm,
@@ -84,14 +84,12 @@ namespace Ping.Controllers.Events
             [FromQuery] DateTime? fromDate,
             [FromQuery] DateTime? toDate,
             [FromQuery] int? genreId,
+            [FromQuery] string? scope,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
-            if (!lat.HasValue || !lng.HasValue || !radiusKm.HasValue || radiusKm <= 0)
-            {
-                return BadRequest("lat, lng, and radiusKm are required.");
-            }
-
+            // Location is optional. If missing, strict public events by date.
+            
             var filter = new EventFilterDto
             {
                 Latitude = lat,
@@ -101,7 +99,8 @@ namespace Ping.Controllers.Events
                 MaxPrice = maxPrice,
                 FromDate = fromDate,
                 ToDate = toDate,
-                GenreId = genreId
+                GenreId = genreId,
+                Scope = scope
             };
 
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };

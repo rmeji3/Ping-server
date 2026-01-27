@@ -372,9 +372,26 @@ public class EventService(
         var query = appDb.Events
             .Include(e => e.Attendees)
             .Include(e => e.Ping)
-            .Where(e => e.IsPublic)
             .Where(e => e.EndTime > DateTime.UtcNow)
             .AsQueryable();
+
+        if (string.Equals(filter.Scope, "friends", StringComparison.OrdinalIgnoreCase))
+        {
+            if (userId == null) 
+            {
+                return new PaginatedResult<EventDto>(new List<EventDto>(), 0, pagination.PageNumber, pagination.PageSize);
+            }
+            
+            var friendIds = (await followService.GetMutualIdsAsync(userId)).ToList();
+            
+            // Friends Scope: Events created by friends (Public or Private)
+            query = query.Where(e => friendIds.Contains(e.CreatedById));
+        }
+        else
+        {
+            // Global Scope (Default): Public events only
+            query = query.Where(e => e.IsPublic);
+        }
 
         // Keyword Search
         if (!string.IsNullOrWhiteSpace(filter.Query))
