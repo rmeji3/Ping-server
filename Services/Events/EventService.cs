@@ -160,7 +160,9 @@ public class EventService(
         // Apply simple fields
         if (dto.IsPublic.HasValue) ev.IsPublic = dto.IsPublic.Value;
         
+        var originalStartTime = ev.StartTime;
         bool timeChanged = false;
+        
         if (dto.StartTime.HasValue)
         {
             ev.StartTime = dto.StartTime.Value;
@@ -174,8 +176,11 @@ public class EventService(
         
         if (timeChanged)
         {
-             if (ev.StartTime < DateTime.UtcNow)
+             // Allow start time to be in past only if it hasn't moved earlier than original start time
+             // This allows editing events that have already started
+             if (ev.StartTime < DateTime.UtcNow && ev.StartTime < originalStartTime)
                 throw new ArgumentException("Event start time must be in the future.");
+
              if (ev.EndTime <= ev.StartTime)
                 throw new ArgumentException("End time must be after start time.");
              if ((ev.EndTime - ev.StartTime).TotalMinutes < 15)

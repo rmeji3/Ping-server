@@ -83,6 +83,17 @@ public class PingService(
                             {
                                 dto = dto with { Latitude = googlePlace.Lat.Value, Longitude = googlePlace.Lng.Value };
                             }
+                            
+                            // DUPLICATE CHECK: Verify if this GooglePlaceId already exists in our DB
+                            var existingByPlaceId = await db.Pings
+                                .Where(p => p.GooglePlaceId == dto.GooglePlaceId && !p.IsDeleted)
+                                .FirstOrDefaultAsync();
+
+                            if (existingByPlaceId != null)
+                            {
+                                logger.LogInformation("Verified ping already exists with GooglePlaceId '{PlaceId}'. Returning error.", dto.GooglePlaceId);
+                                throw new InvalidOperationException($"Ping already exists: {existingByPlaceId.Name}");
+                            }
                         }
                         else
                         {
@@ -113,8 +124,8 @@ public class PingService(
 
                     if (existingByAddress != null)
                     {
-                        logger.LogInformation("Verified ping already exists with address '{Address}'. Returning existing ping {PingId}.", dto.Address, existingByAddress.Id);
-                        return await ToPingDetailsDto(existingByAddress, userId);
+                        logger.LogInformation("Verified ping already exists with address '{Address}'. Returning error.", dto.Address);
+                        throw new InvalidOperationException($"Ping already exists: {existingByAddress.Name}");
                     }
 
                     // Fetch Google name for verified pings (Overwrite behavior)
@@ -134,20 +145,38 @@ public class PingService(
             }
             else // PingType.Custom
             {
+                // Check for duplicates using AI (Semantic check against ALL public pings nearby)
                 var newPoint = new Point(dto.Longitude, dto.Latitude) { SRID = 4326 };
-                var existingCustom = await db.Pings
+                var nearbyPings = await db.Pings
                     .Where(p => p.Visibility == PingVisibility.Public &&
-                                p.Type == PingType.Custom &&
-                                p.Location.IsWithinDistance(newPoint, 0.0005))
-                    .FirstOrDefaultAsync();
+                                p.Location.IsWithinDistance(newPoint, 0.0005)) // ~50m radius
+                    .ToListAsync();
+                
+                Models.Pings.Ping? existingMatch = null;
 
-                if (existingCustom != null)
+                if (nearbyPings.Any())
                 {
-                    logger.LogInformation("Custom ping already exists within 50m at coordinates {Lat}, {Lng}. Returning existing ping {PingId}.", dto.Latitude, dto.Longitude, existingCustom.Id);
-                    return await ToPingDetailsDto(existingCustom, userId);
+                    // 1. Exact Name Match (Case-Insensitive)
+                    existingMatch = nearbyPings.FirstOrDefault(p => p.Name.Equals(finalName, StringComparison.OrdinalIgnoreCase));
+                    
+                    // 2. AI Semantic Match if no exact match
+                    if (existingMatch == null)
+                    {
+                        var duplicateName = await semanticService.FindDuplicateAsync(finalName, nearbyPings.Select(p => p.Name));
+                        if (duplicateName != null)
+                        {
+                            existingMatch = nearbyPings.FirstOrDefault(p => p.Name == duplicateName);
+                        }
+                    }
                 }
 
-                logger.LogInformation("Custom ping created with user-provided name: '{UserName}'", finalName);
+                if (existingMatch != null)
+                {
+                    logger.LogInformation("Ping duplicate detected: '{NewName}' matches existing '{ExistingName}' ({Id}). Returning error.", finalName, existingMatch.Name, existingMatch.Id);
+                    throw new InvalidOperationException($"Ping already exists: {existingMatch.Name}");
+                }
+
+                logger.LogInformation("Custom ping verified unique: '{UserName}'", finalName);
             }
         }
         else
