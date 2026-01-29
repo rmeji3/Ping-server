@@ -178,7 +178,7 @@ public class PingService(
         return await ToPingDetailsDto(ping, userId);
     }
 
-    public async Task<PingDetailsDto> UpdatePingAsync(int id, UpsertPingDto dto, string userId)
+    public async Task<PingDetailsDto> UpdatePingAsync(int id, UpdatePingDto dto, string userId)
     {
         var ping = await db.Pings.FindAsync(id);
         if (ping == null)
@@ -187,55 +187,38 @@ public class PingService(
         if (ping.OwnerUserId != userId)
             throw new InvalidOperationException("You do not have permission to update this ping.");
 
-        if (dto.Visibility != PingVisibility.Public && dto.Type == PingType.Verified)
-        {
-             logger.LogWarning("Verified type is only allowed for Public pings. Auto-correcting to Custom for {Visibility} ping update.", dto.Visibility);
-             dto = dto with { Type = PingType.Custom };
-        }
+        var targetName = !string.IsNullOrWhiteSpace(dto.Name) ? dto.Name.Trim() : ping.Name;
 
-        var finalName = dto.Name.Trim();
-
-        if (ping.Name != finalName)
+        if (dto.Name != null && ping.Name != targetName)
         {
-            if (dto.Type == PingType.Custom)
+            if (ping.Type == PingType.Custom)
             {
-                 var mod = await moderationService.CheckContentAsync(finalName);
+                 var mod = await moderationService.CheckContentAsync(targetName);
                  if (mod.IsFlagged)
                  {
-                     logger.LogWarning("Ping name flagged on update: {Name} - {Reason}", finalName, mod.Reason);
+                     logger.LogWarning("Ping name flagged on update: {Name} - {Reason}", targetName, mod.Reason);
                      throw new ArgumentException($"Ping name rejected: {mod.Reason}");
                  }
             }
-        }
-
-        ping.Name = finalName;
-        ping.Address = dto.Address?.Trim() ?? string.Empty;
-        ping.Latitude = dto.Latitude;
-        ping.Longitude = dto.Longitude;
-        ping.Visibility = dto.Visibility;
-        ping.Type = dto.Type;
-        ping.PingGenreId = dto.PingGenreId;
-        
-        // Update GooglePlaceId if provided (allows linking later)
-        if (!string.IsNullOrWhiteSpace(dto.GooglePlaceId))
-        {
-             // If we are updating to Verified, run verification again?
-             // For now, trust the Create logic or if they pass it in update.
-             // If type is verified, ensure match.
-             if (dto.Type == PingType.Verified)
-             {
-                 var googlePlace = await pingNameService.GetGooglePlaceByIdAsync(dto.GooglePlaceId);
+            
+            // If the ping is Verified, we must ensure the new name still matches the official Google Place name
+            if (ping.Type == PingType.Verified && !string.IsNullOrWhiteSpace(ping.GooglePlaceId))
+            {
+                 var googlePlace = await pingNameService.GetGooglePlaceByIdAsync(ping.GooglePlaceId);
                  if (googlePlace != null)
                  {
-                     if (!await semanticService.VerifyPlaceNameMatchAsync(googlePlace.Name, finalName))
+                     if (!await semanticService.VerifyPlaceNameMatchAsync(googlePlace.Name, targetName))
                      {
-                          logger.LogWarning("Update Ping: Name '{User}' does NOT match '{Official}'. Force downgrading to Custom.", finalName, googlePlace.Name);
+                          logger.LogWarning("Update Ping: Name '{User}' does NOT match '{Official}'. Force downgrading to Custom.", targetName, googlePlace.Name);
                           ping.Type = PingType.Custom;
                      }
                  }
-             }
-             ping.GooglePlaceId = dto.GooglePlaceId;
+            }
+
+            ping.Name = targetName;
         }
+
+        if (dto.PingGenreId.HasValue) ping.PingGenreId = dto.PingGenreId;
 
         await db.SaveChangesAsync();
 

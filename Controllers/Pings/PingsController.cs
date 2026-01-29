@@ -43,13 +43,10 @@ namespace Ping.Controllers.Pings
             }
         }
         
-        // PUT /api/pings/{id}
-        [HttpPut("{id:int}")]
-        public async Task<ActionResult<PingDetailsDto>> Update(int id, [FromBody] UpsertPingDto dto)
+        // PATCH /api/pings/{id}
+        [HttpPatch("{id:int}")]
+        public async Task<ActionResult<PingDetailsDto>> Update(int id, [FromBody] UpdatePingDto dto)
         {
-            if (string.IsNullOrWhiteSpace(dto.Name))
-                return BadRequest("Ping name is required.");
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null)
                 return Unauthorized("You must be logged in to update a ping.");

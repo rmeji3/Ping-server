@@ -293,7 +293,8 @@ Property Configuration:
 ### Pings
 - `PingVisibility` enum: `Private = 0`, `Friends = 1`, `Public = 2`
 - `PingType` enum: `Custom = 0`, `Verified = 1`
-- `UpsertPingDto(Name, Address?, Latitude, Longitude, Visibility, Type, GooglePlaceId?)`
+- `UpsertPingDto(Name, Address?, Latitude, Longitude, Visibility, Type, PingGenreId?, GooglePlaceId?)` - Create only
+- `UpdatePingDto(Name?, PingGenreId?)` - Patch only (Name and Genre updates only)
 - `PingDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Favorites, Activities[PingActivitySummaryDto], PingGenre?, ClaimStatus?, IsClaimed, GooglePlaceId?)`
 
 ### Profiles
@@ -569,6 +570,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | Method | Route                                                                              | Auth | Body             | Returns             | Notes                                                                                                           |
 | ------ | ---------------------------------------------------------------------------------- | ---- | ---------------- | ------------------- | --------------------------------------------------------------------------------------------------------------- |
 | POST   | /api/pings                                                                        | A    | `UpsertPingDto` | `PingDetailsDto`   | Daily per-user creation limit (10); Verified type requires address; Private/Friends auto-converted to Custom    |
+| PATCH  | /api/pings/{id}                                                                   | A    | `UpdatePingDto` | `PingDetailsDto`   | Partial updates for Name and Genre only. Auto-downgrades Verified to Custom if name verification fails.   |
 | GET    | /api/pings/{id}                                                                   | A    | —                | `PingDetailsDto`   | Respects visibility: Private (owner only), Friends (owner + friends), Public (all)                              |
 | GET    | /api/pings/nearby (Q: lat,lng,radiusKm,activityName,pingGenre,visibility,type, pageNumber, pageSize) | A    | —                | `PaginatedResult<PingDetailsDto>` | Geo-search with optional filters: visibility (Public/Private/Friends), type (Verified/Custom), activity filters |
 | POST   | /api/pings/favorites/{id}                                          | A    | —                | 200 OK              | Adds ping to favorites; prevents duplicates, validates ping exists                                            |

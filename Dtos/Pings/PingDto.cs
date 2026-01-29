@@ -35,5 +35,10 @@ namespace Ping.Dtos.Pings
         string? GooglePlaceId = null
         );
 
+    public class UpdatePingDto
+    {
+        [MaxLength(100)] public string? Name { get; set; }
+        public int? PingGenreId { get; set; }
+    }
 }
 
