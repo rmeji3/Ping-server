@@ -7,6 +7,7 @@ using Ping.Models.Pings;
 using Ping.Services.Pings;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
+using System.ComponentModel.DataAnnotations;
 
 namespace Ping.Controllers.Pings
 {
@@ -94,9 +95,9 @@ namespace Ping.Controllers.Pings
             [FromQuery] double? lng,
             [FromQuery] double? radiusKm = 5,
             [FromQuery] string? query = null,
-            [FromQuery] string? activityName = null,
-            [FromQuery] string? pingGenreName = null,
-            [FromQuery] string[]? tags = null,
+            [FromQuery, MaxLength(10)] string[]? activityNames = null,
+            [FromQuery, MaxLength(10)] string[]? pingGenreNames = null,
+            [FromQuery, MaxLength(10)] string[]? tags = null,
             [FromQuery] PingVisibility? visibility = null,
             [FromQuery] PingType? type = null,
             [FromQuery] int pageNumber = 1,
@@ -104,7 +105,7 @@ namespace Ping.Controllers.Pings
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await pingService.SearchNearbyAsync(lat, lng, radiusKm, query, activityName, pingGenreName, tags, visibility, type, userId, pagination);
+            var result = await pingService.SearchNearbyAsync(lat, lng, radiusKm, query, activityNames, pingGenreNames, tags, visibility, type, userId, pagination);
             return Ok(result);
         }
 

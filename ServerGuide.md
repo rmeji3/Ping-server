@@ -573,7 +573,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/pings                                                                        | A    | `UpsertPingDto` | `PingDetailsDto`   | Daily per-user creation limit (10); Verified type requires address; Private/Friends auto-converted to Custom    |
 | PATCH  | /api/pings/{id}                                                                   | A    | `UpdatePingDto` | `PingDetailsDto`   | Partial updates for Name and Genre only. Auto-downgrades Verified to Custom if name verification fails.   |
 | GET    | /api/pings/{id}                                                                   | A    | —                | `PingDetailsDto`   | Respects visibility: Private (owner only), Friends (owner + friends), Public (all)                              |
-| GET    | /api/pings/nearby (Q: lat,lng,radiusKm,activityName,pingGenre,visibility,type, pageNumber, pageSize) | A    | —                | `PaginatedResult<PingDetailsDto>` | Geo-search with optional filters: visibility (Public/Private/Friends), type (Verified/Custom), activity filters |
+| GET    | /api/pings/nearby (Q: lat,lng,radiusKm,activityNames,pingGenreNames,visibility,type, pageNumber, pageSize) | A    | —                | `PaginatedResult<PingDetailsDto>` | Geo-search with optional filters: visibility (Public/Private/Friends), type (Verified/Custom), activity filters |
 | POST   | /api/pings/favorites/{id}                                          | A    | —                | 200 OK              | Adds ping to favorites; prevents duplicates, validates ping exists                                            |
 | DELETE | /api/pings/favorites/{id}                                          | A    | —                | 204 NoContent       | Removes ping from favorites; idempotent                                                                        |
 | GET    | /api/pings/favorites (Q: pageNumber, pageSize)                                    | A    | —                | `PaginatedResult<PingDetailsDto>` | Returns all favorited pings with activities                                                                    |
@@ -686,6 +686,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
   - `URLs`: 2048 chars
   - `Usernames`: 24 chars, Alphanumeric + `_` only.
   - `Addresses/Ids`: 256 chars
+  - `Filter Arrays (Activities, Genres, Tags)`: Max 10 items
 - **Database Consistency**: `AppDbContext` and `AuthDbContext` enforce strict `HasMaxLength` constraints matching DTOs to prevent truncation errors and overflow attacks.
 
 
@@ -1256,7 +1257,7 @@ The Unified Search endpoint allows users to search across multiple entity types 
 
 ### Endpoints
 - `GET /api/search` or `GET /api/v1/search`:
-  - **Parameters**: `Query`, `Latitude`, `Longitude`, `RadiusKm`, `PageNumber`, `PageSize`, `PingGenreId`, `Tags`.
+  - **Parameters**: `Query`, `Latitude`, `Longitude`, `RadiusKm`, `PageNumber`, `PageSize`, `ActivityNames`, `PingGenreNames`, `Tags`.
   - **Return**: `UnifiedSearchResultDto` containing `Profiles` and `Pings`.
 - `GET /api/search/history`: Get recent history (Default 20).
 - `POST /api/search/history`: Add history item.

@@ -16,8 +16,9 @@ public record UnifiedSearchFilterDto(
     double? Longitude = null,
     double? RadiusKm = null,
     // Ping specific
-    int? PingGenreId = null,
-    string[]? Tags = null
+    [MaxLength(10)] string[]? ActivityNames = null,
+    [MaxLength(10)] string[]? PingGenreNames = null,
+    [MaxLength(10)] string[]? Tags = null
 );
 
 public record UnifiedSearchResultDto(

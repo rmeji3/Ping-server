@@ -33,8 +33,8 @@ public class SearchService(
             filter.Longitude,
             filter.RadiusKm,
             filter.Query, // Use query for name search
-            null, // activityName
-            null, // pinGenreName
+            filter.ActivityNames,
+            filter.PingGenreNames,
             filter.Tags,
             null, // visibility
             null, // type

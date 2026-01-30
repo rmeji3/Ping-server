@@ -323,8 +323,8 @@ public class PingService(
         double? lng,
         double? radiusKm,
         string? query,
-        string? activityName,
-        string? pingGenreName,
+        string[]? activityNames,
+        string[]? pingGenreNames,
         string[]? tags,
         PingVisibility? visibility,
         PingType? type,
@@ -374,16 +374,16 @@ public class PingService(
             q = q.Where(p => p.Type == type.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(activityName))
+        if (activityNames != null && activityNames.Any())
         {
-            var an = activityName.Trim().ToLowerInvariant();
-            q = q.Where(p => p.PingActivities.Any(a => a.Name != null && a.Name.ToLower() == an));
+            var normalizedNames = activityNames.Select(a => a.Trim().ToLowerInvariant()).ToList();
+            q = q.Where(p => p.PingActivities.Any(a => a.Name != null && normalizedNames.Contains(a.Name.ToLower())));
         }
 
-        if (!string.IsNullOrWhiteSpace(pingGenreName))
+        if (pingGenreNames != null && pingGenreNames.Any())
         {
-            var gn = pingGenreName.Trim().ToLowerInvariant();
-            q = q.Where(p => p.PingGenre != null && p.PingGenre.Name.ToLower() == gn);
+            var normalizedGenres = pingGenreNames.Select(g => g.Trim().ToLowerInvariant()).ToList();
+            q = q.Where(p => p.PingGenre != null && normalizedGenres.Contains(p.PingGenre.Name.ToLower()));
         }
 
         var candidates = await q.ToListAsync();
