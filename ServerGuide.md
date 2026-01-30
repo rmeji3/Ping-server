@@ -237,7 +237,7 @@ Property Configuration:
 | EventAttendee | (EventId, UserId)  | JoinedAt                                                                                                                 | Event                                  | Many-to-many join                                                                                                     |
 | Tag           | Id                 | Name, IsApproved, IsBanned, CanonicalTagId                                                                               | ReviewTags                             | Used for categorizing reviews                                                                                         |
 | UserBlock     | (BlockerId, BlockedId) | CreatedAt                                                                                                                | Blocker, Blocked                       | Separation of concern for blocking users; masks content bidirectionally                                               |
-| Report        | Id                 | ReporterId, TargetId?, TargetType, Reason, Description?, ScreenshotUrl?, Status, CreatedAt                              | (None - Polymorphic)                    | TargetId is nullable string (null for Bug reports); TargetType enum (Ping/PingActivity/Review/Profile/Bug/Event/EventComment); Status enum (Pending/Reviewed/Dismissed) |
+| Report        | Id (Guid)          | ReporterId (string), TargetId?, TargetType, Reason, Description?, ScreenshotUrl?, Status, CreatedAt                              | (None - Polymorphic)                    | TargetId is nullable string (null for Bug reports); TargetType enum (Ping/PingActivity/Review/Profile/Bug/Event/EventComment); Status enum (Pending/Reviewed/Dismissed) |
 | PingClaim     | Id                 | UserId, PingId, Proof, Status, CreatedUtc, ReviewedUtc, ReviewerId                                                      | Ping                                   | Tracks ownership claim requests; Logic FK to User                                                                     |
 | UserActivityLog | Id               | UserId, Date, LoginCount, LastActivityUtc                                                                                | User                                   | Tracks daily unique logins per user for analytics                                                                     |
 | DailySystemMetric | Id             | Date, MetricType, Value, Dimensions                                                                                      | (None)                                 | Stores historical aggregated stats (DAU, WAU, MAU, etc.)                                                              |
@@ -304,9 +304,10 @@ Property Configuration:
 
 ### Reviews
 - `UserReviewsDto(Review, History[])` - Grouped response
-- `ReviewDto(Id, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[])`
-- `CreateReviewDto(Rating, Content?, ImageUrl, Tags[])`
-- `ExploreReviewDto(ReviewId, PingActivityId, PingId, PingName, PingAddress, ActivityName, PingGenreName?, Latitude, Longitude, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, CreatedAt, Likes, IsLiked, Tags[], IsPingDeleted)`
+- `ReviewDto(Id, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, ThumbnailUrl, CreatedAt, Likes, IsLiked, IsOwner, Tags[])`
+- `CreateReviewDto(Rating, Content?, ImageUrl, ThumbnailUrl?, Tags[])`
+- `UpdateReviewDto(Rating?, Content?, ImageUrl?, ThumbnailUrl?, Tags?[] )`
+- `ExploreReviewDto(ReviewId, PingActivityId, PingId, PingName, PingAddress, ActivityName, PingGenreName?, Latitude, Longitude, Rating, Content?, UserId, UserName, ProfilePictureUrl, ImageUrl, ThumbnailUrl, CreatedAt, Likes, IsLiked, IsOwner, Tags[], IsPingDeleted)`
 
 ### Repings
 - `RepingDto(Id, ReviewId, UserId, CreatedAt, Privacy, Review(ExploreReviewDto))`
@@ -331,7 +332,7 @@ Property Configuration:
 
 ### Reporting
 - `CreateReportDto(TargetId?, TargetType, Reason, Description?)` - TargetId is nullable string. `null` for Bug reports; required for content reports (Ping, Review, Profile, etc.). Screenshot uploaded separately via `IFormFile`.
-- `Report(Id, ReporterId, TargetId?, TargetType, Reason, Description?, ScreenshotUrl?, CreatedAt, Status)`
+- `Report(Id (Guid), ReporterId (string), TargetId?, TargetType, Reason, Description?, ScreenshotUrl?, CreatedAt, Status)`
 
 ### Business & Claims
 - `CreateClaimDto(PingId, Proof)`
@@ -640,6 +641,8 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | GET    | /api/reviews/liked (Q: pageNumber, pageSize)               | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's liked reviews (Alias for profiles/me/likes) |
 | GET    | /api/reviews/me (Q: pageNumber, pageSize)                  | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's own reviews                                 |
 | GET    | /api/reviews/friends (Q: pageNumber, pageSize)             | A    | —                         | `PaginatedResult<ExploreReviewDto>` | Friends' reviews sorted by date                    |
+| DELETE | /api/reviews/{reviewId}                                    | A    | —                         | 204 NoContent        | Delete own review (Owner only)                     |
+| PATCH  | /api/reviews/{reviewId}                                    | A    | `UpdateReviewDto`         | `ReviewDto`          | Update own review (Partial, Owner only)            |
 
 ### TagsController (`/api/tags`)
 | Method | Route                                        | Auth | Body | Returns     | Notes                        |

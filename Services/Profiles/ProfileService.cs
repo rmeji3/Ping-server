@@ -673,6 +673,7 @@ public class ProfileService(
                 r.CreatedAt,
                 r.LikesList.Count,
                 r.LikesList.Any(l => l.UserId == currentUserId),
+                r.UserId == currentUserId, // IsOwner
                 r.ReviewTags.Select(rt => rt.Tag.Name).ToList()
             ))
             .ToListAsync();

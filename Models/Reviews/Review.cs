@@ -13,10 +13,10 @@ public class Review
     public int PingActivityId { get; set; }
     public PingActivity PingActivity { get; set; } = null!;
     [Range(1, 5, ErrorMessage = "Rating must be between 1 and 5.")]
-    public int Rating { get; init; }
+    public int Rating { get; set; }
     public ReviewType Type { get; set; }
     [MaxLength(1000)]
-    public string? Content { get; init; }
+    public string? Content { get; set; }
     public DateTime CreatedAt { get; init; }
     public List<ReviewTag> ReviewTags { get; set; } = new();
     public int Likes { get; set; }

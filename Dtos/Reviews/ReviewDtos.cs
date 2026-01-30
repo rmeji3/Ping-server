@@ -14,6 +14,7 @@ public record ReviewDto(
     DateTime CreatedAt,
     int Likes,
     bool IsLiked,
+    bool IsOwner,
     List<string> Tags
 );
 
@@ -27,6 +28,18 @@ public record CreateReviewDto(
     [MaxLength(2048)]
     string? ThumbnailUrl,
     List<string>? Tags = null
+);
+
+public record UpdateReviewDto(
+    [Range(1, 5, ErrorMessage = "Rating must be between 1 and 5.")]
+    int? Rating,
+    [MaxLength(1000, ErrorMessage = "Content must be at most 1000 characters.")]
+    string? Content,
+    [MaxLength(2048)]
+    string? ImageUrl,
+    [MaxLength(2048)]
+    string? ThumbnailUrl,
+    List<string>? Tags
 );
 
 public record ExploreReviewDto(
@@ -49,6 +62,7 @@ public record ExploreReviewDto(
     DateTime CreatedAt,
     int Likes,
     bool IsLiked,
+    bool IsOwner,
     List<string> Tags,
     bool IsPingDeleted
 );

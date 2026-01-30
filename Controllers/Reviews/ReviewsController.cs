@@ -194,5 +194,63 @@ namespace Ping.Controllers.Reviews
             logger.LogInformation("GetFriendsFeed: Friends feed fetched for {UserId}", userId);
             return Ok(reviews);
         }
+
+        // DELETE /api/reviews/{reviewId}
+        [HttpDelete("/api/reviews/{reviewId:int}")]
+        [HttpDelete("/api/v{version:apiVersion}/reviews/{reviewId:int}")]
+        public async Task<IActionResult> DeleteReview(int reviewId)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+            {
+                logger.LogWarning("DeleteReview: User is not authenticated or missing id.");
+                return Unauthorized();
+            }
+
+            try
+            {
+                await reviewService.DeleteReviewAsync(reviewId, userId);
+                return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
+        }
+
+        // PATCH /api/reviews/{reviewId}
+        [HttpPatch("/api/reviews/{reviewId:int}")]
+        [HttpPatch("/api/v{version:apiVersion}/reviews/{reviewId:int}")]
+        public async Task<ActionResult<ReviewDto>> UpdateReview(int reviewId, [FromBody] UpdateReviewDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+            {
+                logger.LogWarning("UpdateReview: User is not authenticated or missing id.");
+                return Unauthorized();
+            }
+
+            try
+            {
+                var result = await reviewService.UpdateReviewAsync(reviewId, userId, dto);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
     }
 }

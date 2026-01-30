@@ -157,6 +157,7 @@ public class RepingService(
                 item.Review.CreatedAt,
                 item.Review.Likes,
                 likedReviewIds.Contains(item.ReviewId),
+                item.Review.UserId == currentUserId, // IsOwner
                 item.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
                 item.Review.PingActivity.Ping.IsDeleted
             );
@@ -251,6 +252,7 @@ public class RepingService(
             item.Review.CreatedAt,
             item.Review.Likes,
             isLiked,
+            item.Review.UserId == currentUserId, // IsOwner
             item.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
             item.Review.PingActivity.Ping.IsDeleted
         );

@@ -3,7 +3,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Ping.Models.Reports;
 using Ping.Dtos.Common;
-using Ping.DTOs.Reports;
+using Ping.Dtos.Reports;
 using Ping.Services.Reports;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -24,18 +24,17 @@ namespace Ping.Controllers.Reports
         /// Use multipart/form-data when uploading a screenshot.
         /// </summary>
         [HttpPost]
-        [Consumes("multipart/form-data", "application/json")]
-        public async Task<ActionResult> CreateReport([FromForm] CreateReportDto dto, IFormFile? screenshot = null)
+        [Consumes("multipart/form-data")]
+        public async Task<ActionResult> CreateReport([FromForm] CreateReportDto dto)
         {
-            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (userIdStr is null || !Guid.TryParse(userIdStr, out var userId))
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
             {
                 return Unauthorized();
             }
 
-            var report = await reportService.CreateReportAsync(userId, dto, screenshot);
+            var report = await reportService.CreateReportAsync(userId, dto, dto.Screenshot);
             
-            // returning 201 Created
             return StatusCode(201, report);
         }
 

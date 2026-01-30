@@ -130,6 +130,7 @@ public class ReviewService(
             review.CreatedAt,
             review.Likes,
             false, // IsLiked
+            true, // IsOwner
             dto.Tags ?? new List<string>() // Return tags
         );
     }
@@ -216,6 +217,7 @@ public class ReviewService(
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
+            r.UserId == userId, // IsOwner
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList() 
         )).ToList();
 
@@ -383,6 +385,7 @@ public class ReviewService(
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
+            r.UserId == userId, // IsOwner
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
             r.PingActivity.Ping.IsDeleted
         )).ToList();
@@ -598,6 +601,7 @@ public class ReviewService(
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
                 viewerLikedIds.Contains(rl.Review.Id), // IsLiked by Viewer
+                rl.Review.UserId == viewerUserId, // IsOwner
                 rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
                 rl.Review.PingActivity.Ping.IsDeleted
             )).ToList();
@@ -663,6 +667,7 @@ public class ReviewService(
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
                 true, // IsLiked
+                rl.Review.UserId == userId, // IsOwner
                 rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
                 rl.Review.PingActivity.Ping.IsDeleted
             )).ToList();
@@ -726,6 +731,7 @@ public class ReviewService(
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id),
+            true, // IsOwner (My Review)
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
             r.PingActivity.Ping.IsDeleted
         )).ToList();
@@ -794,6 +800,7 @@ public class ReviewService(
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
+            r.UserId == currentUserId, // IsOwner
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
             r.PingActivity.Ping.IsDeleted
         )).ToList();
@@ -874,6 +881,7 @@ public class ReviewService(
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
+            r.UserId == userId, // IsOwner
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
             r.PingActivity.Ping.IsDeleted
         )).ToList();
@@ -892,6 +900,125 @@ public class ReviewService(
              await appDb.SaveChangesAsync();
              logger.LogInformation("Review deleted by Admin: {ReviewId}", id);
         }
+    }
+
+    public async Task DeleteReviewAsync(int reviewId, string userId)
+    {
+        var review = await appDb.Reviews.FindAsync(reviewId);
+        
+        if (review == null)
+        {
+            throw new KeyNotFoundException("Review not found.");
+        }
+
+        if (review.UserId != userId)
+        {
+            throw new UnauthorizedAccessException("You are not authorized to delete this review.");
+        }
+
+        appDb.Reviews.Remove(review);
+        await appDb.SaveChangesAsync();
+        logger.LogInformation("Review {ReviewId} deleted by user {UserId}", reviewId, userId);
+    }
+
+    public async Task<ReviewDto> UpdateReviewAsync(int reviewId, string userId, UpdateReviewDto dto)
+    {
+        var review = await appDb.Reviews
+            .Include(r => r.ReviewTags)
+            .ThenInclude(rt => rt.Tag)
+            .FirstOrDefaultAsync(r => r.Id == reviewId);
+
+        if (review == null) throw new KeyNotFoundException("Review not found.");
+
+        if (review.UserId != userId)
+        {
+            throw new UnauthorizedAccessException("You are not authorized to update this review.");
+        }
+
+        bool updated = false;
+
+        if (dto.Rating.HasValue)
+        {
+            review.Rating = dto.Rating.Value;
+            updated = true;
+        }
+
+        if (dto.Content != null)
+        {
+            if (dto.Content.Length > 1000) throw new ArgumentException("Content must be at most 1000 characters.");
+            
+            // Moderate content if changed
+            if (dto.Content != review.Content)
+            {
+                 var modResult = await moderationService.CheckContentAsync(dto.Content);
+                 if (modResult.IsFlagged) throw new ArgumentException($"Content rejected: {modResult.Reason}");
+                 review.Content = dto.Content;
+                 updated = true;
+            }
+        }
+
+        if (dto.ImageUrl != null)
+        {
+            review.ImageUrl = dto.ImageUrl;
+            review.ThumbnailUrl = !string.IsNullOrWhiteSpace(dto.ThumbnailUrl) ? dto.ThumbnailUrl : dto.ImageUrl;
+            updated = true;
+        }
+
+        if (dto.Tags != null)
+        {
+            // Simplified Tag Update: clear existing, add new
+            // A more efficient way would be diffing, but this is safer for now.
+            // Actually, we must be careful not to delete global tags? No, ReviewTag is a link.
+            // We delete the links (ReviewTags) not the Tags themselves.
+            
+            appDb.ReviewTags.RemoveRange(review.ReviewTags);
+            
+            var distinctTags = dto.Tags
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Select(t => t.Trim().ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            foreach (var tagName in distinctTags)
+            {
+                var tag = await appDb.Tags.FirstOrDefaultAsync(t => t.Name == tagName);
+                if (tag == null)
+                {
+                    var tagMod = await moderationService.CheckContentAsync(tagName);
+                    if (tagMod.IsFlagged) continue; 
+
+                    tag = new Tag { Name = tagName };
+                    appDb.Tags.Add(tag);
+                }
+                review.ReviewTags.Add(new ReviewTag { Tag = tag, ReviewId = review.Id }); // EF tracks relationship
+            }
+            updated = true;
+        }
+
+        if (updated)
+        {
+            await appDb.SaveChangesAsync();
+            logger.LogInformation("Review {ReviewId} updated by {UserId}", reviewId, userId);
+        }
+
+        // Return updated DTO
+        var user = await userManager.FindByIdAsync(userId);
+        
+        return new ReviewDto(
+            review.Id,
+            review.Rating,
+            review.Content,
+            review.UserId,
+            review.UserName,
+            user?.ProfileImageUrl,
+            review.ImageUrl,
+            review.ThumbnailUrl,
+            review.CreatedAt,
+            review.Likes,
+            await appDb.ReviewLikes.AnyAsync(rl => rl.ReviewId == review.Id && rl.UserId == userId),
+            true, // IsOwner
+            review.ReviewTags.Select(rt => rt.Tag.Name).ToList()
+        );
     }
 }
 
