@@ -340,7 +340,35 @@ public class EventService(
         if (ev.CreatedById != requesterId) throw new UnauthorizedAccessException("Only creator can uninvite users.");
 
         var att = await appDb.EventAttendees.FirstOrDefaultAsync(a => a.EventId == eventId && a.UserId == targetUserId);
-        if (att == null) return false; // Not attending/invited
+        if (att == null) return false;
+
+        if (att.Status == AttendeeStatus.Attending)
+        {
+            throw new InvalidOperationException("User has already joined. Use Remove to kick them.");
+        }
+
+        appDb.EventAttendees.Remove(att);
+        await appDb.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RemoveAttendeeAsync(int eventId, string requesterId, string targetUserId)
+    {
+        var ev = await appDb.Events.FindAsync(eventId);
+        if (ev == null) throw new KeyNotFoundException("Event not found");
+
+        if (ev.CreatedById != requesterId) throw new UnauthorizedAccessException("Only creator can remove attendees.");
+
+        var att = await appDb.EventAttendees.FirstOrDefaultAsync(a => a.EventId == eventId && a.UserId == targetUserId);
+        if (att == null) return false; 
+        
+        if (att.Status != AttendeeStatus.Attending)
+        {
+             // If user is just Invited, use Uninvite instead.
+             // But for robustness, "Remove" could cover both.
+             // However, strictly following the request for differentiation:
+             throw new InvalidOperationException("User has not joined yet. Use Uninvite to cancel invitation.");
+        }
 
         appDb.EventAttendees.Remove(att);
         await appDb.SaveChangesAsync();
@@ -689,13 +717,21 @@ public class EventService(
         return true;
     }
 
-    public async Task<PaginatedResult<FriendInviteDto>> GetFriendsToInviteAsync(int eventId, string userId, PaginationParams pagination)
+    public async Task<PaginatedResult<FriendInviteDto>> GetFriendsToInviteAsync(int eventId, string userId, PaginationParams pagination, string? query = null)
     {
         // Mutuals: Users I follow who also follow me
         var friendsQuery = authDb.Follows
             .Where(f => f.FollowerId == userId && 
                         authDb.Follows.Any(f2 => f2.FollowerId == f.FolloweeId && f2.FolloweeId == userId))
             .Select(f => f.Followee);
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var search = query.Trim().ToLowerInvariant();
+            friendsQuery = friendsQuery.Where(u => u.UserName.ToLower().Contains(search) || 
+                                                   u.FirstName.ToLower().Contains(search) || 
+                                                   u.LastName.ToLower().Contains(search));
+        }
 
         var totalCount = await friendsQuery.CountAsync();
         

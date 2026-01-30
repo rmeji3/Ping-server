@@ -201,8 +201,8 @@ namespace Ping.Controllers.Events
             try
             {
                 var result = await eventService.UninviteUserAsync(id, userId, req.UserId);
-                if (!result) return NotFound("User not found in event list.");
-                return Ok("User uninvited.");
+                if (!result) return NotFound("User not found or invite not active.");
+                return Ok("User uninvited (invite cancelled).");
             }
             catch (KeyNotFoundException ex)
             {
@@ -212,6 +212,40 @@ namespace Ping.Controllers.Events
             {
                 return Forbid(ex.Message);
             }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        // POST /api/events/{id}/remove
+        [HttpPost("{id:int}/remove")]
+        public async Task<IActionResult> RemoveUser(int id, [FromBody] InviteRequest req)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            if (string.IsNullOrEmpty(req.UserId)) return BadRequest("UserId is required.");
+
+            try
+            {
+                var result = await eventService.RemoveAttendeeAsync(id, userId, req.UserId);
+                if (!result) return NotFound("User not found in event list.");
+                return Ok("User removed from event.");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
+             catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            
         }
 
         // GET /api/events/{id}/invite-candidates
@@ -219,13 +253,14 @@ namespace Ping.Controllers.Events
         public async Task<ActionResult<PaginatedResult<FriendInviteDto>>> GetInviteCandidates(
             int id,
             [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 20)
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? query = null)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null) return Unauthorized();
 
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-            var result = await eventService.GetFriendsToInviteAsync(id, userId, pagination);
+            var result = await eventService.GetFriendsToInviteAsync(id, userId, pagination, query);
             return Ok(result);
         }
 

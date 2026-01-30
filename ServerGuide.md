@@ -557,6 +557,10 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/Events/{id}/comments                        | A    | `CreateEventCommentDto` | `EventCommentDto` | Add comment (Max 100 words, Moderated) |
 | GET    | /api/Events/{id}/comments (Q: pageNumber, pageSize) | A | —               | `PaginatedResult` | Get comments (Newest first)               |
 | DELETE | /api/Events/comments/{id}                        | A    | —                | 204          | Delete comment (Owner only)               |
+| GET    | /api/Events/{id}/invite-candidates (Q: query)    | A    | —                | `PaginatedResult` | List friends to invite. Query filters name. |
+| POST   | /api/Events/{id}/invite                          | A    | `InviteRequest`  | 200          | Invite user to event (`UserId` in body)   |
+| POST   | /api/Events/{id}/uninvite                        | A    | `InviteRequest`  | 200          | Cancel invite (Status must be 'Invited')   |
+| POST   | /api/Events/{id}/remove                          | A    | `InviteRequest`  | 200          | Remove attendee (Status must be 'Attending')|
 
 ### FollowsController (`/api/follows`)
 | Method | Route                          | Auth | Body | Returns              | Notes                                                    |
