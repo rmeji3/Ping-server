@@ -361,49 +361,74 @@ public class ProfileService(
 
         // Logic: Return {Ping, Date} to allow sorting by recency
         // Created Pings
+        // Logic: Return {Ping, Date} to allow sorting by recency
+        // Created Pings
         var createdQuery = appDb.Pings.AsNoTracking()
             .Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted)
-            .Select(p => new { Ping = p, Date = p.CreatedUtc });
+            .Select(p => new { PingId = p.Id, Date = p.CreatedUtc, p.Visibility, p.OwnerUserId });
 
         // Visited Pings (from Reviews)
         var visitedQuery = appDb.Reviews.AsNoTracking()
-            .Where(r => r.UserId == targetUserId)
-            .Select(r => new { Ping = r.PingActivity!.Ping, Date = r.CreatedAt })
-            .Where(x => !x.Ping.IsDeleted);
+            .Where(r => r.UserId == targetUserId && !r.PingActivity!.Ping.IsDeleted)
+            .Select(r => new { PingId = r.PingActivity!.PingId, Date = r.CreatedAt, r.PingActivity.Ping.Visibility, r.PingActivity.Ping.OwnerUserId });
 
-        var combinedQuery = createdQuery.Union(visitedQuery);
+        // Combined List of ID+Date+Visibility
+        // EF Core 9 might still struggle with full UNION of anonymous types followed by complex conditional filtering in one go.
+        // Let's materialize the lightweight list first (fetching ID, Date, Visibility) - typically small enough (<10k rows usually).
+        // If huge, we need to optimize differently, but for a user profile, it's manageable.
+        
+        var createdList = await createdQuery.ToListAsync();
+        var visitedList = await visitedQuery.ToListAsync();
+        
+        var combinedList = createdList.Concat(visitedList); // In-Memory concat
 
-        // Apply Visibility Filters to the combined list (to hide private/friends-only pings user shouldn't see)
+        // Apply Visibility Filters In-Memory
         // Public: Everyone sees
         // Owner is Me (Viewer): I see
-        // Owner is Target (Profile Owner) AND IsFriend: I see (because of 'friends only' visibility logic on the ping + we are friends)
-        // Note: Logic copied from GetProfileByIdAsync but adapted for LINQ
-        combinedQuery = combinedQuery.Where(x => 
-            x.Ping.Visibility == Models.Pings.PingVisibility.Public ||
-            x.Ping.OwnerUserId == currentUserId ||
-            (x.Ping.Visibility == Models.Pings.PingVisibility.Friends && x.Ping.OwnerUserId == targetUserId && isFriend)
-            // Note: We exclude third-party friends-only pings if we aren't the owner, as consistent with GetProfile logic
+        // Owner is Target (Profile Owner) AND IsFriend: I see
+        
+        var visibleItems = combinedList.Where(x => 
+            x.Visibility == Models.Pings.PingVisibility.Public ||
+            x.OwnerUserId == currentUserId ||
+            (x.Visibility == Models.Pings.PingVisibility.Friends && x.OwnerUserId == targetUserId && isFriend)
         );
 
-        var totalCount = await combinedQuery.Select(x => x.Ping.Id).Distinct().CountAsync();
-        
-        // Paginate - distinct by Ping ID to avoid duplicates if visited + created same ping? 
-        // Union handles distinct on the anonymous object {Ping, Date}. 
-        // If created and visited at different times, they appear twice? Yes.
-        // We probably want unique Pings.
-        // GroupBy ID and take latest date.
-        
-        var pagedItems = await combinedQuery
-            .GroupBy(x => x.Ping.Id)
-            .Select(g => g.OrderByDescending(x => x.Date).First()) // Take most recent interaction
+        // Group By PingId to get latest date
+        var groupedItems = visibleItems
+            .GroupBy(x => x.PingId)
+            .Select(g => new { PingId = g.Key, Date = g.Max(x => x.Date) })
             .OrderByDescending(x => x.Date)
+            .ToList();
+
+        var totalCount = groupedItems.Count;
+        
+        // Paginate IDs
+        var pagedIds = groupedItems
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
-            .Select(x => x.Ping)
+            .Select(x => x.PingId)
+            .ToList();
+
+        if (pagedIds.Count == 0)
+        {
+             return new PaginatedResult<PingDetailsDto>(new List<PingDetailsDto>(), totalCount, pagination.PageNumber, pagination.PageSize);
+        }
+
+        // Fetch Full Ping Details for the page
+        var pings = await appDb.Pings.AsNoTracking()
+            .Where(p => pagedIds.Contains(p.Id))
+            .Include(p => p.PingGenre)
             .ToListAsync();
+            
+        // Re-order to match date sort
+        var pingsOrdered = pagedIds
+            .Select(id => pings.FirstOrDefault(p => p.Id == id))
+            .Where(p => p != null)
+            .Select(p => p!)
+            .ToList();
 
         var pingDtos = new List<PingDetailsDto>();
-        foreach (var p in pagedItems)
+        foreach (var p in pingsOrdered)
         {
             bool isPingOwner = p.OwnerUserId == currentUserId;
             // Map
@@ -447,55 +472,96 @@ public class ProfileService(
         
         // Created Events
         var createdQuery = appDb.Events.AsNoTracking()
-            .Where(e => e.CreatedById == targetUserId);
+            .Where(e => e.CreatedById == targetUserId)
+            .Select(e => new { EventId = e.Id, e.StartTime, e.IsPublic, e.CreatedById, IsAttendee = false }); // IsAttendee not used for filter yet but needed for union shape? Actually we can fetch Id, Time etc.
 
         // Attending Events
-        var attendingQuery = appDb.EventAttendees.AsNoTracking()
+        // We need to know if current user is attending for visibility check: e.Attendees.Any(a => a.UserId == currentUserId)
+        // This is hard to project in a simple union.
+        // Strategy: Fetch IDs and metadata, filter in memory if necessary or refine query.
+        
+        // Let's materialize lightweight lists first.
+        var createdList = await createdQuery.Select(x => new { x.EventId, x.StartTime, x.IsPublic, x.CreatedById, IsMyAttendee = false }).ToListAsync(); 
+        
+        // For attending list, we just need events target user is attending.
+        var attendingList = await appDb.EventAttendees.AsNoTracking()
             .Where(ea => ea.UserId == targetUserId)
-            .Select(ea => ea.Event);
+            .Select(ea => new { 
+                EventId = ea.EventId, 
+                ea.Event.StartTime, 
+                ea.Event.IsPublic, 
+                ea.Event.CreatedById,
+                IsMyAttendee = ea.Event.Attendees.Any(a => a.UserId == currentUserId) // Check if viewer is also attending
+            })
+            .ToListAsync();
 
-        var combinedQuery = createdQuery.Union(attendingQuery);
+        // Check if viewer is attending "Created" events (for visibility)
+        // This requires an extra check or fetch. 
+        // Simplification: We already fetched 'attendingList' which contains events TargetUser attends.
+        // If TargetUser created an event, they might not be in Attendees list explicitly? (Depends on business logic. Usually creator assumes attendance or adds self).
+        // Let's assume visibility check needs: IsPublic OR CreatedByViewer OR ViewerIsAttendee.
+        
+        // We need to know if Viewer Is Attendee for the 'createdList' too.
+        // Use a separate query to get all EventIds viewer is attending, then check against that set.
+        var viewerAttendingIds = await appDb.EventAttendees.AsNoTracking()
+            .Where(ea => ea.UserId == currentUserId)
+            .Select(ea => ea.EventId)
+            .ToListAsync();
+        var viewerAttendingSet = new HashSet<int>(viewerAttendingIds);
+
+        var combinedList = createdList.Select(x => new { x.EventId, x.StartTime, x.IsPublic, x.CreatedById })
+            .Concat(attendingList.Select(x => new { x.EventId, x.StartTime, x.IsPublic, x.CreatedById }))
+            .DistinctBy(x => x.EventId); // Remove duplicates if creator is also attendee
 
         // Visibility Filter
-        combinedQuery = combinedQuery.Where(e => 
+        var visibleItems = combinedList.Where(e => 
             e.IsPublic || 
             e.CreatedById == currentUserId || 
-            e.Attendees.Any(a => a.UserId == currentUserId)
+            viewerAttendingSet.Contains(e.EventId)
         );
 
-        var totalCount = await combinedQuery.CountAsync();
+        var totalCount = visibleItems.Count();
 
-        // Default Sort: StartTime Descending
+        // Sort
         bool isAscending = sortOrder?.Equals("Asc", StringComparison.OrdinalIgnoreCase) ?? false;
-        
-        // Currently only "Time" (StartTime) is supported for events sorting as per requirement
-        var sortedQuery = isAscending 
-            ? combinedQuery.OrderBy(e => e.StartTime) 
-            : combinedQuery.OrderByDescending(e => e.StartTime);
-
-        var pagedEvents = await sortedQuery
+        var pagedIds = (isAscending 
+            ? visibleItems.OrderBy(e => e.StartTime) 
+            : visibleItems.OrderByDescending(e => e.StartTime))
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
-            .Include(e => e.Attendees) // Need attendees for mapping
+            .Select(e => e.EventId)
+            .ToList();
+
+        if (pagedIds.Count == 0)
+        {
+             return new PaginatedResult<EventDto>(new List<EventDto>(), totalCount, pagination.PageNumber, pagination.PageSize);
+        }
+
+        var pagedEvents = await appDb.Events.AsNoTracking()
+            .Where(e => pagedIds.Contains(e.Id))
+            .Include(e => e.Attendees) 
             .Include(e => e.Ping)
             .ToListAsync();
 
+        // Re-order
+        var eventsOrdered = pagedIds
+             .Select(id => pagedEvents.FirstOrDefault(e => e.Id == id))
+             .Where(e => e != null)
+             .Select(e => e!)
+             .ToList();
+
         var eventDtos = new List<EventDto>();
-        if (pagedEvents.Any())
+        if (eventsOrdered.Any())
         {
             // Batch fetch creators
-            var creatorIds = pagedEvents.Select(e => e.CreatedById).Distinct().ToList();
+            var creatorIds = eventsOrdered.Select(e => e.CreatedById).Distinct().ToList();
             var creators = await userManager.Users
                 .AsNoTracking()
                 .Where(u => creatorIds.Contains(u.Id))
                 .ToDictionaryAsync(u => u.Id);
 
-            // Batch fetch attendees for mapping (only those in the event attendees list)
-            // EventMapper needs `attendeeUsers` dictionary to map `Attendees` list.
-            var allAttendeeIds = pagedEvents.SelectMany(e => e.Attendees.Select(a => a.UserId)).Distinct().ToList();
-            // This could be large. Limit?
-            // For card view, we usually need top X attendees or just count. 
-            // EventMapper maps ALL attendees.
+            // Batch fetch attendees for mapping
+            var allAttendeeIds = eventsOrdered.SelectMany(e => e.Attendees.Select(a => a.UserId)).Distinct().ToList();
             var attendeesMap = await userManager.Users
                 .AsNoTracking()
                 .Where(u => allAttendeeIds.Contains(u.Id))
@@ -503,10 +569,11 @@ public class ProfileService(
 
             var friendIds = await followService.GetMutualIdsAsync(currentUserId);
 
-            foreach (var evt in pagedEvents)
+            foreach (var evt in eventsOrdered)
             {
                 if (creators.TryGetValue(evt.CreatedById, out var creator))
                 {
+                     // Creator summary
                     var creatorSummary = new UserSummaryDto(creator.Id, creator.UserName!, creator.ProfileImageUrl);
                     eventDtos.Add(EventMapper.MapToDto(evt, creatorSummary, attendeesMap, currentUserId, friendIds));
                 }
