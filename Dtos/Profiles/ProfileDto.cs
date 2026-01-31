@@ -55,6 +55,9 @@ public record PersonalProfileDto(
     string? ProfilePictureUrl,
     string? Bio,
     [Required] string Email,
+    int ReviewCount,
+    int PingCount,
+    int EventCount,
     int FollowersCount,
     int FollowingCount,
     string[] Roles

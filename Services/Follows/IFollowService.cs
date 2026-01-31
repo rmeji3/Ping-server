@@ -1,5 +1,6 @@
 using Ping.Dtos.Common;
 using Ping.Dtos.Friends; // Reusing FriendSummaryDto for now, or creating FollowerDto? Let's check Dtos.
+using Ping.Dtos.Profiles;
 // Actually let's reuse FriendSummaryDto but maybe alias it or creates FollowerDto if fields differ.
 // FriendSummaryDto has Id, UserName, Name, Image. That's perfect for Follower.
 
@@ -18,5 +19,10 @@ namespace Ping.Services.Follows
         Task<IReadOnlyList<string>> GetMutualIdsAsync(string userId);
         Task<int> GetFollowerCountAsync(string userId);
         Task<int> GetFollowingCountAsync(string userId);
+        
+        // Batch Methods
+        Task<Dictionary<string, int>> GetFollowerCountsAsync(List<string> userIds);
+        Task<Dictionary<string, int>> GetFollowingCountsAsync(List<string> userIds);
+        Task<Dictionary<string, FriendshipStatus>> GetFriendshipStatusesAsync(string currentUserId, List<string> targetUserIds);
     }
 }

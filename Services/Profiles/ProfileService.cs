@@ -47,6 +47,14 @@ public class ProfileService(
         var roles = await userManager.GetRolesAsync(user);
         var followersCount = await followService.GetFollowerCountAsync(userId);
         var followingCount = await followService.GetFollowingCountAsync(userId);
+        
+        var reviewCount = await appDb.Reviews.CountAsync(r => r.UserId == userId && !r.PingActivity!.Ping.IsDeleted);
+        var eventCount = await appDb.EventAttendees.CountAsync(ea => ea.UserId == userId);
+        var pingVisitCount = await appDb.Reviews
+            .Where(r => r.UserId == userId && !r.PingActivity!.Ping.IsDeleted)
+            .Select(r => r.PingActivity!.PingId)
+            .Union(appDb.Pings.Where(p => p.OwnerUserId == userId && !p.IsDeleted).Select(p => p.Id))
+            .CountAsync();
 
         return new PersonalProfileDto(
             user.Id,
@@ -54,6 +62,9 @@ public class ProfileService(
             user.ProfileImageUrl,
             user.Bio,
             user.Email!,
+            reviewCount,
+            pingVisitCount,
+            eventCount,
             followersCount,
             followingCount,
             roles.ToArray()
@@ -84,27 +95,74 @@ public class ProfileService(
             .OrderBy(u => u.UserName)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
-            .Select(u => new ProfileDto(
+            .ToListAsync();
+
+        var userIds = users.Select(u => u.Id).ToList();
+
+        // Batch Fetch Counts
+        var followerCounts = await followService.GetFollowerCountsAsync(userIds);
+        var followingCounts = await followService.GetFollowingCountsAsync(userIds);
+        var friendshipStatuses = await followService.GetFriendshipStatusesAsync(currentUserId, userIds);
+
+        // Review Counts (Active Pings only)
+        var reviewCounts = await appDb.Reviews.AsNoTracking()
+            .Where(r => userIds.Contains(r.UserId) && !r.PingActivity!.Ping.IsDeleted)
+            .GroupBy(r => r.UserId)
+            .Select(g => new { UserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.UserId, x => x.Count);
+
+        // Event Counts
+        var eventCounts = await appDb.EventAttendees.AsNoTracking()
+            .Where(ea => userIds.Contains(ea.UserId))
+            .GroupBy(ea => ea.UserId)
+            .Select(g => new { UserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.UserId, x => x.Count);
+
+        // Ping Counts (Created + Visited, Active)
+        var validPingIdsCreated = await appDb.Pings.AsNoTracking()
+             .Where(p => userIds.Contains(p.OwnerUserId) && !p.IsDeleted)
+             .Select(p => new { p.OwnerUserId, p.Id })
+             .ToListAsync();
+
+        var visitedPings = await appDb.Reviews.AsNoTracking()
+             .Where(r => userIds.Contains(r.UserId) && !r.PingActivity!.Ping.IsDeleted)
+             .Select(r => new { r.UserId, PingId = r.PingActivity.PingId })
+             .Distinct()
+             .ToListAsync();
+
+        var pingCounts = new Dictionary<string, int>();
+        foreach (var uid in userIds)
+        {
+            var created = validPingIdsCreated.Where(x => x.OwnerUserId == uid).Select(x => x.Id);
+            var visited = visitedPings.Where(x => x.UserId == uid).Select(x => x.PingId);
+            pingCounts[uid] = created.Union(visited).Distinct().Count();
+        }
+
+        var profileDtos = users.Select(u => {
+             var status = friendshipStatuses.GetValueOrDefault(u.Id, FriendshipStatus.None);
+             var isFriend = status == FriendshipStatus.Accepted;
+
+             return new ProfileDto(
                 u.Id,
-                u.UserName!,
+                u.UserName!, // DisplayName
                 u.ProfileImageUrl,
                 u.Bio,
-                FriendshipStatus.None, // FriendshipStatus
-                0, // ReviewCount
-                0, // PingCount
-                0, // EventCount
-                0, // FollowersCount
-                0, // FollowingCount
-                false, // IsFriends
+                status,
+                reviewCounts.GetValueOrDefault(u.Id, 0),
+                pingCounts.GetValueOrDefault(u.Id, 0),
+                eventCounts.GetValueOrDefault(u.Id, 0),
+                followerCounts.GetValueOrDefault(u.Id, 0),
+                followingCounts.GetValueOrDefault(u.Id, 0),
+                isFriend,
                 u.ReviewsPrivacy,
                 u.PingsPrivacy,
                 u.LikesPrivacy
-            ))
-            .ToListAsync();
+             );
+        }).ToList();
 
         logger.LogDebug("Profile search for '{Query}' returned {Count} results.", query, users.Count);
 
-        return new PaginatedResult<ProfileDto>(users, totalCount, pagination.PageNumber, pagination.PageSize);
+        return new PaginatedResult<ProfileDto>(profileDtos, totalCount, pagination.PageNumber, pagination.PageSize);
     }
 
 
@@ -182,11 +240,11 @@ public class ProfileService(
         // else: None (even if they follow me, if I don't follow back, no special status in this specific enum for now unless we added 'Follower')
 
         // Stats
-        var reviewCount = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId);
+        var reviewCount = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId && !r.PingActivity!.Ping.IsDeleted);
         var eventCount = await appDb.EventAttendees.CountAsync(ea => ea.UserId == targetUserId);
-        // "Pings visited" -> distinct pings from reviews + Created Pings
+        // "Pings visited" -> distinct pings from reviews + Created Pings (filtering deleted)
         var pingVisitCount = await appDb.Reviews
-            .Where(r => r.UserId == targetUserId)
+            .Where(r => r.UserId == targetUserId && !r.PingActivity!.Ping.IsDeleted)
             .Select(r => r.PingActivity!.PingId)
             .Union(appDb.Pings.Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted).Select(p => p.Id))
             .CountAsync();
@@ -242,11 +300,11 @@ public class ProfileService(
         else if (isFollowing) friendshipStatus = FriendshipStatus.Following;
 
         // Stats
-        var reviewCount = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId);
+        var reviewCount = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId && !r.PingActivity!.Ping.IsDeleted);
         var eventCount = await appDb.EventAttendees.CountAsync(ea => ea.UserId == targetUserId);
-        // "Pings visited" -> distinct pings from reviews + Created Pings
+        // "Pings visited" -> distinct pings from reviews + Created Pings (filtering deleted)
         var pingVisitCount = await appDb.Reviews
-            .Where(r => r.UserId == targetUserId)
+            .Where(r => r.UserId == targetUserId && !r.PingActivity!.Ping.IsDeleted)
             .Select(r => r.PingActivity!.PingId)
             .Union(appDb.Pings.Where(p => p.OwnerUserId == targetUserId && !p.IsDeleted).Select(p => p.Id))
             .CountAsync();

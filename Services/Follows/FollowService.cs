@@ -1,6 +1,7 @@
 using Ping.Data.Auth;
 using Ping.Dtos.Common;
 using Ping.Dtos.Friends;
+using Ping.Dtos.Profiles;
 using Ping.Models;
 using Ping.Models.AppUsers;
 using Ping.Models.Follows;
@@ -149,5 +150,80 @@ public class FollowService(
     public async Task<int> GetFollowingCountAsync(string userId)
     {
         return await authDb.Follows.CountAsync(f => f.FollowerId == userId);
+    }
+    
+    public async Task<Dictionary<string, int>> GetFollowerCountsAsync(List<string> userIds)
+    {
+        if (userIds == null || userIds.Count == 0) return new Dictionary<string, int>();
+
+        return await authDb.Follows
+            .AsNoTracking()
+            .Where(f => userIds.Contains(f.FolloweeId))
+            .GroupBy(f => f.FolloweeId)
+            .Select(g => new { UserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.UserId, x => x.Count);
+    }
+
+    public async Task<Dictionary<string, int>> GetFollowingCountsAsync(List<string> userIds)
+    {
+        if (userIds == null || userIds.Count == 0) return new Dictionary<string, int>();
+
+        return await authDb.Follows
+            .AsNoTracking()
+            .Where(f => userIds.Contains(f.FollowerId))
+            .GroupBy(f => f.FollowerId)
+            .Select(g => new { UserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.UserId, x => x.Count);
+    }
+
+    public async Task<Dictionary<string, FriendshipStatus>> GetFriendshipStatusesAsync(string currentUserId, List<string> targetUserIds)
+    {
+        if (string.IsNullOrEmpty(currentUserId) || targetUserIds == null || targetUserIds.Count == 0) 
+            return new Dictionary<string, FriendshipStatus>();
+
+        // 1. Get who I follow (among targets)
+        var iFollow = await authDb.Follows
+            .AsNoTracking()
+            .Where(f => f.FollowerId == currentUserId && targetUserIds.Contains(f.FolloweeId))
+            .Select(f => f.FolloweeId)
+            .ToListAsync();
+
+        var iFollowSet = new HashSet<string>(iFollow);
+
+        // 2. Get who follows me (among targets) - needed for 'Accepted' (Friend) status
+        var followsMe = await authDb.Follows
+            .AsNoTracking()
+            .Where(f => f.FolloweeId == currentUserId && targetUserIds.Contains(f.FollowerId))
+            .Select(f => f.FollowerId)
+            .ToListAsync();
+            
+        var followsMeSet = new HashSet<string>(followsMe);
+        
+        // 3. Check blocks (optional but recommended for accuracy)
+        // Ignoring complicated block logic for batch status for now to keep it performant
+        // Assuming search already filtered blocked users if necessary
+        
+        var result = new Dictionary<string, FriendshipStatus>();
+        
+        foreach (var targetId in targetUserIds)
+        {
+            var isFollowing = iFollowSet.Contains(targetId);
+            var isFollowedBy = followsMeSet.Contains(targetId);
+            
+            if (isFollowing && isFollowedBy)
+            {
+                result[targetId] = FriendshipStatus.Accepted;
+            }
+            else if (isFollowing)
+            {
+                result[targetId] = FriendshipStatus.Following;
+            }
+            else
+            {
+                result[targetId] = FriendshipStatus.None;
+            }
+        }
+        
+        return result;
     }
 }

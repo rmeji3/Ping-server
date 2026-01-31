@@ -299,7 +299,7 @@ Property Configuration:
 
 ### Profiles
 - `ProfileDto(Id, DisplayName, ProfilePictureUrl?, Bio?, FollowersCount, FollowingCount, FriendshipStatus, ReviewCount, PingCount, EventCount, IsFriends, PrivacySettings)`
-- `PersonalProfileDto(Id, DisplayName, ProfilePictureUrl, Bio?, Email, FollowersCount, FollowingCount, Roles[])`
+- `PersonalProfileDto(Id, DisplayName, ProfilePictureUrl, Bio?, Email, ReviewCount, PingCount, EventCount, FollowersCount, FollowingCount, Roles[])`
 - `UpdateBioDto(Bio)`
 
 ### Reviews
