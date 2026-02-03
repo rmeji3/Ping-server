@@ -62,7 +62,9 @@ namespace Ping.Data.App
                 new PingGenre { Id = 17, Name = "Dating" },
                 new PingGenre { Id = 18, Name = "Fashion" },
                 new PingGenre { Id = 19, Name = "Automotive" },
-                new PingGenre { Id = 20, Name = "Home" }
+                new PingGenre { Id = 20, Name = "Home" },
+                new PingGenre { Id = 21, Name = "Cafe" },
+                new PingGenre { Id = 22, Name = "Parking"}
             );
 
             // Seed EventGenres

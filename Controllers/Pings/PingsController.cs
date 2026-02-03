@@ -90,22 +90,19 @@ namespace Ping.Controllers.Pings
 
         // GET /api/pings/nearby
         [HttpGet("nearby")]
-        public async Task<ActionResult<PaginatedResult<PingDetailsDto>>> Nearby(
-            [FromQuery] double? lat,
-            [FromQuery] double? lng,
-            [FromQuery] double? radiusKm = 5,
-            [FromQuery] string? query = null,
-            [FromQuery, MaxLength(10)] string[]? activityNames = null,
-            [FromQuery, MaxLength(10)] string[]? pingGenreNames = null,
-            [FromQuery, MaxLength(10)] string[]? tags = null,
-            [FromQuery] PingVisibility? visibility = null,
-            [FromQuery] PingType? type = null,
-            [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 20)
+        public async Task<ActionResult<PaginatedResult<PingDetailsDto>>> Nearby([FromQuery] PingSearchFilterDto filter)
         {
-            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await pingService.SearchNearbyAsync(lat, lng, radiusKm, query, activityNames, pingGenreNames, tags, visibility, type, userId, pagination);
+            var result = await pingService.SearchPingsAsync(filter, userId);
+            return Ok(result);
+        }
+
+        // POST /api/pings/search
+        [HttpPost("search")]
+        public async Task<ActionResult<PaginatedResult<PingDetailsDto>>> Search([FromBody] PingSearchFilterDto filter)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await pingService.SearchPingsAsync(filter, userId);
             return Ok(result);
         }
 

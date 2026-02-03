@@ -84,19 +84,14 @@ public class SpatialTest : BaseIntegrationTest
 
         // Act
         // Search near Times Square with 1km radius
-        var result = await service.SearchNearbyAsync(
-            40.7580, 
-            -73.9855, 
-            1.0, 
-            null, // query
-            null, // activityName
-            null, // pingGenreName
-            null, // tags
-            null, // visibility
-            null, // type
-            userId,
-            new Dtos.Common.PaginationParams { PageNumber = 1, PageSize = 10 }
-        );
+        var result = await service.SearchPingsAsync(new PingSearchFilterDto
+        {
+            Latitude = 40.7580,
+            Longitude = -73.9855,
+            RadiusKm = 1.0,
+            PageNumber = 1,
+            PageSize = 10
+        }, userId);
 
         // Assert
         Assert.Contains(result.Items, p => p.Name == "Times Square");

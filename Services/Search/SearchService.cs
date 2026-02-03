@@ -28,19 +28,18 @@ public class SearchService(
             : new PaginatedResult<Ping.Dtos.Profiles.ProfileDto>(new List<Ping.Dtos.Profiles.ProfileDto>(), 0, filter.PageNumber, filter.PageSize);
 
         // 2. Search Pings
-        var pings = await pingService.SearchNearbyAsync(
-            filter.Latitude,
-            filter.Longitude,
-            filter.RadiusKm,
-            filter.Query, // Use query for name search
-            filter.ActivityNames,
-            filter.PingGenreNames,
-            filter.Tags,
-            null, // visibility
-            null, // type
-            userId,
-            pagination
-        );
+        var pings = await pingService.SearchPingsAsync(new Ping.Dtos.Pings.PingSearchFilterDto
+        {
+            Latitude = filter.Latitude,
+            Longitude = filter.Longitude,
+            RadiusKm = filter.RadiusKm,
+            Query = filter.Query,
+            ActivityNames = filter.ActivityNames?.ToList(),
+            PingGenreNames = filter.PingGenreNames?.ToList(),
+            Tags = filter.Tags?.ToList(),
+            PageNumber = filter.PageNumber,
+            PageSize = filter.PageSize
+        }, userId);
 
         return new UnifiedSearchResultDto(
             profiles,

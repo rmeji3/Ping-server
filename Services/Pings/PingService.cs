@@ -318,21 +318,10 @@ public class PingService(
     }
 
 
-    public async Task<PaginatedResult<PingDetailsDto>> SearchNearbyAsync(
-        double? lat,
-        double? lng,
-        double? radiusKm,
-        string? query,
-        string[]? activityNames,
-        string[]? pingGenreNames,
-        string[]? tags,
-        PingVisibility? visibility,
-        PingType? type,
-        string? userId,
-        PaginationParams pagination
-    )
+    public async Task<PaginatedResult<PingDetailsDto>> SearchPingsAsync(PingSearchFilterDto filter, string? userId)
     {
-        logger.LogDebug("Nearby search: lat={Lat}, lng={Lng}, query={Query}, tags={Tags}", lat, lng, query, tags != null ? string.Join(",", tags) : "none");
+        logger.LogDebug("Ping search: lat={Lat}, lng={Lng}, query={Query}, tags={Tags}", 
+            filter.Latitude, filter.Longitude, filter.Query, filter.Tags != null ? string.Join(",", filter.Tags) : "none");
 
         var q = db.Pings
             .Where(p => !p.IsDeleted)
@@ -341,48 +330,48 @@ public class PingService(
             .AsNoTracking();
 
         // Keyword Search
-        if (!string.IsNullOrWhiteSpace(query))
+        if (!string.IsNullOrWhiteSpace(filter.Query))
         {
-            var search = query.Trim().ToLowerInvariant();
+            var search = filter.Query.Trim().ToLowerInvariant();
             q = q.Where(p => p.Name.ToLower().Contains(search) || (p.Address != null && p.Address.ToLower().Contains(search)));
         }
 
         // Tags Search
-        if (tags != null && tags.Any())
+        if (filter.Tags != null && filter.Tags.Any())
         {
-            var normalizedTags = tags.Select(t => t.Trim().ToLowerInvariant()).ToList();
+            var normalizedTags = filter.Tags.Select(t => t.Trim().ToLowerInvariant()).ToList();
             q = q.Where(p => p.PingActivities
                 .Any(a => a.Reviews
                     .Any(r => r.ReviewTags.Any(rt => normalizedTags.Contains(rt.Tag.Name.ToLower())))));
         }
 
         // Geospatial
-        if (lat.HasValue && lng.HasValue && radiusKm.HasValue)
+        if (filter.Latitude.HasValue && filter.Longitude.HasValue && filter.RadiusKm.HasValue)
         {
-            var searchPoint = new Point(lng.Value, lat.Value) { SRID = 4326 };
-            double radiusDegrees = radiusKm.Value / 111.32;
+            var searchPoint = new Point(filter.Longitude.Value, filter.Latitude.Value) { SRID = 4326 };
+            double radiusDegrees = filter.RadiusKm.Value / 111.32;
             q = q.Where(p => p.Location.IsWithinDistance(searchPoint, radiusDegrees));
         }
 
-        if (visibility.HasValue)
+        if (filter.Visibility.HasValue)
         {
-            q = q.Where(p => p.Visibility == visibility.Value);
+            q = q.Where(p => p.Visibility == filter.Visibility.Value);
         }
 
-        if (type.HasValue)
+        if (filter.Type.HasValue)
         {
-            q = q.Where(p => p.Type == type.Value);
+            q = q.Where(p => p.Type == filter.Type.Value);
         }
 
-        if (activityNames != null && activityNames.Any())
+        if (filter.ActivityNames != null && filter.ActivityNames.Any())
         {
-            var normalizedNames = activityNames.Select(a => a.Trim().ToLowerInvariant()).ToList();
+            var normalizedNames = filter.ActivityNames.Select(a => a.Trim().ToLowerInvariant()).ToList();
             q = q.Where(p => p.PingActivities.Any(a => a.Name != null && normalizedNames.Contains(a.Name.ToLower())));
         }
 
-        if (pingGenreNames != null && pingGenreNames.Any())
+        if (filter.PingGenreNames != null && filter.PingGenreNames.Any())
         {
-            var normalizedGenres = pingGenreNames.Select(g => g.Trim().ToLowerInvariant()).ToList();
+            var normalizedGenres = filter.PingGenreNames.Select(g => g.Trim().ToLowerInvariant()).ToList();
             q = q.Where(p => p.PingGenre != null && normalizedGenres.Contains(p.PingGenre.Name.ToLower()));
         }
 
@@ -402,9 +391,9 @@ public class PingService(
             if (!IsVisibleToUser(p, userId, friendIds)) continue;
             
             double? dist = null;
-            if (lat.HasValue && lng.HasValue) 
+            if (filter.Latitude.HasValue && filter.Longitude.HasValue) 
             {
-                dist = DistanceKm(lat.Value, lng.Value, p.Latitude, p.Longitude);
+                dist = DistanceKm(filter.Latitude.Value, filter.Longitude.Value, p.Latitude, p.Longitude);
             }
             
             var dto = await ToPingDetailsDto(p, userId);
@@ -413,8 +402,10 @@ public class PingService(
 
         var sorted = mapped
             .OrderBy(x => x.Distance ?? double.MaxValue)
+            .ThenBy(x => x.Dto.Name)
             .Select(x => x.Dto);
 
+        var pagination = new PaginationParams { PageNumber = filter.PageNumber, PageSize = filter.PageSize };
         return sorted.ToPaginatedResult(pagination);
     }
 
