@@ -135,7 +135,7 @@ public class ReviewService(
         );
     }
 
-    public async Task<PaginatedResult<UserReviewsDto>> GetReviewsAsync(int pingActivityId, string scope, string userId, PaginationParams pagination)
+    public async Task<PaginatedResult<ReviewDto>> GetReviewsAsync(int pingActivityId, string scope, string userId, PaginationParams pagination)
     {
         var activityExists = await appDb.PingActivities
             .AnyAsync(pa => pa.Id == pingActivityId);
@@ -166,11 +166,11 @@ public class ReviewService(
                 }
             case "friends":
                 {
-                    var following = await followService.GetFollowingAsync(userId, new PaginationParams { PageNumber = 1, PageSize = 1000 }); // Simple fetch for now or need ID getter
-                    var friendIds = following.Items.Select(f => f.Id).ToHashSet(); // Optimization: Add GetFollowingIdsAsync to service?
+                    var following = await followService.GetFollowingAsync(userId, new PaginationParams { PageNumber = 1, PageSize = 1000 });
+                    var friendIds = following.Items.Select(f => f.Id).ToHashSet();
                     if (friendIds.Count == 0)
                     {
-                        return new PaginatedResult<UserReviewsDto>(new List<UserReviewsDto>(), 0, pagination.PageNumber, pagination.PageSize);
+                        return new PaginatedResult<ReviewDto>(new List<ReviewDto>(), 0, pagination.PageNumber, pagination.PageSize);
                     }
                     query = query.Where(r => friendIds.Contains(r.UserId));
                     break;
@@ -180,7 +180,12 @@ public class ReviewService(
                 break;
         }
 
-        var reviews = await query.ToListAsync();
+        var count = await query.CountAsync();
+
+        var reviews = await query
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .ToListAsync();
 
         var reviewIds = reviews.Select(r => r.Id).ToList();
         var likedReviewIds = new HashSet<int>();
@@ -221,18 +226,7 @@ public class ReviewService(
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList() 
         )).ToList();
 
-        var groupedReviews = reviewDtos
-            .GroupBy(r => r.UserId)
-            .Select(g =>
-            {
-                var userReviews = g.OrderByDescending(r => r.CreatedAt).ToList();
-                var latest = userReviews.First();
-                var history = userReviews.Skip(1).ToList();
-                return new UserReviewsDto(latest, history);
-            })
-            .ToList();
-
-        return groupedReviews.ToPaginatedResult(pagination);
+        return new PaginatedResult<ReviewDto>(reviewDtos, count, pagination.PageNumber, pagination.PageSize);
     }
 
     public async Task<PaginatedResult<ExploreReviewDto>> GetExploreReviewsAsync(ExploreReviewsFilterDto filter, string? userId, PaginationParams pagination)

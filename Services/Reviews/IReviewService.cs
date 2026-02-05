@@ -6,7 +6,7 @@ namespace Ping.Services.Reviews;
 public interface IReviewService
 {
     Task<ReviewDto> CreateReviewAsync(int pingActivityId, CreateReviewDto dto, string userId, string userName);
-    Task<PaginatedResult<UserReviewsDto>> GetReviewsAsync(int pingActivityId, string scope, string userId, PaginationParams pagination);
+    Task<PaginatedResult<ReviewDto>> GetReviewsAsync(int pingActivityId, string scope, string userId, PaginationParams pagination);
     Task<PaginatedResult<ExploreReviewDto>> GetExploreReviewsAsync(ExploreReviewsFilterDto filter, string? userId, PaginationParams pagination);
     Task LikeReviewAsync(int reviewId, string userId);
     Task UnlikeReviewAsync(int reviewId, string userId);

@@ -44,7 +44,7 @@ namespace Ping.Controllers.Reviews
 
         // GET /api/ping-activities/{pingActivityId}/reviews?scope=mine|global|friends&pageNumber=1&pageSize=20
         [HttpGet]
-        public async Task<ActionResult<PaginatedResult<UserReviewsDto>>> GetReviews(int pingActivityId,
+        public async Task<ActionResult<PaginatedResult<ReviewDto>>> GetReviews(int pingActivityId,
             [FromQuery] string scope = "global",
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
@@ -112,8 +112,6 @@ namespace Ping.Controllers.Reviews
         // DELETE /api/reviews/{reviewId}/like
         [HttpDelete("/api/reviews/{reviewId:int}/like")]
         [HttpDelete("/api/v{version:apiVersion}/reviews/{reviewId:int}/like")]
-        [HttpPost("/api/reviews/{reviewId:int}/unlike")] // Backward compatibility
-        [HttpPost("/api/v{version:apiVersion}/reviews/{reviewId:int}/unlike")]
         public async Task<IActionResult> UnlikeReview(int reviewId)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
