@@ -18,6 +18,12 @@ namespace Ping.Models.Pings
         
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
+        [MaxLength(2048)]
+        public string? ImageUrl { get; set; }
+
+        [MaxLength(2048)]
+        public string? ThumbnailUrl { get; set; }
+
         // Navigation properties
         public ICollection<CollectionPing> CollectionPings { get; set; } = new List<CollectionPing>();
     }

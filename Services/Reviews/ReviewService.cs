@@ -118,6 +118,12 @@ public class ReviewService(
         var user = await userManager.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
         string? profileUrl = user?.ProfileImageUrl;
 
+        // Fetch the ping's deleted status (PingActivity is not loaded on the review entity)
+        var pingIsDeleted = await appDb.PingActivities.AsNoTracking()
+            .Where(pa => pa.Id == pingActivityId)
+            .Select(pa => pa.Ping.IsDeleted)
+            .FirstOrDefaultAsync();
+
         return new ReviewDto(
             review.Id,
             review.Rating,
@@ -125,13 +131,14 @@ public class ReviewService(
             review.UserId,
             review.UserName,
             profileUrl,
-            review.ImageUrl,
-            review.ThumbnailUrl,
+            review.ImageUrl ?? "",
+            review.ThumbnailUrl ?? "",
             review.CreatedAt,
             review.Likes,
             false, // IsLiked
             true, // IsOwner
-            dto.Tags ?? new List<string>() // Return tags
+            dto.Tags ?? new List<string>(), // Return tags
+            pingIsDeleted
         );
     }
 
@@ -144,6 +151,8 @@ public class ReviewService(
 
         var query = appDb.Reviews
             .AsNoTracking()
+            .Include(r => r.PingActivity)
+                .ThenInclude(pa => pa.Ping)
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
             .Where(r => r.PingActivityId == pingActivityId)
@@ -217,13 +226,14 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
-            r.ImageUrl,
-            r.ThumbnailUrl,
+            r.ImageUrl ?? "",
+            r.ThumbnailUrl ?? "",
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
             r.UserId == userId, // IsOwner
-            r.ReviewTags.Select(rt => rt.Tag.Name).ToList() 
+            r.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
+            r.PingActivity!.Ping.IsDeleted
         )).ToList();
 
         return new PaginatedResult<ReviewDto>(reviewDtos, count, pagination.PageNumber, pagination.PageSize);
@@ -374,8 +384,8 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
-            r.ImageUrl,
-            r.ThumbnailUrl,
+            r.ImageUrl ?? "",
+            r.ThumbnailUrl ?? "",
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
@@ -590,8 +600,8 @@ public class ReviewService(
                 rl.Review.UserId,
                 rl.Review.UserName,
                 userMap.GetValueOrDefault(rl.Review.UserId),
-                rl.Review.ImageUrl,
-                rl.Review.ThumbnailUrl,
+                rl.Review.ImageUrl ?? "",
+                rl.Review.ThumbnailUrl ?? "",
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
                 viewerLikedIds.Contains(rl.Review.Id), // IsLiked by Viewer
@@ -656,8 +666,8 @@ public class ReviewService(
                 rl.Review.UserId,
                 rl.Review.UserName,
                 userMap.GetValueOrDefault(rl.Review.UserId),
-                rl.Review.ImageUrl,
-                rl.Review.ThumbnailUrl,
+                rl.Review.ImageUrl ?? "",
+                rl.Review.ThumbnailUrl ?? "",
                 rl.Review.CreatedAt,
                 rl.Review.Likes,
                 true, // IsLiked
@@ -720,8 +730,8 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
-            r.ImageUrl,
-            r.ThumbnailUrl,
+            r.ImageUrl ?? "",
+            r.ThumbnailUrl ?? "",
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id),
@@ -789,8 +799,8 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
-            r.ImageUrl,
-            r.ThumbnailUrl,
+            r.ImageUrl ?? "",
+            r.ThumbnailUrl ?? "",
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
@@ -870,8 +880,8 @@ public class ReviewService(
             r.UserId,
             r.UserName,
             userMap.GetValueOrDefault(r.UserId),
-            r.ImageUrl,
-            r.ThumbnailUrl,
+            r.ImageUrl ?? "",
+            r.ThumbnailUrl ?? "",
             r.CreatedAt,
             r.Likes,
             likedReviewIds.Contains(r.Id), 
@@ -1005,13 +1015,14 @@ public class ReviewService(
             review.UserId,
             review.UserName,
             user?.ProfileImageUrl,
-            review.ImageUrl,
-            review.ThumbnailUrl,
+            review.ImageUrl ?? "",
+            review.ThumbnailUrl ?? "",
             review.CreatedAt,
             review.Likes,
             await appDb.ReviewLikes.AnyAsync(rl => rl.ReviewId == review.Id && rl.UserId == userId),
             true, // IsOwner
-            review.ReviewTags.Select(rt => rt.Tag.Name).ToList()
+            review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
+            review.PingActivity!.Ping.IsDeleted
         );
     }
 }

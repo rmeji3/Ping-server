@@ -21,7 +21,7 @@ AppRecommendations.md
 /Data/Auth.db
 app.db
 auth.db
-Migrations/
+# Migrations/
 Data/App.db
 Data/Auth.db
 App.db-shm
@@ -38,18 +38,6 @@ Auth.db-wal
 *.user
 *.userosscache
 *.sln.docstates
-
-# database files
-/Data/App.db
-/Data/Auth.db
-app.db
-Migrations/
-Data/App.db
-Data/Auth.db
-App.db-shm
-App.db-wal
-Auth.db-shm
-Auth.db-wal
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

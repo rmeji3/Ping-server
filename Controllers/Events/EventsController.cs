@@ -13,23 +13,101 @@ namespace Ping.Controllers.Events
     [Route("api/[controller]")]
     [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize]
-    public class EventsController(IEventService eventService) : ControllerBase
+    public class EventsController(IEventService eventService, Ping.Services.Images.IImageService imageService) : ControllerBase
     {
+        public class CreateEventRequest
+        {
+            [System.ComponentModel.DataAnnotations.Required]
+            [System.ComponentModel.DataAnnotations.MaxLength(100)]
+            public string Title { get; set; } = null!;
+            
+            [System.ComponentModel.DataAnnotations.MaxLength(500)]
+            public string? Description { get; set; }
+            public bool IsPublic { get; set; }
+            public DateTime StartTime { get; set; }
+            public DateTime EndTime { get; set; }
+            public int PingId { get; set; }
+            public int? EventGenreId { get; set; }
+            public decimal? Price { get; set; }
+            
+            public IFormFile? Image { get; set; }
+        }
+
+        public class UpdateEventRequest : UpdateEventDto
+        {
+             public new string? ImageUrl { get; set; }
+             public new string? ThumbnailUrl { get; set; }
+
+             public IFormFile? Image { get; set; }
+        }
+        // POST /api/Events/create
         // POST /api/Events/create
         [HttpPost("create")]
-        public async Task<ActionResult<EventDto>> Create([FromBody] CreateEventDto dto)
+        public async Task<ActionResult<EventDto>> Create([FromForm] CreateEventRequest request)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null) return Unauthorized();
 
-            try
+            // Handle Image
+            if (request.Image != null)
             {
-                var result = await eventService.CreateEventAsync(dto, userId);
-                return Ok(result);
+                try
+                {
+                    // "events" folder
+                    var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "events", userId);
+                    // Manually map back to base properties for the service call
+                    // We can cast or create new DTO, but since Request inherits DTO, we can just set properties on it 
+                    // IF we are passing 'request' as 'dto'.
+                    // However, 'CreateEventRequest' hides properties. 
+                    // Let's create a clean DTO to pass to service.
+                    
+                    // Actually, simpler: Create valid DTO from request
+                    var dto = new CreateEventDto(
+                        request.Title,
+                        request.Description,
+                        request.IsPublic,
+                        request.StartTime,
+                        request.EndTime,
+                        request.PingId,
+                        request.EventGenreId,
+                        original,
+                        thumb,
+                        request.Price
+                    );
+                    
+                    var result = await eventService.CreateEventAsync(dto, userId);
+                    return Ok(result);
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest($"Image processing failed: {ex.Message}");
+                }
             }
-            catch (ArgumentException ex)
+            else 
             {
-                return BadRequest(ex.Message);
+                 // No image, pass through (or if client sent URLs manually? assume File priority)
+                 var dto = new CreateEventDto(
+                        request.Title,
+                        request.Description,
+                        request.IsPublic,
+                        request.StartTime,
+                        request.EndTime,
+                        request.PingId,
+                        request.EventGenreId,
+                        null,
+                        null,
+                        request.Price
+                    );
+                 
+                 try 
+                 {
+                    var result = await eventService.CreateEventAsync(dto, userId);
+                    return Ok(result);
+                 }
+                 catch (ArgumentException ex)
+                 {
+                    return BadRequest(ex.Message);
+                 }
             }
         }
 
@@ -265,11 +343,43 @@ namespace Ping.Controllers.Events
         }
 
         // PATCH /api/Events/{id}
+        // PATCH /api/Events/{id}
         [HttpPatch("{id:int}")]
-        public async Task<ActionResult<EventDto>> UpdateEvent(int id, [FromBody] UpdateEventDto dto)
+        public async Task<ActionResult<EventDto>> UpdateEvent(int id, [FromForm] UpdateEventRequest request)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null) return Unauthorized();
+
+            string? imgUrl = request.ImageUrl; // from JSON if any (but hidden/ignored mostly if File present)
+            string? thumbUrl = request.ThumbnailUrl;
+
+            if (request.Image != null)
+            {
+                try
+                {
+                    var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "events", userId);
+                    imgUrl = original;
+                    thumbUrl = thumb;
+                }
+                catch(Exception ex)
+                {
+                    return BadRequest("Image upload failed: " + ex.Message);
+                }
+            }
+
+            var dto = new UpdateEventDto
+            {
+                Title = request.Title,
+                Description = request.Description,
+                IsPublic = request.IsPublic,
+                StartTime = request.StartTime,
+                EndTime = request.EndTime,
+                PingId = request.PingId,
+                EventGenreId = request.EventGenreId,
+                ImageUrl = imgUrl,
+                ThumbnailUrl = thumbUrl,
+                Price = request.Price
+            };
 
             try
             {

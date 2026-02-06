@@ -12,10 +12,30 @@ namespace Ping.Controllers.Reviews
     [ApiVersion("1.0")]
     [Route("api/ping-activities/{pingActivityId:int}/[controller]")]
     [Route("api/v{version:apiVersion}/ping-activities/{pingActivityId:int}/[controller]")]
-    public class ReviewsController(IReviewService reviewService, ILogger<ReviewsController> logger) : ControllerBase
+    public class ReviewsController(IReviewService reviewService, Ping.Services.Images.IImageService imageService, ILogger<ReviewsController> logger) : ControllerBase
     {
+        public class CreateReviewRequest
+        {
+            public int Rating { get; set; }
+            public string? Content { get; set; }
+            public IFormFile? Image { get; set; }
+            public List<string>? Tags { get; set; }
+        }
+
+        public class UpdateReviewRequest
+        {
+            public int? Rating { get; set; }
+            public string? Content { get; set; }
+            public IFormFile? Image { get; set; }
+            public List<string>? Tags { get; set; }
+            
+            // Allow manual URL overrides if needed, though Image file takes precedence
+            public string? ImageUrl { get; set; }
+            public string? ThumbnailUrl { get; set; }
+        }
+
         [HttpPost]
-        public async Task<ActionResult<ReviewDto>> CreateReview(int pingActivityId, [FromBody] CreateReviewDto dto)
+        public async Task<ActionResult<ReviewDto>> CreateReview(int pingActivityId, [FromForm] CreateReviewRequest request)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var userName = User.Identity?.Name;
@@ -25,6 +45,35 @@ namespace Ping.Controllers.Reviews
                 logger.LogWarning("CreateReview: User is not authenticated or missing id/username.");
                 return Unauthorized("User is not authenticated or missing id/username.");
             }
+
+            string imageUrl = "";
+            string thumbnailUrl = "";
+
+            // Handle Image Upload
+            if (request.Image != null)
+            {
+                try 
+                {
+                    // "reviews" acts as the folder
+                    var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "reviews", userId);
+                    imageUrl = original;
+                    thumbnailUrl = thumb;
+                }
+                catch (Exception ex)
+                {
+                     logger.LogError(ex, "Failed to upload image for review.");
+                     return BadRequest("Failed to process image.");
+                }
+            }
+
+            // Map to DTO
+            var dto = new CreateReviewDto(
+                request.Rating,
+                request.Content,
+                imageUrl,
+                thumbnailUrl,
+                request.Tags
+            );
 
             try
             {
@@ -223,7 +272,7 @@ namespace Ping.Controllers.Reviews
         // PATCH /api/reviews/{reviewId}
         [HttpPatch("/api/reviews/{reviewId:int}")]
         [HttpPatch("/api/v{version:apiVersion}/reviews/{reviewId:int}")]
-        public async Task<ActionResult<ReviewDto>> UpdateReview(int reviewId, [FromBody] UpdateReviewDto dto)
+        public async Task<ActionResult<ReviewDto>> UpdateReview(int reviewId, [FromForm] UpdateReviewRequest request)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null)
@@ -231,6 +280,34 @@ namespace Ping.Controllers.Reviews
                 logger.LogWarning("UpdateReview: User is not authenticated or missing id.");
                 return Unauthorized();
             }
+
+            string? imgUrl = request.ImageUrl;
+            string? thumbUrl = request.ThumbnailUrl;
+
+            // Handle Image Upload
+            if (request.Image != null)
+            {
+                try 
+                {
+                    var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "reviews", userId);
+                    imgUrl = original;
+                    thumbUrl = thumb;
+                }
+                catch (Exception ex)
+                {
+                     logger.LogError(ex, "Failed to upload image for review update.");
+                     return BadRequest("Failed to process image.");
+                }
+            }
+
+            // Map to DTO
+            var dto = new UpdateReviewDto(
+                request.Rating,
+                request.Content,
+                imgUrl,
+                thumbUrl,
+                request.Tags
+            );
 
             try
             {

@@ -647,7 +647,8 @@ public class PingService(
             p.IsClaimed,
             p.PingGenreId,
             p.PingGenre?.Name,
-            p.GooglePlaceId
+            p.GooglePlaceId,
+            p.IsDeleted // Maps to IsPingDeleted
         );
     }
 }

@@ -13,15 +13,47 @@ namespace Ping.Controllers.Pings
     [Route("api/[controller]")]
     [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize]
-    public class CollectionsController(ICollectionService collectionService) : ControllerBase
+    public class CollectionsController(ICollectionService collectionService, Ping.Services.Images.IImageService imageService) : ControllerBase
     {
+        public class CreateCollectionRequest
+        {
+            public string Name { get; set; } = null!;
+            public bool IsPublic { get; set; }
+            public IFormFile? Image { get; set; }
+        }
+
+        public class UpdateCollectionRequest
+        {
+            public string? Name { get; set; }
+            public bool? IsPublic { get; set; }
+            public IFormFile? Image { get; set; }
+        }
+        // POST /api/collections
         // POST /api/collections
         [HttpPost]
-        public async Task<ActionResult<CollectionDto>> Create([FromBody] CreateCollectionDto dto)
+        public async Task<ActionResult<CollectionDto>> Create([FromForm] CreateCollectionRequest request)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null) return Unauthorized();
 
+            string? imgUrl = null;
+            string? thumbUrl = null;
+
+            if (request.Image != null)
+            {
+                try
+                {
+                    var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "collections", userId);
+                    imgUrl = original;
+                    thumbUrl = thumb;
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest("Image processing failed: " + ex.Message);
+                }
+            }
+
+            var dto = new CreateCollectionDto(request.Name, request.IsPublic, imgUrl, thumbUrl);
             var result = await collectionService.CreateCollectionAsync(userId, dto);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
@@ -67,11 +99,31 @@ namespace Ping.Controllers.Pings
         }
 
         // PATCH /api/collections/{id}
+        // PATCH /api/collections/{id}
         [HttpPatch("{id:int}")]
-        public async Task<ActionResult<CollectionDto>> Update(int id, [FromBody] UpdateCollectionDto dto)
+        public async Task<ActionResult<CollectionDto>> Update(int id, [FromForm] UpdateCollectionRequest request)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId is null) return Unauthorized();
+            
+            string? imgUrl = null;
+            string? thumbUrl = null;
+
+            if (request.Image != null)
+            {
+                 try
+                {
+                    var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "collections", userId);
+                    imgUrl = original;
+                    thumbUrl = thumb;
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest("Image processing failed: " + ex.Message);
+                }
+            }
+
+            var dto = new UpdateCollectionDto(request.Name, request.IsPublic, imgUrl, thumbUrl);
 
             try
             {

@@ -291,12 +291,12 @@ Property Configuration:
 - `FriendSummaryDto(Id, UserName, ProfileImageUrl?)`
 - `BlockDto(BlockedUserId, BlockedUserName, BlockedAt)`
 
-### Pings
+#### 7.5. Pings
 - `PingVisibility` enum: `Private = 0`, `Friends = 1`, `Public = 2`
 - `PingType` enum: `Custom = 0`, `Verified = 1`
-- `UpsertPingDto(Name, Address?, Latitude, Longitude, Visibility, Type, PingGenreId?, GooglePlaceId?)` - Create only
-- `UpdatePingDto(Name?, PingGenreId?)` - Patch only (Name and Genre updates only)
-- `PingDetailsDto(Id, Name, Address, Latitude, Longitude, Visibility, Type, IsOwner, IsFavorited, Favorites, Activities[PingActivitySummaryDto], PingGenre?, ClaimStatus?, IsClaimed, GooglePlaceId?)`
+- `UpsertPingDto`: `Name`, `Address`, `Latitude`, `Longitude`, `Visibility`, `Type`, `PingGenreId`, `GooglePlaceId`, `ThumbnailUrl`.
+- `PingDetailsDto`: `Id`, `Name`, `Address`, `Latitude`, `Longitude`, `Visibility`, `Type`, `IsOwner`, `IsFavorited`, `Favorites`, `Activities[]`, `PingGenre`, `ClaimStatus`, `IsClaimed`, `PingGenreId`, `PingGenreName`, `GooglePlaceId`, `ThumbnailUrl`.
+- `UpdatePingDto`: `Name`, `PingGenreId`, `ThumbnailUrl`.
 - `PingSearchFilterDto(Latitude?, Longitude?, RadiusKm?, Query?, ActivityNames?[], PingGenreNames?[], Tags?[], Visibility?, Type?, PageNumber, PageSize)`
 
 ### Profiles
@@ -597,7 +597,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | GET    | /api/profiles/{id}/pings      | A    | —    | `PaginatedResult`    | Pings created by user (respects privacy)           |
 | GET    | /api/profiles/{id}/reviews     | A    | —    | `PaginatedResult`    | Reviews by user (respects privacy)                  |
 | GET    | /api/profiles/{id}/events (Q: sortBy, sortOrder) | A    | —    | `PaginatedResult`    | Events created by user (respects privacy)           |
-| GET    | /api/profiles/{id}/places (Q: sortBy, sortOrder) | A    | —    | `PaginatedResult<PlaceReviewSummaryDto>` | Grouped places reviewed by user (Strict Privacy)        |
+| GET    | /api/profiles/{id}/places (Q: sortBy, sortOrder) | A    | —    | `PaginatedResult<PlaceReviewSummaryDto>` | Grouped places created or reviewed by user (Respects Privacy) |
 | GET    | /api/profiles/me/places (Q: sortBy, sortOrder)   | A    | —    | `PaginatedResult<PlaceReviewSummaryDto>` | All places reviewed by current user (No filtering)      |
 | GET    | /api/profiles/{id}/places/{pId}/reviews | A | — | `PaginatedResult<ReviewDto>` | Drill down into reviews for a place (Strict Privacy) |
 | GET    | /api/profiles/me/places/{pId}/reviews | A | — | `PaginatedResult<ReviewDto>` | Drill down into own reviews (No filtering) |
@@ -1268,6 +1268,33 @@ The Unified Search endpoint allows users to search across multiple entity types 
 - `POST /api/search/history`: Add history item.
 - `DELETE /api/search/history/{id}`: Delete specific item.
 - `DELETE /api/search/history`: Clear all history.
+
+---
+## 25. Image & Thumbnail Service
+
+### Overview
+The `ImageService` (`IImageService`) is the central authority for processing, validating, and uploading images within the Ping ecosystem. It ensures consistent thumbnail generation and storage organization.
+
+### Key Features
+- **Validation**: Enforces file size limits (10MB) and allowed content types (JPEG, PNG, WebP, GIF).
+- **Automatic Thumbnailing**: Generates a **WebP** thumbnail (max 500x500px) for every uploaded image.
+- **Storage Strategy**:
+  - Folders are organized by feature (`profiles`, `reviews`, `events`).
+  - Keys follow the pattern: `{folder}/{userId}/{timestamp}_{type}{extension}`.
+  - Thumbnails always use the `.webp` extension regardless of the original format.
+
+### Workflow (Frontend Integration)
+1. **Upload**: Frontend calls `POST /api/images?folder=reviews`.
+2. **Processing**: `ImagesController` moderates the image, then `ImageService` creates the thumbnail and uploads both to S3.
+3. **Response**: Backend returns an `ImageUploadResponse` containing `{ Url, ThumbnailUrl }`.
+4. **Persistence**: The frontend passes **both** URLs to the target creation endpoint (e.g., `POST /api/reviews`).
+
+### Proactive Fallbacks
+To prevent UI breakage (e.g., in `PingAlbumCard` or `ReviewCard`), the server implements several fallback layers:
+- **Reviews**: If a review is missing a thumbnail, it falls back to the **Place's (Ping's) Thumbnail**.
+- **Pings**: If a Ping has no thumbnail, it defaults to the first available image from its activities/reviews.
+- **Global**: DTO mappings ensure that `ImageUrl` and `ThumbnailUrl` are at least an empty string `""` rather than `null`.
+
 
 ### Frontend Workflow & Best Practices
 **Important**: The `UnifiedSearch` endpoint does **not** automatically save search history. This is by design to prevent "jitter" from debounced keystrokes (e.g., saving "t", "te", "tes", "test" as separate entries).

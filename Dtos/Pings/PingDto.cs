@@ -27,13 +27,14 @@ namespace Ping.Dtos.Pings
         bool IsFavorited,
         int Favorites,
         PingActivitySummaryDto[] Activities,
-        string? PingGenre, // Changed from array to single per user request
+        string? PingGenre,
         ClaimStatus? ClaimStatus = null,
         bool IsClaimed = false,
         int? PingGenreId = null,
         string? PingGenreName = null,
-        string? GooglePlaceId = null
-        );
+        string? GooglePlaceId = null,
+        bool IsPingDeleted = false
+    );
 
     public class UpdatePingDto
     {
@@ -41,4 +42,3 @@ namespace Ping.Dtos.Pings
         public int? PingGenreId { get; set; }
     }
 }
-

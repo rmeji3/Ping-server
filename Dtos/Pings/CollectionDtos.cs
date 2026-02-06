@@ -8,18 +8,23 @@ namespace Ping.Dtos.Pings
         string Name,
         bool IsPublic,
         int PingCount,
+        string? ImageUrl,
         string? ThumbnailUrl,
         DateTime CreatedUtc
     );
 
     public record CreateCollectionDto(
         [Required, MaxLength(100)] string Name,
-        bool IsPublic
+        bool IsPublic,
+        [MaxLength(2048)] string? ImageUrl = null,
+        [MaxLength(2048)] string? ThumbnailUrl = null
     );
 
     public record UpdateCollectionDto(
         [MaxLength(100)] string? Name,
-        bool? IsPublic
+        bool? IsPublic,
+        [MaxLength(2048)] string? ImageUrl,
+        [MaxLength(2048)] string? ThumbnailUrl
     );
 
     public record CollectionDetailsDto(
@@ -27,6 +32,7 @@ namespace Ping.Dtos.Pings
         string Name,
         bool IsPublic,
         int PingCount,
+        string? ImageUrl,
         string? ThumbnailUrl,
         DateTime CreatedUtc,
         List<PingDetailsDto> Pings

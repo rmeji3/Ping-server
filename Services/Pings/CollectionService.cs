@@ -22,7 +22,7 @@ namespace Ping.Services.Pings
                 // If "All" collection already exists (created by system), just return it
                 if (existing.Name.Equals("All", StringComparison.OrdinalIgnoreCase))
                 {
-                    return MapToDto(existing, existing.CollectionPings.Count, null); // optimized count not here, but acceptable for create return
+                    return MapToDto(existing, existing.CollectionPings.Count);
                 }
 
                 throw new InvalidOperationException($"You already have a collection named '{dto.Name}'.");
@@ -33,6 +33,8 @@ namespace Ping.Services.Pings
                 UserId = userId,
                 Name = dto.Name,
                 IsPublic = dto.IsPublic,
+                ImageUrl = dto.ImageUrl,
+                ThumbnailUrl = dto.ThumbnailUrl,
                 CreatedUtc = DateTime.UtcNow
             };
 
@@ -41,7 +43,7 @@ namespace Ping.Services.Pings
 
             logger.LogInformation("Collection {CollectionId} created for user {UserId}", collection.Id, userId);
 
-            return MapToDto(collection, 0, null);
+            return MapToDto(collection, 0);
         }
 
         public async Task<List<CollectionDto>> GetMyCollectionsAsync(string userId)
@@ -55,8 +57,7 @@ namespace Ping.Services.Pings
 
             return collections.Select(c => 
             {
-                var latestPing = c.CollectionPings.OrderByDescending(cp => cp.AddedUtc).FirstOrDefault()?.Ping;
-                return MapToDto(c, c.CollectionPings.Count, latestPing?.ThumbnailUrl);
+                return MapToDto(c, c.CollectionPings.Count);
             }).ToList();
         }
 
@@ -73,8 +74,7 @@ namespace Ping.Services.Pings
 
             return collections.Select(c => 
             {
-                var latestPing = c.CollectionPings.OrderByDescending(cp => cp.AddedUtc).FirstOrDefault()?.Ping;
-                return MapToDto(c, c.CollectionPings.Count, latestPing?.ThumbnailUrl);
+                return MapToDto(c, c.CollectionPings.Count);
             }).ToList();
         }
 
@@ -106,14 +106,13 @@ namespace Ping.Services.Pings
                 }
             }
 
-            var latestPingThumb = collection.CollectionPings.OrderByDescending(cp => cp.AddedUtc).FirstOrDefault()?.Ping?.ThumbnailUrl;
-
             return new CollectionDetailsDto(
                 collection.Id,
                 collection.Name,
                 collection.IsPublic,
                 collection.CollectionPings.Count,
-                latestPingThumb,
+                collection.ImageUrl,
+                collection.ThumbnailUrl,
                 collection.CreatedUtc,
                 pings
             );
@@ -138,17 +137,14 @@ namespace Ping.Services.Pings
             }
             if (dto.IsPublic.HasValue) collection.IsPublic = dto.IsPublic.Value;
 
+            if (dto.ImageUrl != null) collection.ImageUrl = dto.ImageUrl;
+            if (dto.ThumbnailUrl != null) collection.ThumbnailUrl = dto.ThumbnailUrl;
+
             await db.SaveChangesAsync();
             
-            // Re-fetch to get counts/thumbs if needed, or just return basic
             var count = await db.CollectionPings.CountAsync(cp => cp.CollectionId == collectionId);
-            var latestThumb = await db.CollectionPings
-                .Where(cp => cp.CollectionId == collectionId)
-                .OrderByDescending(cp => cp.AddedUtc)
-                .Select(cp => cp.Ping.ThumbnailUrl)
-                .FirstOrDefaultAsync();
 
-            return MapToDto(collection, count, latestThumb);
+            return MapToDto(collection, count);
         }
 
         public async Task DeleteCollectionAsync(int collectionId, string userId)
@@ -201,14 +197,15 @@ namespace Ping.Services.Pings
             }
         }
 
-        private static CollectionDto MapToDto(Collection c, int count, string? thumb)
+        private static CollectionDto MapToDto(Collection c, int count)
         {
             return new CollectionDto(
                 c.Id,
                 c.Name,
                 c.IsPublic,
                 count,
-                thumb,
+                c.ImageUrl,
+                c.ThumbnailUrl,
                 c.CreatedUtc
             );
         }

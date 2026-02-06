@@ -6,5 +6,6 @@ public record PlaceReviewSummaryDto(
     string PingAddress,
     double UserRating,
     int ReviewCount,
-    List<string> Thumbnails
+    List<string> Thumbnails,
+    bool IsPingDeleted
 );

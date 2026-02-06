@@ -15,7 +15,8 @@ public record ReviewDto(
     int Likes,
     bool IsLiked,
     bool IsOwner,
-    List<string> Tags
+    List<string> Tags,
+    bool IsPingDeleted
 );
 
 public record CreateReviewDto(

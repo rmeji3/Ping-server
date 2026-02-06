@@ -50,9 +50,6 @@ namespace Ping.Models.Pings
 
         public int? PingGenreId { get; set; }
         public PingGenre? PingGenre { get; set; }
-
-        [MaxLength(500)]
-        public string? ThumbnailUrl { get; set; }
     }
 }
 
