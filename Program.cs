@@ -253,6 +253,7 @@ builder.Services.AddScoped<Ping.Services.Verification.IVerificationService, Ping
 builder.Services.AddHostedService<AnalyticsBackgroundJob>();
 builder.Services.AddHostedService<Ping.Services.Background.UnverifiedUserCleanupService>();
 
+builder.Services.AddScoped<Ping.Services.Admin.IDbJanitorService, Ping.Services.Admin.DbJanitorService>();
 // --- AWS S3 & Storage & Email ---
 var awsOptions = builder.Configuration.GetAWSOptions();
 var awsAccessKey = builder.Configuration["AWS:AccessKey"];

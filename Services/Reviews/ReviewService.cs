@@ -73,8 +73,8 @@ public class ReviewService(
             Rating = dto.Rating,
             Type = hasReview ? ReviewType.CheckIn : ReviewType.Review,
             Content = dto.Content,
-            ImageUrl = dto.ImageUrl!,
-            ThumbnailUrl = !string.IsNullOrWhiteSpace(dto.ThumbnailUrl) ? dto.ThumbnailUrl : dto.ImageUrl!,
+            ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl),
+            ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl ?? dto.ImageUrl),
             CreatedAt = DateTime.UtcNow,
             Likes = 0,
         };
@@ -930,6 +930,8 @@ public class ReviewService(
         var review = await appDb.Reviews
             .Include(r => r.ReviewTags)
             .ThenInclude(rt => rt.Tag)
+            .Include(r => r.PingActivity)
+            .ThenInclude(pa => pa.Ping)
             .FirstOrDefaultAsync(r => r.Id == reviewId);
 
         if (review == null) throw new KeyNotFoundException("Review not found.");
@@ -963,8 +965,8 @@ public class ReviewService(
 
         if (dto.ImageUrl != null)
         {
-            review.ImageUrl = dto.ImageUrl;
-            review.ThumbnailUrl = !string.IsNullOrWhiteSpace(dto.ThumbnailUrl) ? dto.ThumbnailUrl : dto.ImageUrl;
+            review.ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl);
+            review.ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl ?? dto.ImageUrl);
             updated = true;
         }
 

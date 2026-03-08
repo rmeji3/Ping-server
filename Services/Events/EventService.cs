@@ -68,8 +68,8 @@ public class EventService(
             CreatedAt = DateTime.UtcNow,
             PingId = dto.PingId,
             EventGenreId = dto.EventGenreId,
-            ImageUrl = dto.ImageUrl,
-            ThumbnailUrl = dto.ThumbnailUrl,
+            ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl),
+            ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl ?? dto.ImageUrl),
             Price = dto.Price
         };
 
@@ -190,8 +190,8 @@ public class EventService(
         if (dto.EventGenreId.HasValue) ev.EventGenreId = dto.EventGenreId.Value;
         
         // Apply new optional fields
-        if (dto.ImageUrl != null) ev.ImageUrl = dto.ImageUrl;
-        if (dto.ThumbnailUrl != null) ev.ThumbnailUrl = dto.ThumbnailUrl;
+        if (dto.ImageUrl != null) ev.ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl);
+        if (dto.ThumbnailUrl != null) ev.ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl ?? dto.ImageUrl);
         if (dto.Price.HasValue) ev.Price = dto.Price.Value;
 
         if (dto.PingId.HasValue)

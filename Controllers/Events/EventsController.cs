@@ -85,7 +85,7 @@ namespace Ping.Controllers.Events
             }
             else 
             {
-                 // No image, pass through (or if client sent URLs manually? assume File priority)
+                 // No image file, check if URLs were sent manually and sanitize them
                  var dto = new CreateEventDto(
                         request.Title,
                         request.Description,
@@ -94,8 +94,8 @@ namespace Ping.Controllers.Events
                         request.EndTime,
                         request.PingId,
                         request.EventGenreId,
-                        null,
-                        null,
+                        null, // Events can have null images, but we should sanitize if we had them. 
+                        null, // Since request doesn't even have ImageUrl/ThumbUrl, this is fine.
                         request.Price
                     );
                  
@@ -365,6 +365,12 @@ namespace Ping.Controllers.Events
                 {
                     return BadRequest("Image upload failed: " + ex.Message);
                 }
+            }
+            else 
+            {
+                // Sanitize manual URLs
+                imgUrl = Ping.Utils.UrlUtils.SanitizeUrl(imgUrl);
+                thumbUrl = Ping.Utils.UrlUtils.SanitizeUrl(thumbUrl);
             }
 
             var dto = new UpdateEventDto

@@ -35,7 +35,8 @@ namespace Ping.Controllers
         IVerificationService verificationService,
         IAuthService authService,
 
-        Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager
+        Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager,
+        Ping.Services.Admin.IDbJanitorService janitorService
         ) : ControllerBase
     {
         // ==========================================
@@ -341,6 +342,17 @@ namespace Ping.Controllers
 
             await verificationService.RejectRequestAsync(id, adminId, dto.Reason);
             return Ok(new { message = "Request rejected." });
+        }
+
+        // ==========================================
+        // Janitor Tasks
+        // ==========================================
+
+        [HttpPost("janitor/cleanup-urls")]
+        public async Task<ActionResult<Ping.Services.Admin.JanitorResult>> RunJanitor()
+        {
+            var result = await janitorService.CleanupFileUrlsAsync();
+            return Ok(result);
         }
     }
 

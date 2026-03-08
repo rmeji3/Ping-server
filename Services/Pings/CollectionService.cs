@@ -33,8 +33,8 @@ namespace Ping.Services.Pings
                 UserId = userId,
                 Name = dto.Name,
                 IsPublic = dto.IsPublic,
-                ImageUrl = dto.ImageUrl,
-                ThumbnailUrl = dto.ThumbnailUrl,
+                ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl),
+                ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl),
                 CreatedUtc = DateTime.UtcNow
             };
 
@@ -137,8 +137,8 @@ namespace Ping.Services.Pings
             }
             if (dto.IsPublic.HasValue) collection.IsPublic = dto.IsPublic.Value;
 
-            if (dto.ImageUrl != null) collection.ImageUrl = dto.ImageUrl;
-            if (dto.ThumbnailUrl != null) collection.ThumbnailUrl = dto.ThumbnailUrl;
+            if (dto.ImageUrl != null) collection.ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl);
+            if (dto.ThumbnailUrl != null) collection.ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl);
 
             await db.SaveChangesAsync();
             

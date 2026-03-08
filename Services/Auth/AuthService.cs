@@ -178,7 +178,7 @@ public class AuthService(
                 LastName = payload.FamilyName,
                 EmailConfirmed = true, // Trusted from Google
                 CreatedUtc = DateTimeOffset.UtcNow,
-                ProfileImageUrl = payload.Picture
+                ProfileImageUrl = Ping.Utils.UrlUtils.SanitizeProfileUrl(payload.Picture)
             };
 
             var result = await users.CreateAsync(user);

@@ -54,7 +54,6 @@ namespace Ping.Controllers.Reviews
             {
                 try 
                 {
-                    // "reviews" acts as the folder
                     var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "reviews", userId);
                     imageUrl = original;
                     thumbnailUrl = thumb;
@@ -64,6 +63,13 @@ namespace Ping.Controllers.Reviews
                      logger.LogError(ex, "Failed to upload image for review.");
                      return BadRequest("Failed to process image.");
                 }
+            }
+            else 
+            {
+                // If no file, use placeholders or error out if strictly required by business logic.
+                // Review model requires ImageUrl, so we use placeholder.
+                imageUrl = Ping.Utils.UrlUtils.SanitizeUrl(null);
+                thumbnailUrl = imageUrl;
             }
 
             // Map to DTO
@@ -298,6 +304,12 @@ namespace Ping.Controllers.Reviews
                      logger.LogError(ex, "Failed to upload image for review update.");
                      return BadRequest("Failed to process image.");
                 }
+            }
+            else 
+            {
+                // Sanitize manual URLs to prevent file:// pollution
+                imgUrl = Ping.Utils.UrlUtils.SanitizeUrl(imgUrl);
+                thumbUrl = Ping.Utils.UrlUtils.SanitizeUrl(thumbUrl);
             }
 
             // Map to DTO

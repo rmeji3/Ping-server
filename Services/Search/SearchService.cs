@@ -86,7 +86,7 @@ public class SearchService(
             Query = input.Query,
             Type = input.Type,
             TargetId = input.TargetId,
-            ImageUrl = input.ImageUrl,
+            ImageUrl = UrlUtils.SanitizeUrl(input.ImageUrl),
             CreatedAt = DateTime.UtcNow
         };
 
