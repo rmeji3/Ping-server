@@ -34,6 +34,7 @@ namespace Ping.Data.App
         public DbSet<VerificationRequest> VerificationRequests => Set<VerificationRequest>();
         public DbSet<Collection> Collections => Set<Collection>();
         public DbSet<CollectionPing> CollectionPings => Set<CollectionPing>();
+        public DbSet<SavedCollection> SavedCollections => Set<SavedCollection>();
         public DbSet<SearchHistory> SearchHistories => Set<SearchHistory>();
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -240,6 +241,17 @@ namespace Ping.Data.App
                 .HasOne(cp => cp.Ping)
                 .WithMany()
                 .HasForeignKey(cp => cp.PingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // SavedCollection: unique per user per collection; cascade when collection is deleted
+            builder.Entity<SavedCollection>()
+                .HasIndex(sc => new { sc.UserId, sc.CollectionId })
+                .IsUnique();
+
+            builder.Entity<SavedCollection>()
+                .HasOne(sc => sc.Collection)
+                .WithMany()
+                .HasForeignKey(sc => sc.CollectionId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // ReviewLike: unique per user per review

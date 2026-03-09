@@ -205,5 +205,49 @@ namespace Ping.Controllers.Pings
                 return Forbid();
             }
         }
+
+        // POST /api/collections/{id}/save
+        [HttpPost("{id:int}/save")]
+        public async Task<ActionResult> SaveCollection(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            try
+            {
+                await collectionService.SaveCollectionAsync(id, userId);
+                return Ok();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        // DELETE /api/collections/{id}/save
+        [HttpDelete("{id:int}/save")]
+        public async Task<ActionResult> UnsaveCollection(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            await collectionService.UnsaveCollectionAsync(id, userId);
+            return NoContent();
+        }
+
+        // GET /api/collections/saved
+        [HttpGet("saved")]
+        public async Task<ActionResult<List<CollectionDto>>> GetSaved()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            var result = await collectionService.GetSavedCollectionsAsync(userId);
+            return Ok(result);
+        }
     }
 }

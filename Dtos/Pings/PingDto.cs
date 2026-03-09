@@ -33,7 +33,8 @@ namespace Ping.Dtos.Pings
         int? PingGenreId = null,
         string? PingGenreName = null,
         string? GooglePlaceId = null,
-        bool IsPingDeleted = false
+        bool IsPingDeleted = false,
+        string? ThumbnailUrl = null
     );
 
     public class UpdatePingDto

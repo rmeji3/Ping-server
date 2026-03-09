@@ -15,6 +15,9 @@ namespace Ping.Models.Pings
         public string Name { get; set; } = null!;
         
         public bool IsPublic { get; set; } = false;
+
+        /// <summary>True for the auto-generated "All" collection. Cannot be deleted or renamed.</summary>
+        public bool IsSystem { get; set; } = false;
         
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

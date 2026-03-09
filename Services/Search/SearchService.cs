@@ -7,6 +7,7 @@ using Ping.Models.Pings;
 using Ping.Data.App;
 using Ping.Models.Search;
 using Microsoft.EntityFrameworkCore;
+using Ping.Utils;
 
 namespace Ping.Services.Search;
 

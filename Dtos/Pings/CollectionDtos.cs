@@ -10,7 +10,10 @@ namespace Ping.Dtos.Pings
         int PingCount,
         string? ImageUrl,
         string? ThumbnailUrl,
-        DateTime CreatedUtc
+        DateTime CreatedUtc,
+        bool IsSystem = false,
+        bool IsOwner = false,
+        bool IsSaved = false
     );
 
     public record CreateCollectionDto(
@@ -35,7 +38,10 @@ namespace Ping.Dtos.Pings
         string? ImageUrl,
         string? ThumbnailUrl,
         DateTime CreatedUtc,
-        List<PingDetailsDto> Pings
+        List<PingDetailsDto> Pings,
+        bool IsSystem = false,
+        bool IsOwner = false,
+        bool IsSaved = false
     );
 
     public record AddPingToCollectionDto(

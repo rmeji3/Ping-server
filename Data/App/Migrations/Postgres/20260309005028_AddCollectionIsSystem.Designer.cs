@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -13,9 +14,11 @@ using Ping.Data.App;
 namespace Ping.Data.App.Migrations.Postgres
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260309005028_AddCollectionIsSystem")]
+    partial class AddCollectionIsSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -766,35 +769,6 @@ namespace Ping.Data.App.Migrations.Postgres
                         });
                 });
 
-            modelBuilder.Entity("Ping.Models.Pings.SavedCollection", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CollectionId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("SavedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CollectionId");
-
-                    b.HasIndex("UserId", "CollectionId")
-                        .IsUnique();
-
-                    b.ToTable("SavedCollections");
-                });
-
             modelBuilder.Entity("Ping.Models.Reports.Report", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1189,17 +1163,6 @@ namespace Ping.Data.App.Migrations.Postgres
                         .IsRequired();
 
                     b.Navigation("Ping");
-                });
-
-            modelBuilder.Entity("Ping.Models.Pings.SavedCollection", b =>
-                {
-                    b.HasOne("Ping.Models.Pings.Collection", "Collection")
-                        .WithMany()
-                        .HasForeignKey("CollectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Collection");
                 });
 
             modelBuilder.Entity("Ping.Models.Reviews.Reping", b =>

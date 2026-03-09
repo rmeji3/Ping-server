@@ -560,11 +560,18 @@ public class PingService(
             {
                 UserId = userId,
                 Name = "All",
-                IsPublic = false, // Private by default
+                IsPublic = false,  // Private by default
+                IsSystem = true,   // Mark as the system-generated catch-all collection
                 CreatedUtc = DateTime.UtcNow
             };
             db.Collections.Add(allCollection);
             await db.SaveChangesAsync(); // Save to get Id
+        }
+        else if (!allCollection.IsSystem)
+        {
+            // Backfill: "All" collections created before the IsSystem migration are unmarked.
+            // Stamp them now so the front end can correctly identify them going forward.
+            allCollection.IsSystem = true;
         }
 
         // 2. Add Ping to Collection if not present
@@ -630,6 +637,13 @@ public class PingService(
             ))
             .ToArray();
 
+        var activityIds = p.PingActivities.Select(a => a.Id).ToList();
+        var topReviewImage = activityIds.Any() ? await db.Reviews
+            .Where(r => activityIds.Contains(r.PingActivityId))
+            .OrderByDescending(r => r.Likes)
+            .Select(r => r.ThumbnailUrl)
+            .FirstOrDefaultAsync() : null;
+
         return new PingDetailsDto(
             p.Id,
             p.Name,
@@ -648,7 +662,8 @@ public class PingService(
             p.PingGenreId,
             p.PingGenre?.Name,
             p.GooglePlaceId,
-            p.IsDeleted // Maps to IsPingDeleted
+            p.IsDeleted, // Maps to IsPingDeleted
+            topReviewImage
         );
     }
 }

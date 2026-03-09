@@ -13,5 +13,8 @@ namespace Ping.Services.Pings
         Task DeleteCollectionAsync(int collectionId, string userId);
         Task AddPingToCollectionAsync(int collectionId, string userId, int pingId);
         Task RemovePingFromCollectionAsync(int collectionId, string userId, int pingId);
+        Task SaveCollectionAsync(int collectionId, string userId);
+        Task UnsaveCollectionAsync(int collectionId, string userId);
+        Task<List<CollectionDto>> GetSavedCollectionsAsync(string userId);
     }
 }

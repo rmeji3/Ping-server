@@ -4,6 +4,7 @@ using Ping.Models.Pings;
 using Ping.Services.Follows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Ping.Utils;
 
 namespace Ping.Services.Pings
 {
@@ -33,8 +34,9 @@ namespace Ping.Services.Pings
                 UserId = userId,
                 Name = dto.Name,
                 IsPublic = dto.IsPublic,
-                ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl),
-                ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl),
+                IsSystem = false, // User-created collections are never system collections
+                ImageUrl = dto.ImageUrl,
+                ThumbnailUrl = dto.ThumbnailUrl,
                 CreatedUtc = DateTime.UtcNow
             };
 
@@ -48,23 +50,55 @@ namespace Ping.Services.Pings
 
         public async Task<List<CollectionDto>> GetMyCollectionsAsync(string userId)
         {
-            var collections = await db.Collections
+            // 1. Owned collections — always appear first
+            var ownedCollections = await db.Collections
                 .Where(c => c.UserId == userId)
                 .Include(c => c.CollectionPings)
                     .ThenInclude(cp => cp.Ping)
                 .OrderByDescending(c => c.CreatedUtc)
                 .ToListAsync();
 
-            return collections.Select(c => 
+            var result = new List<CollectionDto>();
+            foreach (var c in ownedCollections)
             {
-                return MapToDto(c, c.CollectionPings.Count);
-            }).ToList();
+                var dto = MapToDto(c, c.CollectionPings.Count, isOwner: true, isSaved: false);
+
+                if (c.ImageUrl == null)
+                {
+                    var (img, thumb) = await GetDefaultCollectionThumbnailAsync(c.Id);
+                    dto = dto with { ImageUrl = img, ThumbnailUrl = thumb };
+                }
+
+                result.Add(dto);
+            }
+
+            // 2. Saved collections from other users — appended after owned
+            var saved = await db.SavedCollections
+                .Where(sc => sc.UserId == userId)
+                .Include(sc => sc.Collection)
+                    .ThenInclude(c => c.CollectionPings)
+                .OrderByDescending(sc => sc.SavedAt)
+                .ToListAsync();
+
+            foreach (var sc in saved)
+            {
+                var dto = MapToDto(sc.Collection, sc.Collection.CollectionPings.Count, isOwner: false, isSaved: true);
+
+                if (sc.Collection.ImageUrl == null)
+                {
+                    var (img, thumb) = await GetDefaultCollectionThumbnailAsync(sc.Collection.Id);
+                    dto = dto with { ImageUrl = img, ThumbnailUrl = thumb };
+                }
+
+                result.Add(dto);
+            }
+
+            return result;
         }
 
         public async Task<List<CollectionDto>> GetUserPublicCollectionsAsync(string targetUserId, string? currentUserId)
         {
             // If viewing someone else, only show public
-            // (Standard rule, though we could add "Friends Only" collections later if needed)
             var collections = await db.Collections
                 .Where(c => c.UserId == targetUserId && c.IsPublic)
                 .Include(c => c.CollectionPings)
@@ -72,10 +106,30 @@ namespace Ping.Services.Pings
                 .OrderByDescending(c => c.CreatedUtc)
                 .ToListAsync();
 
-            return collections.Select(c => 
+            // Pre-load all saved collection IDs for the current user in one query (avoid N+1)
+            HashSet<int> savedIds = currentUserId != null
+                ? (await db.SavedCollections
+                    .Where(sc => sc.UserId == currentUserId)
+                    .Select(sc => sc.CollectionId)
+                    .ToListAsync()).ToHashSet()
+                : new HashSet<int>();
+
+            var result = new List<CollectionDto>();
+            foreach (var c in collections)
             {
-                return MapToDto(c, c.CollectionPings.Count);
-            }).ToList();
+                var isOwner = currentUserId != null && c.UserId == currentUserId;
+                var isSaved = savedIds.Contains(c.Id);
+                var dto = MapToDto(c, c.CollectionPings.Count, isOwner, isSaved);
+
+                if (c.ImageUrl == null)
+                {
+                    var (img, thumb) = await GetDefaultCollectionThumbnailAsync(c.Id);
+                    dto = dto with { ImageUrl = img, ThumbnailUrl = thumb };
+                }
+
+                result.Add(dto);
+            }
+            return result;
         }
 
         public async Task<CollectionDetailsDto> GetCollectionDetailsAsync(int collectionId, string? currentUserId)
@@ -106,15 +160,32 @@ namespace Ping.Services.Pings
                 }
             }
 
+            var isOwner = currentUserId != null && collection.UserId == currentUserId;
+            var isSaved = currentUserId != null && await db.SavedCollections
+                .AnyAsync(sc => sc.UserId == currentUserId && sc.CollectionId == collectionId);
+
+            // If the user hasn't uploaded a custom image, derive the cover dynamically
+            string? imageUrl = collection.ImageUrl;
+            string? thumbnailUrl = collection.ThumbnailUrl;
+            if (collection.ImageUrl == null)
+            {
+                var (img, thumb) = await GetDefaultCollectionThumbnailAsync(collection.Id);
+                imageUrl = img;
+                thumbnailUrl = thumb;
+            }
+
             return new CollectionDetailsDto(
                 collection.Id,
                 collection.Name,
                 collection.IsPublic,
                 collection.CollectionPings.Count,
-                collection.ImageUrl,
-                collection.ThumbnailUrl,
+                imageUrl,
+                thumbnailUrl,
                 collection.CreatedUtc,
-                pings
+                pings,
+                collection.IsSystem,
+                isOwner,
+                isSaved
             );
         }
 
@@ -137,8 +208,8 @@ namespace Ping.Services.Pings
             }
             if (dto.IsPublic.HasValue) collection.IsPublic = dto.IsPublic.Value;
 
-            if (dto.ImageUrl != null) collection.ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl);
-            if (dto.ThumbnailUrl != null) collection.ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl);
+            if (dto.ImageUrl != null) collection.ImageUrl = dto.ImageUrl;
+            if (dto.ThumbnailUrl != null) collection.ThumbnailUrl = dto.ThumbnailUrl;
 
             await db.SaveChangesAsync();
             
@@ -197,7 +268,7 @@ namespace Ping.Services.Pings
             }
         }
 
-        private static CollectionDto MapToDto(Collection c, int count)
+        private static CollectionDto MapToDto(Collection c, int count, bool isOwner = false, bool isSaved = false)
         {
             return new CollectionDto(
                 c.Id,
@@ -206,8 +277,116 @@ namespace Ping.Services.Pings
                 count,
                 c.ImageUrl,
                 c.ThumbnailUrl,
-                c.CreatedUtc
+                c.CreatedUtc,
+                c.IsSystem,
+                isOwner,
+                isSaved
             );
+        }
+
+        /// <summary>Save a public collection to the current user's saved library.</summary>
+        public async Task SaveCollectionAsync(int collectionId, string userId)
+        {
+            var collection = await db.Collections.FindAsync(collectionId);
+            if (collection == null) throw new KeyNotFoundException("Collection not found.");
+
+            // Users cannot save their own collections
+            if (collection.UserId == userId)
+                throw new InvalidOperationException("You cannot save your own collection.");
+
+            // Collection must be public to be saved
+            if (!collection.IsPublic)
+                throw new InvalidOperationException("You can only save public collections.");
+
+            var already = await db.SavedCollections
+                .AnyAsync(sc => sc.UserId == userId && sc.CollectionId == collectionId);
+
+            if (!already)
+            {
+                db.SavedCollections.Add(new SavedCollection
+                {
+                    UserId = userId,
+                    CollectionId = collectionId,
+                    SavedAt = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync();
+            }
+        }
+
+        /// <summary>Remove a previously saved collection from the user's library.</summary>
+        public async Task UnsaveCollectionAsync(int collectionId, string userId)
+        {
+            var saved = await db.SavedCollections
+                .FirstOrDefaultAsync(sc => sc.UserId == userId && sc.CollectionId == collectionId);
+
+            if (saved != null)
+            {
+                db.SavedCollections.Remove(saved);
+                await db.SaveChangesAsync();
+            }
+        }
+
+        /// <summary>Get all collections the user has saved from other users.</summary>
+        public async Task<List<CollectionDto>> GetSavedCollectionsAsync(string userId)
+        {
+            var saved = await db.SavedCollections
+                .Where(sc => sc.UserId == userId)
+                .Include(sc => sc.Collection)
+                    .ThenInclude(c => c.CollectionPings)
+                .OrderByDescending(sc => sc.SavedAt)
+                .ToListAsync();
+
+            var result = new List<CollectionDto>();
+            foreach (var sc in saved)
+            {
+                var dto = MapToDto(sc.Collection, sc.Collection.CollectionPings.Count, isOwner: false, isSaved: true);
+
+                if (sc.Collection.ImageUrl == null)
+                {
+                    var (img, thumb) = await GetDefaultCollectionThumbnailAsync(sc.Collection.Id);
+                    dto = dto with { ImageUrl = img, ThumbnailUrl = thumb };
+                }
+
+                result.Add(dto);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Computes the default cover image for a collection when the user hasn't uploaded one:
+        /// finds the most recently added ping in the collection, then returns the
+        /// thumbnail of the most-liked review across all activities for that ping.
+        /// Returns (null, null) if no reviews exist yet.
+        /// </summary>
+        private async Task<(string? ImageUrl, string? ThumbnailUrl)> GetDefaultCollectionThumbnailAsync(int collectionId)
+        {
+            // Get the most recently added ping in the collection
+            var mostRecentPingId = await db.CollectionPings
+                .Where(cp => cp.CollectionId == collectionId)
+                .OrderByDescending(cp => cp.AddedUtc)
+                .Select(cp => (int?)cp.PingId)
+                .FirstOrDefaultAsync();
+
+            if (mostRecentPingId == null)
+                return (null, null);
+
+            // Get the activity IDs for that ping
+            var activityIds = await db.PingActivities
+                .Where(a => a.PingId == mostRecentPingId)
+                .Select(a => a.Id)
+                .ToListAsync();
+
+            if (!activityIds.Any())
+                return (null, null);
+
+            // Get the most-liked review's image URLs for those activities
+            var topReview = await db.Reviews
+                .Where(r => activityIds.Contains(r.PingActivityId))
+                .OrderByDescending(r => r.Likes)
+                .Select(r => new { r.ImageUrl, r.ThumbnailUrl })
+                .FirstOrDefaultAsync();
+
+            return (topReview?.ImageUrl, topReview?.ThumbnailUrl);
         }
     }
 }
