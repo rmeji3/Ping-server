@@ -446,8 +446,9 @@ namespace Ping.Controllers.Events
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-            var result = await eventService.GetCommentsAsync(id, pagination);
+            var result = await eventService.GetCommentsAsync(id, pagination, userId);
             return Ok(result);
         }
 
@@ -494,6 +495,63 @@ namespace Ping.Controllers.Events
             {
                 return Forbid(ex.Message);
             }
+        }
+
+        // POST /api/events/comments/{commentId}/react
+        [HttpPost("comments/{commentId:int}/react")]
+        public async Task<ActionResult<EventCommentDto>> ReactToComment(int commentId, [FromBody] ReactToCommentDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            try
+            {
+                var result = await eventService.ReactToCommentAsync(commentId, userId, dto.Value);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("Comment not found.");
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        // POST /api/events/{id}/comments/{commentId}/replies
+        [HttpPost("{id:int}/comments/{commentId:int}/replies")]
+        public async Task<ActionResult<EventCommentDto>> AddReply(int id, int commentId, [FromBody] CreateEventCommentDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            try
+            {
+                var result = await eventService.AddReplyAsync(commentId, id, userId, dto.Content);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        // GET /api/events/comments/{commentId}/replies?pageNumber=1&pageSize=10
+        [HttpGet("comments/{commentId:int}/replies")]
+        public async Task<ActionResult<PaginatedResult<EventCommentDto>>> GetReplies(
+            int commentId,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 10)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+            var result = await eventService.GetRepliesAsync(commentId, pagination, userId);
+            return Ok(result);
         }
     }
 }

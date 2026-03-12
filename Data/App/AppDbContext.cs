@@ -25,6 +25,7 @@ namespace Ping.Data.App
         public DbSet<Event> Events => Set<Event>();
         public DbSet<EventAttendee> EventAttendees => Set<EventAttendee>();
         public DbSet<EventComment> EventComments => Set<EventComment>();
+        public DbSet<EventCommentReaction> EventCommentReactions => Set<EventCommentReaction>();
         public DbSet<Favorited> Favorited => Set<Favorited>();
         public DbSet<ReviewLike> ReviewLikes => Set<ReviewLike>();
         public DbSet<Reping> Repings => Set<Reping>();
@@ -258,6 +259,29 @@ namespace Ping.Data.App
             builder.Entity<ReviewLike>()
                 .HasIndex(rl => new { rl.ReviewId, rl.UserId })
                 .IsUnique();
+
+            // EventCommentReaction: unique per user per comment
+            builder.Entity<EventCommentReaction>()
+                .HasIndex(r => new { r.CommentId, r.UserId })
+                .IsUnique();
+
+            // EventCommentReaction: value must be -1 or +1
+            builder.Entity<EventCommentReaction>()
+                .ToTable(t => t.HasCheckConstraint("CK_EventCommentReaction_Value", "\"Value\" IN (-1, 1)"));
+
+            // EventComment: self-referential FK for replies
+            builder.Entity<EventComment>()
+                .HasOne(c => c.ParentComment)
+                .WithMany()
+                .HasForeignKey(c => c.ParentCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // EventCommentReaction -> EventComment
+            builder.Entity<EventCommentReaction>()
+                .HasOne(r => r.Comment)
+                .WithMany(c => c.Reactions)
+                .HasForeignKey(r => r.CommentId)
+                .OnDelete(DeleteBehavior.Cascade);
 
 
             // ---------- Property config ----------

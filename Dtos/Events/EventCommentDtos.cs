@@ -10,9 +10,18 @@ public record EventCommentDto(
     string UserId,
     string UserName,
     string? UserProfileImageUrl,
-    string? UserProfileThumbnailUrl
+    string? UserProfileThumbnailUrl,
+    int LikeCount,
+    int DislikeCount,
+    int? CurrentUserReaction,
+    int? ParentCommentId,
+    int ReplyCount
 );
 
 public record CreateEventCommentDto(
     [Required, MaxLength(500)] string Content
+);
+
+public record ReactToCommentDto(
+    [Required, Range(-1, 1)] int Value
 );

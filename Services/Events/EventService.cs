@@ -2,9 +2,11 @@ using Ping.Data.App;
 using Ping.Data.Auth;
 using Ping.Dtos.Common;
 using Ping.Dtos.Events;
+using Ping.Models;
 using Ping.Models.AppUsers;
 using Ping.Models.Events;
 using Ping.Services.Moderation;
+using Ping.Services.Notifications;
 using Ping.Utils;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +21,7 @@ public class EventService(
     IModerationService moderationService,
     Services.Blocks.IBlockService blockService,
     Services.Follows.IFollowService followService,
+    INotificationService notificationService,
     ILogger<EventService> logger) : IEventService
 {
     public async Task<EventDto> CreateEventAsync(CreateEventDto dto, string userId)
@@ -640,27 +643,62 @@ public class EventService(
             userId,
             user?.UserName ?? "Unknown",
             user?.ProfileImageUrl,
-            user?.ProfileThumbnailUrl
+            user?.ProfileThumbnailUrl,
+            0, 0, null, null, 0
         );
     }
 
-    public async Task<PaginatedResult<EventCommentDto>> GetCommentsAsync(int eventId, PaginationParams pagination)
+    public async Task<PaginatedResult<EventCommentDto>> GetCommentsAsync(int eventId, PaginationParams pagination, string? currentUserId = null)
     {
+        // Only top-level comments (no replies)
         var query = appDb.EventComments
             .AsNoTracking()
-            .Where(c => c.EventId == eventId)
-            .OrderByDescending(c => c.CreatedAt)
-            .Select(c => new EventCommentDto(
+            .Where(c => c.EventId == eventId && c.ParentCommentId == null)
+            .OrderByDescending(c => c.CreatedAt);
+
+        var count = await query.CountAsync();
+        var comments = await query
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .ToListAsync();
+
+        // Batch-lookup users from auth DB
+        var userIds = comments.Select(c => c.UserId).Distinct().ToList();
+        var users = await userManager.Users
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id);
+
+        // Get current user's reactions for these comments
+        Dictionary<int, int> userReactions = new();
+        if (currentUserId != null)
+        {
+            var commentIds = comments.Select(c => c.Id).ToList();
+            userReactions = await appDb.EventCommentReactions
+                .Where(r => commentIds.Contains(r.CommentId) && r.UserId == currentUserId)
+                .ToDictionaryAsync(r => r.CommentId, r => r.Value);
+        }
+
+        var dtos = comments.Select(c =>
+        {
+            users.TryGetValue(c.UserId, out var user);
+            userReactions.TryGetValue(c.Id, out var reactionValue);
+            return new EventCommentDto(
                 c.Id,
                 c.Content,
                 c.CreatedAt,
                 c.UserId,
-                c.User!.UserName!,
-                c.User.ProfileImageUrl,
-                c.User.ProfileThumbnailUrl
-            ));
-        
-        return await query.ToPaginatedResultAsync(pagination);
+                user?.UserName ?? "Unknown",
+                user?.ProfileImageUrl,
+                user?.ProfileThumbnailUrl,
+                c.LikeCount,
+                c.DislikeCount,
+                currentUserId != null && userReactions.ContainsKey(c.Id) ? reactionValue : null,
+                c.ParentCommentId,
+                c.ReplyCount
+            );
+        }).ToList();
+
+        return new PaginatedResult<EventCommentDto>(dtos, count, pagination.PageNumber, pagination.PageSize);
     }
 
     public async Task<EventCommentDto> UpdateCommentAsync(int commentId, string userId, string content)
@@ -696,7 +734,12 @@ public class EventService(
             userId,
             user?.UserName ?? "Unknown",
             user?.ProfileImageUrl,
-            user?.ProfileThumbnailUrl
+            user?.ProfileThumbnailUrl,
+            comment.LikeCount,
+            comment.DislikeCount,
+            null,
+            comment.ParentCommentId,
+            comment.ReplyCount
         );
     }
 
@@ -705,16 +748,220 @@ public class EventService(
         var comment = await appDb.EventComments.FindAsync(commentId);
         if (comment == null) return false;
 
-        // Allow deletion if owner or admin (admin check logic might be higher up, but for service method usually owner)
-        // Also Event Owner could potentially delete? For now, only Comment Owner.
         if (comment.UserId != userId)
         {
             throw new UnauthorizedAccessException("Not comment owner.");
         }
 
+        // If this is a reply, decrement parent's ReplyCount
+        if (comment.ParentCommentId.HasValue)
+        {
+            var parent = await appDb.EventComments.FindAsync(comment.ParentCommentId.Value);
+            if (parent != null)
+            {
+                parent.ReplyCount = Math.Max(0, parent.ReplyCount - 1);
+            }
+        }
+
         appDb.EventComments.Remove(comment);
         await appDb.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<EventCommentDto> ReactToCommentAsync(int commentId, string userId, int value)
+    {
+        var comment = await appDb.EventComments.FindAsync(commentId);
+        if (comment == null) throw new KeyNotFoundException("Comment not found.");
+
+        if (value != 1 && value != -1)
+            throw new ArgumentException("Value must be 1 (like) or -1 (dislike).");
+
+        var existing = await appDb.EventCommentReactions
+            .FirstOrDefaultAsync(r => r.CommentId == commentId && r.UserId == userId);
+
+        if (existing != null)
+        {
+            if (existing.Value == value)
+            {
+                // Same reaction — remove it (toggle off)
+                if (value == 1) comment.LikeCount = Math.Max(0, comment.LikeCount - 1);
+                else comment.DislikeCount = Math.Max(0, comment.DislikeCount - 1);
+                appDb.EventCommentReactions.Remove(existing);
+            }
+            else
+            {
+                // Switch reaction
+                if (existing.Value == 1) comment.LikeCount = Math.Max(0, comment.LikeCount - 1);
+                else comment.DislikeCount = Math.Max(0, comment.DislikeCount - 1);
+
+                if (value == 1) comment.LikeCount++;
+                else comment.DislikeCount++;
+
+                existing.Value = value;
+                existing.CreatedAt = DateTime.UtcNow;
+            }
+        }
+        else
+        {
+            // New reaction
+            appDb.EventCommentReactions.Add(new EventCommentReaction
+            {
+                CommentId = commentId,
+                UserId = userId,
+                Value = value,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            if (value == 1) comment.LikeCount++;
+            else comment.DislikeCount++;
+        }
+
+        await appDb.SaveChangesAsync();
+
+        // Check what the user's current reaction is after the operation
+        var currentReaction = await appDb.EventCommentReactions
+            .FirstOrDefaultAsync(r => r.CommentId == commentId && r.UserId == userId);
+
+        // Notify comment author about the reaction (skip if reacting to own comment, skip if toggling off)
+        if (comment.UserId != userId && currentReaction != null)
+        {
+            try
+            {
+                var sender = await userManager.FindByIdAsync(userId);
+                var senderName = sender?.UserName ?? "Unknown";
+                var isLike = currentReaction.Value == 1;
+
+                await notificationService.SendNotificationAsync(new Notification
+                {
+                    UserId = comment.UserId,
+                    SenderId = userId,
+                    SenderName = senderName,
+                    SenderProfileImageUrl = sender?.ProfileThumbnailUrl ?? sender?.ProfileImageUrl,
+                    Type = isLike ? NotificationType.CommentLike : NotificationType.CommentDislike,
+                    Title = isLike ? "New like" : "New dislike",
+                    Message = isLike
+                        ? $"{senderName} liked your comment"
+                        : $"{senderName} disliked your comment",
+                    ReferenceId = comment.EventId.ToString()
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send comment reaction notification");
+            }
+        }
+
+        var user = await userManager.FindByIdAsync(comment.UserId);
+        return new EventCommentDto(
+            comment.Id, comment.Content, comment.CreatedAt, comment.UserId,
+            user?.UserName ?? "Unknown", user?.ProfileImageUrl, user?.ProfileThumbnailUrl,
+            comment.LikeCount, comment.DislikeCount,
+            currentReaction?.Value,
+            comment.ParentCommentId, comment.ReplyCount
+        );
+    }
+
+    public async Task<EventCommentDto> AddReplyAsync(int parentCommentId, int eventId, string userId, string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) throw new ArgumentException("Reply cannot be empty.");
+
+        var wordCount = content.Split(new[] { ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        if (wordCount > 100) throw new ArgumentException($"Reply exceeds 100 words limit (Current: {wordCount}).");
+
+        var parent = await appDb.EventComments.FindAsync(parentCommentId);
+        if (parent == null) throw new KeyNotFoundException("Parent comment not found.");
+        if (parent.EventId != eventId) throw new ArgumentException("Parent comment does not belong to this event.");
+
+        var check = await moderationService.CheckContentAsync(content);
+        if (check.IsFlagged) throw new ArgumentException($"Reply violates content policy: {check.Reason}");
+
+        var reply = new EventComment
+        {
+            EventId = eventId,
+            UserId = userId,
+            Content = content,
+            CreatedAt = DateTime.UtcNow,
+            ParentCommentId = parentCommentId
+        };
+
+        appDb.EventComments.Add(reply);
+        parent.ReplyCount++;
+        await appDb.SaveChangesAsync();
+
+        var user = await userManager.FindByIdAsync(userId);
+        var senderName = user?.UserName ?? "Unknown";
+
+        // Notify parent comment author (skip if replying to self)
+        if (parent.UserId != userId)
+        {
+            try
+            {
+                await notificationService.SendNotificationAsync(new Notification
+                {
+                    UserId = parent.UserId,
+                    SenderId = userId,
+                    SenderName = senderName,
+                    SenderProfileImageUrl = user?.ProfileThumbnailUrl ?? user?.ProfileImageUrl,
+                    Type = NotificationType.CommentReply,
+                    Title = "New reply",
+                    Message = $"{senderName} replied to your comment",
+                    ReferenceId = eventId.ToString()
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send comment reply notification");
+            }
+        }
+
+        return new EventCommentDto(
+            reply.Id, reply.Content, reply.CreatedAt, userId,
+            senderName, user?.ProfileImageUrl, user?.ProfileThumbnailUrl,
+            0, 0, null, parentCommentId, 0
+        );
+    }
+
+    public async Task<PaginatedResult<EventCommentDto>> GetRepliesAsync(int parentCommentId, PaginationParams pagination, string? currentUserId = null)
+    {
+        var query = appDb.EventComments
+            .AsNoTracking()
+            .Where(c => c.ParentCommentId == parentCommentId)
+            .OrderBy(c => c.CreatedAt);
+
+        var count = await query.CountAsync();
+        var replies = await query
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .ToListAsync();
+
+        var userIds = replies.Select(c => c.UserId).Distinct().ToList();
+        var users = await userManager.Users
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id);
+
+        Dictionary<int, int> userReactions = new();
+        if (currentUserId != null)
+        {
+            var replyIds = replies.Select(c => c.Id).ToList();
+            userReactions = await appDb.EventCommentReactions
+                .Where(r => replyIds.Contains(r.CommentId) && r.UserId == currentUserId)
+                .ToDictionaryAsync(r => r.CommentId, r => r.Value);
+        }
+
+        var dtos = replies.Select(c =>
+        {
+            users.TryGetValue(c.UserId, out var user);
+            userReactions.TryGetValue(c.Id, out var reactionValue);
+            return new EventCommentDto(
+                c.Id, c.Content, c.CreatedAt, c.UserId,
+                user?.UserName ?? "Unknown", user?.ProfileImageUrl, user?.ProfileThumbnailUrl,
+                c.LikeCount, c.DislikeCount,
+                currentUserId != null && userReactions.ContainsKey(c.Id) ? reactionValue : null,
+                c.ParentCommentId, c.ReplyCount
+            );
+        }).ToList();
+
+        return new PaginatedResult<EventCommentDto>(dtos, count, pagination.PageNumber, pagination.PageSize);
     }
 
     public async Task<PaginatedResult<FriendInviteDto>> GetFriendsToInviteAsync(int eventId, string userId, PaginationParams pagination, string? query = null)

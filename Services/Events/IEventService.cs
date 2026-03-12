@@ -23,8 +23,11 @@ public interface IEventService
     Task<bool> LeaveEventAsync(int id, string userId);
     Task<EventCommentDto> AddCommentAsync(int eventId, string userId, string content);
     Task<EventCommentDto> UpdateCommentAsync(int commentId, string userId, string content);
-    Task<PaginatedResult<EventCommentDto>> GetCommentsAsync(int eventId, PaginationParams pagination);
+    Task<PaginatedResult<EventCommentDto>> GetCommentsAsync(int eventId, PaginationParams pagination, string? currentUserId = null);
     Task<bool> DeleteCommentAsync(int commentId, string userId);
+    Task<EventCommentDto> ReactToCommentAsync(int commentId, string userId, int value);
+    Task<EventCommentDto> AddReplyAsync(int parentCommentId, int eventId, string userId, string content);
+    Task<PaginatedResult<EventCommentDto>> GetRepliesAsync(int parentCommentId, PaginationParams pagination, string? currentUserId = null);
     Task<PaginatedResult<FriendInviteDto>> GetFriendsToInviteAsync(int eventId, string userId, PaginationParams pagination, string? query = null);
 }
 

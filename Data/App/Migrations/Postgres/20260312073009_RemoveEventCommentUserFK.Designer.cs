@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -13,9 +14,11 @@ using Ping.Data.App;
 namespace Ping.Data.App.Migrations.Postgres
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260312073009_RemoveEventCommentUserFK")]
+    partial class RemoveEventCommentUserFK
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -295,19 +298,7 @@ namespace Ping.Data.App.Migrations.Postgres
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("DislikeCount")
-                        .HasColumnType("integer");
-
                     b.Property<int>("EventId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LikeCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ParentCommentId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ReplyCount")
                         .HasColumnType("integer");
 
                     b.Property<string>("UserId")
@@ -318,41 +309,7 @@ namespace Ping.Data.App.Migrations.Postgres
 
                     b.HasIndex("EventId");
 
-                    b.HasIndex("ParentCommentId");
-
                     b.ToTable("EventComments");
-                });
-
-            modelBuilder.Entity("Ping.Models.Events.EventCommentReaction", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CommentId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Value")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CommentId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("EventCommentReactions", t =>
-                        {
-                            t.HasCheckConstraint("CK_EventCommentReaction_Value", "\"Value\" IN (-1, 1)");
-                        });
                 });
 
             modelBuilder.Entity("Ping.Models.Events.EventGenre", b =>
@@ -1173,25 +1130,7 @@ namespace Ping.Data.App.Migrations.Postgres
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Ping.Models.Events.EventComment", "ParentComment")
-                        .WithMany()
-                        .HasForeignKey("ParentCommentId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
                     b.Navigation("Event");
-
-                    b.Navigation("ParentComment");
-                });
-
-            modelBuilder.Entity("Ping.Models.Events.EventCommentReaction", b =>
-                {
-                    b.HasOne("Ping.Models.Events.EventComment", "Comment")
-                        .WithMany("Reactions")
-                        .HasForeignKey("CommentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Comment");
                 });
 
             modelBuilder.Entity("Ping.Models.Pings.CollectionPing", b =>
@@ -1337,11 +1276,6 @@ namespace Ping.Data.App.Migrations.Postgres
             modelBuilder.Entity("Ping.Models.Events.Event", b =>
                 {
                     b.Navigation("Attendees");
-                });
-
-            modelBuilder.Entity("Ping.Models.Events.EventComment", b =>
-                {
-                    b.Navigation("Reactions");
                 });
 
             modelBuilder.Entity("Ping.Models.Events.EventGenre", b =>

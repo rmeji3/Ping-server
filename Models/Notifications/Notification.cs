@@ -9,7 +9,10 @@ public enum NotificationType
     ReviewLike = 1,
     System = 2,
     EventInvite = 3,
-    NewFollower = 4
+    NewFollower = 4,
+    CommentReply = 5,
+    CommentLike = 6,
+    CommentDislike = 7
 }
 
 public class Notification

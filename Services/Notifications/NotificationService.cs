@@ -112,6 +112,16 @@ public class NotificationService : INotificationService
             limit = _config.GetValue<int>("NotificationRateLimits:ReviewLikeLimitPerHour", 3);
             window = TimeSpan.FromHours(1);
         }
+        else if (notification.Type == NotificationType.CommentReply)
+        {
+            limit = _config.GetValue<int>("NotificationRateLimits:CommentReplyLimitPerHour", 10);
+            window = TimeSpan.FromHours(1);
+        }
+        else if (notification.Type == NotificationType.CommentLike || notification.Type == NotificationType.CommentDislike)
+        {
+            limit = _config.GetValue<int>("NotificationRateLimits:CommentReactionLimitPerHour", 5);
+            window = TimeSpan.FromHours(1);
+        }
         else
         {
             // Default no limit for other types if they were added
