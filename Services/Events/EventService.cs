@@ -619,6 +619,10 @@ public class EventService(
         var ev = await appDb.Events.FindAsync(eventId);
         if (ev == null) throw new KeyNotFoundException("Event not found.");
 
+        // Block comments 3 days after event has ended
+        if (ev.EndTime.AddDays(5) <= DateTime.UtcNow)
+            throw new ArgumentException("Comments are closed for this event.");
+
         // Check moderation
         var check = await moderationService.CheckContentAsync(content);
         if (check.IsFlagged) throw new ArgumentException($"Comment violates content policy: {check.Reason}");
@@ -773,6 +777,11 @@ public class EventService(
         var comment = await appDb.EventComments.FindAsync(commentId);
         if (comment == null) throw new KeyNotFoundException("Comment not found.");
 
+        // Block reactions 3 days after event has ended
+        var ev = await appDb.Events.FindAsync(comment.EventId);
+        if (ev != null && ev.EndTime.AddDays(5) <= DateTime.UtcNow)
+            throw new ArgumentException("Reactions are closed for this event.");
+
         if (value != 1 && value != -1)
             throw new ArgumentException("Value must be 1 (like) or -1 (dislike).");
 
@@ -871,6 +880,11 @@ public class EventService(
         var parent = await appDb.EventComments.FindAsync(parentCommentId);
         if (parent == null) throw new KeyNotFoundException("Parent comment not found.");
         if (parent.EventId != eventId) throw new ArgumentException("Parent comment does not belong to this event.");
+
+        // Block replies 3 days after event has ended
+        var ev = await appDb.Events.FindAsync(eventId);
+        if (ev != null && ev.EndTime.AddDays(5) <= DateTime.UtcNow)
+            throw new ArgumentException("Comments are closed for this event.");
 
         var check = await moderationService.CheckContentAsync(content);
         if (check.IsFlagged) throw new ArgumentException($"Reply violates content policy: {check.Reason}");
