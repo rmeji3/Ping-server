@@ -25,7 +25,8 @@ public record EventDto(
     bool IsHosting,
     bool IsAttending,
     List<string> FriendThumbnails,
-    string? Address
+    string? Address,
+    bool AreCommentsLocked
 );
 
 public record UserSummaryDto(

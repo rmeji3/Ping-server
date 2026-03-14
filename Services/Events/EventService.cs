@@ -123,7 +123,8 @@ public class EventService(
             true, // IsHosting (creator)
             true, // IsAttending (creator auto-joins)
             new List<string>(), // FriendThumbnails (no other attendees)
-            ping.Address
+            ping.Address,
+            false // AreCommentsLocked (newly created)
         );
     }
 
@@ -623,6 +624,13 @@ public class EventService(
         if (ev.EndTime.AddDays(5) <= DateTime.UtcNow)
             throw new ArgumentException("Comments are closed for this event.");
 
+        // Rate limit: 10 comments per user per hour
+        var oneHourAgo = DateTime.UtcNow.AddHours(-1);
+        var recentCount = await appDb.EventComments
+            .CountAsync(c => c.UserId == userId && c.CreatedAt >= oneHourAgo);
+        if (recentCount >= 10)
+            throw new InvalidOperationException("Maximum 10 comments per hour.");
+
         // Check moderation
         var check = await moderationService.CheckContentAsync(content);
         if (check.IsFlagged) throw new ArgumentException($"Comment violates content policy: {check.Reason}");
@@ -885,6 +893,13 @@ public class EventService(
         var ev = await appDb.Events.FindAsync(eventId);
         if (ev != null && ev.EndTime.AddDays(5) <= DateTime.UtcNow)
             throw new ArgumentException("Comments are closed for this event.");
+
+        // Rate limit: 10 comments per user per hour (comments + replies combined)
+        var oneHourAgo = DateTime.UtcNow.AddHours(-1);
+        var recentCount = await appDb.EventComments
+            .CountAsync(c => c.UserId == userId && c.CreatedAt >= oneHourAgo);
+        if (recentCount >= 10)
+            throw new InvalidOperationException("Maximum 10 comments per hour.");
 
         var check = await moderationService.CheckContentAsync(content);
         if (check.IsFlagged) throw new ArgumentException($"Reply violates content policy: {check.Reason}");

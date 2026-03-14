@@ -77,6 +77,8 @@ public static class EventMapper
              }
         }
 
+        var areCommentsLocked = ev.EndTime.AddDays(5) <= DateTime.UtcNow;
+
         return new EventDto(
             ev.Id,
             ev.Title,
@@ -100,7 +102,8 @@ public static class EventMapper
             isHosting,
             isAttending,
             friendThumbnails,
-            ev.Ping.Address
+            ev.Ping.Address,
+            areCommentsLocked
         );
     }
 }
