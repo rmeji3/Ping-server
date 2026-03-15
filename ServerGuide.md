@@ -570,6 +570,8 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | GET    | /api/follows/followers (Q: pageNumber, pageSize) | A | — | `PaginatedResult<FriendSummaryDto>` | List who follows me |
 | GET    | /api/follows/following (Q: pageNumber, pageSize) | A | — | `PaginatedResult<FriendSummaryDto>` | List who I follow |
 | GET    | /api/follows/mutuals (Q: pageNumber, pageSize)   | A | — | `PaginatedResult<FriendSummaryDto>` | List mutual connections (Friends) |
+| GET    | /api/follows/{targetId}/followers (Q: pageNumber, pageSize) | A | — | `PaginatedResult<FriendSummaryDto>` | List who follows target user |
+| GET    | /api/follows/{targetId}/following (Q: pageNumber, pageSize) | A | — | `PaginatedResult<FriendSummaryDto>` | List who target user follows |
 | POST   | /api/follows/{targetId}        | A    | —    | 200                  | Follow a user |
 | DELETE | /api/follows/{targetId}        | A    | —    | 200                  | Unfollow a user |
 

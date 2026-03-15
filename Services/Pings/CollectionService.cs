@@ -354,36 +354,20 @@ namespace Ping.Services.Pings
 
         /// <summary>
         /// Computes the default cover image for a collection when the user hasn't uploaded one:
-        /// finds the most recently added ping in the collection, then returns the
-        /// thumbnail of the most-liked review across all activities for that ping.
-        /// Returns (null, null) if no reviews exist yet.
+        /// finds the most recently added ping in the collection that has a review with an image,
+        /// then returns the thumbnail of the most-liked review across all activities for that ping.
+        /// Returns (null, null) if no reviews with images exist yet.
         /// </summary>
         private async Task<(string? ImageUrl, string? ThumbnailUrl)> GetDefaultCollectionThumbnailAsync(int collectionId)
         {
-            // Get the most recently added ping in the collection
-            var mostRecentPingId = await db.CollectionPings
+            var topReview = await db.CollectionPings
                 .Where(cp => cp.CollectionId == collectionId)
-                .OrderByDescending(cp => cp.AddedUtc)
-                .Select(cp => (int?)cp.PingId)
-                .FirstOrDefaultAsync();
-
-            if (mostRecentPingId == null)
-                return (null, null);
-
-            // Get the activity IDs for that ping
-            var activityIds = await db.PingActivities
-                .Where(a => a.PingId == mostRecentPingId)
-                .Select(a => a.Id)
-                .ToListAsync();
-
-            if (!activityIds.Any())
-                return (null, null);
-
-            // Get the most-liked review's image URLs for those activities
-            var topReview = await db.Reviews
-                .Where(r => activityIds.Contains(r.PingActivityId))
-                .OrderByDescending(r => r.Likes)
-                .Select(r => new { r.ImageUrl, r.ThumbnailUrl })
+                .Join(db.PingActivities, cp => cp.PingId, a => a.PingId, (cp, a) => new { cp, a })
+                .Join(db.Reviews, x => x.a.Id, r => r.PingActivityId, (x, r) => new { x.cp, r })
+                .Where(x => !string.IsNullOrEmpty(x.r.ImageUrl))
+                .OrderByDescending(x => x.cp.AddedUtc)
+                .ThenByDescending(x => x.r.Likes)
+                .Select(x => new { x.r.ImageUrl, x.r.ThumbnailUrl })
                 .FirstOrDefaultAsync();
 
             return (topReview?.ImageUrl, topReview?.ThumbnailUrl);

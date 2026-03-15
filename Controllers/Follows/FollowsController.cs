@@ -97,6 +97,36 @@ namespace Ping.Controllers.Follows
             return Ok(result);
         }
 
+        // GET /api/follows/{targetId}/followers
+        [HttpGet("{targetId}/followers")]
+        public async Task<ActionResult<PaginatedResult<FriendSummaryDto>>> GetUserFollowers(
+            string targetId,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+            var result = await followService.GetFollowersAsync(targetId, pagination);
+            return Ok(result);
+        }
+
+        // GET /api/follows/{targetId}/following
+        [HttpGet("{targetId}/following")]
+        public async Task<ActionResult<PaginatedResult<FriendSummaryDto>>> GetUserFollowing(
+            string targetId,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
+            var result = await followService.GetFollowingAsync(targetId, pagination);
+            return Ok(result);
+        }
+
         // GET /api/follows/{targetId}/status
         [HttpGet("{targetId}/status")]
         public async Task<ActionResult<bool>> GetFollowStatus(string targetId)
