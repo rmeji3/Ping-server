@@ -23,5 +23,6 @@ public record UnifiedSearchFilterDto(
 
 public record UnifiedSearchResultDto(
     PaginatedResult<ProfileDto> Profiles,
-    PaginatedResult<PingDetailsDto> Pings
+    PaginatedResult<PingDetailsDto> Pings,
+    PaginatedResult<Ping.Dtos.Events.EventDto> Events
 );

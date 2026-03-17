@@ -6,6 +6,7 @@ using Ping.Services.Pings;
 using Ping.Models.Pings;
 using Ping.Data.App;
 using Ping.Models.Search;
+using Ping.Services.Events;
 using Microsoft.EntityFrameworkCore;
 using Ping.Utils;
 
@@ -14,6 +15,7 @@ namespace Ping.Services.Search;
 public class SearchService(
     IProfileService profileService,
     IPingService pingService,
+    IEventService eventService,
     AppDbContext appDbContext,
     ILogger<SearchService> logger) : ISearchService
 {
@@ -42,9 +44,20 @@ public class SearchService(
             PageSize = filter.PageSize
         }, userId);
 
+        // 3. Search Events
+        var events = await eventService.GetPublicEventsAsync(new Ping.Dtos.Events.EventFilterDto
+        {
+            Query = filter.Query,
+            Latitude = filter.Latitude,
+            Longitude = filter.Longitude,
+            RadiusKm = filter.RadiusKm,
+            Scope = "global"
+        }, pagination, userId);
+
         return new UnifiedSearchResultDto(
             profiles,
-            pings
+            pings,
+            events
         );
     }
 

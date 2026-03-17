@@ -555,7 +555,7 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | DELETE | /api/Events/{id}                                 | A    | —                | 200          | Only creator                              |
 | PATCH  | /api/Events/{id}                                 | A    | `UpdateEventDto` | 200          | Partial updates                           |
 | PATCH  | /api/Events/{id}                                 | A    | `UpdateEventDto` | 200          | Partial updates (incl Price, Image)       |
-| GET    | /api/Events (Q: EventFilterDto + scope)          | A    | —                | `PaginatedResult<EventDto>` | Feed/Search. Filters: Price, Date, Genre, Location. Scope: 'global' or 'friends'. |
+| GET    | /api/Events (Q: EventFilterDto + scope)          | A    | —                | `PaginatedResult<EventDto>` | Feed/Search. Filters: Price, Date, Genre, Location, Query. Scope: 'global' or 'friends'. |
 | POST   | /api/Events/{id}/comments                        | A    | `CreateEventCommentDto` | `EventCommentDto` | Add comment (Max 100 words, Moderated) |
 | GET    | /api/Events/{id}/comments (Q: pageNumber, pageSize) | A | —               | `PaginatedResult` | Get comments (Newest first)               |
 | DELETE | /api/Events/comments/{id}                        | A    | —                | 204          | Delete comment (Owner only)               |
@@ -1248,10 +1248,10 @@ Users can organize their "Saved Places" (favorited pings) into named groups call
 ## 24. Unified Search
 
 ### Overview
-The Unified Search endpoint allows users to search across multiple entity types (Profiles and Pings) in a single request. It supports various filters and provides paginated results for each category.
+The Unified Search endpoint allows users to search across multiple entity types (Profiles, Pings, and Events) in a single request. It supports various filters and provides paginated results for each category.
 
 ### Features
-- **Keyword Search**: Searches usernames (Profiles) and names/addresses (Pings).
+- **Keyword Search**: Searches usernames (Profiles), names/addresses (Pings), and titles/descriptions (Events).
 - **Geospatial Filtering**: Optional coordinates and radius for Pings.
 - **Tag Search**: Filter Pings based on tags present in their reviews.
 - **Pagination**: Independent pagination for each result category within the response.
@@ -1265,7 +1265,7 @@ The Unified Search endpoint allows users to search across multiple entity types 
 ### Endpoints
 - `GET /api/search` or `GET /api/v1/search`:
   - **Parameters**: `Query`, `Latitude`, `Longitude`, `RadiusKm`, `PageNumber`, `PageSize`, `ActivityNames`, `PingGenreNames`, `Tags`.
-  - **Return**: `UnifiedSearchResultDto` containing `Profiles` and `Pings`.
+  - **Return**: `UnifiedSearchResultDto` containing `Profiles`, `Pings`, and `Events`.
 - `GET /api/search/history`: Get recent history (Default 20).
 - `POST /api/search/history`: Add history item.
 - `DELETE /api/search/history/{id}`: Delete specific item.

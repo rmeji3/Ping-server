@@ -163,6 +163,7 @@ namespace Ping.Controllers.Events
             [FromQuery] DateTime? toDate,
             [FromQuery] int? genreId,
             [FromQuery] string? scope,
+            [FromQuery] string? query,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
@@ -178,7 +179,8 @@ namespace Ping.Controllers.Events
                 FromDate = fromDate,
                 ToDate = toDate,
                 GenreId = genreId,
-                Scope = scope
+                Scope = scope,
+                Query = query
             };
 
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
