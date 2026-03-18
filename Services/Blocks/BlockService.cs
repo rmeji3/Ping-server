@@ -52,12 +52,17 @@ namespace Ping.Services.Blocks
             await authDb.SaveChangesAsync();
         }
 
-        public async Task<List<AppUser>> GetBlockedUsersAsync(string userId)
+        public async Task<List<Ping.Dtos.Friends.BlockDto>> GetBlockedUsersAsync(string userId)
         {
             return await authDb.UserBlocks
                 .Where(ub => ub.BlockerId == userId)
                 .Include(ub => ub.Blocked)
-                .Select(ub => ub.Blocked)
+                .Select(ub => new Ping.Dtos.Friends.BlockDto(
+                    ub.BlockedId,
+                    ub.Blocked.UserName!,
+                    ub.Blocked.ProfileImageUrl,
+                    ub.CreatedAt
+                ))
                 .ToListAsync();
         }
 

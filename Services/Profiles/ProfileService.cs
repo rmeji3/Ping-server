@@ -447,7 +447,6 @@ public class ProfileService(
                 false, // IsFavorited - fetching this requires extra query, skipping for list view or need batch check
                 0, // Favorites count
                 Array.Empty<PingActivitySummaryDto>(),
-                p.PingGenre?.Name,
                 null,
                 p.IsClaimed,
                 p.PingGenreId,

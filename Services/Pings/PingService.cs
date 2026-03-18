@@ -656,7 +656,6 @@ public class PingService(
             isFavorited,
             p.Favorites,
             activities,
-            p.PingGenre?.Name,
             (ClaimStatus?)claim?.Status,
             p.IsClaimed,
             p.PingGenreId,

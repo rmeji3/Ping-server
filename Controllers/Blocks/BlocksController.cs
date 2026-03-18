@@ -42,7 +42,7 @@ namespace Ping.Controllers.Blocks
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<AppUser>>> GetBlockedUsers()
+        public async Task<ActionResult<List<Ping.Dtos.Friends.BlockDto>>> GetBlockedUsers()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null) return Unauthorized();

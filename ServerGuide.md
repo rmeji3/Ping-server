@@ -289,7 +289,7 @@ Property Configuration:
 
 ### Friends & Blocks
 - `FriendSummaryDto(Id, UserName, ProfileImageUrl?)`
-- `BlockDto(BlockedUserId, BlockedUserName, BlockedAt)`
+- `BlockDto(BlockedUserId, BlockedUserName, BlockedUserProfileImageUrl, BlockedAt)`
 
 #### 7.5. Pings
 - `PingVisibility` enum: `Private = 0`, `Friends = 1`, `Public = 2`

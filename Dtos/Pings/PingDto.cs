@@ -27,7 +27,6 @@ namespace Ping.Dtos.Pings
         bool IsFavorited,
         int Favorites,
         PingActivitySummaryDto[] Activities,
-        string? PingGenre,
         ClaimStatus? ClaimStatus = null,
         bool IsClaimed = false,
         int? PingGenreId = null,
