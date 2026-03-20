@@ -7,6 +7,7 @@ using Ping.Models.Users;
 using Ping.Models.Business;
 using Ping.Models.Search;
 using Ping.Models;
+using Ping.Models.Notifications;
 using NpgsqlTypes; // For NpgsqlTsVector
 using Npgsql.EntityFrameworkCore.PostgreSQL; // For HasGeneratedTsVectorColumn extensions
 
@@ -37,6 +38,8 @@ namespace Ping.Data.App
         public DbSet<CollectionPing> CollectionPings => Set<CollectionPing>();
         public DbSet<SavedCollection> SavedCollections => Set<SavedCollection>();
         public DbSet<SearchHistory> SearchHistories => Set<SearchHistory>();
+        public DbSet<UserDevice> UserDevices => Set<UserDevice>();
+        public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -164,6 +167,16 @@ namespace Ping.Data.App
                 entity.Property(sh => sh.TargetId).HasMaxLength(256);
                 entity.Property(sh => sh.ImageUrl).HasMaxLength(2048);
             });
+
+            // UserDevice: unique per device token per user
+            builder.Entity<UserDevice>()
+                .HasIndex(ud => new { ud.UserId, ud.DeviceToken })
+                .IsUnique();
+
+            // NotificationPreference: unique per user per type
+            builder.Entity<NotificationPreference>()
+                .HasIndex(np => new { np.UserId, np.Type })
+                .IsUnique();
 
             // PingClaim
             builder.Entity<PingClaim>()

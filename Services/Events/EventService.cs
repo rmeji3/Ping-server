@@ -1,3 +1,4 @@
+using Ping.Models.Notifications;
 using Ping.Data.App;
 using Ping.Data.Auth;
 using Ping.Dtos.Common;
@@ -220,14 +221,46 @@ public class EventService(
 
         await appDb.SaveChangesAsync();
         
-        logger.LogInformation("Event updated: {EventId} by {UserId}", ev.Id, userId);
-
         // Return updated DTO
         var creatorUser = await userManager.FindByIdAsync(ev.CreatedById);
         var creatorSummary = creatorUser != null
             ? new UserSummaryDto(creatorUser.Id, creatorUser.UserName!, creatorUser.ProfileImageUrl)
             : new UserSummaryDto("?", "Unknown", null);
-            
+
+        // Notify attendees if critical info changed
+        if (timeChanged || dto.PingId.HasValue)
+        {
+            var attendees = await appDb.EventAttendees
+                .Where(a => a.EventId == ev.Id && a.Status == AttendeeStatus.Attending && a.UserId != userId)
+                .Select(a => a.UserId)
+                .ToListAsync();
+
+            foreach (var attendeeId in attendees)
+            {
+                try
+                {
+                    await notificationService.SendNotificationAsync(new Notification
+                    {
+                        UserId = attendeeId,
+                        SenderId = userId,
+                        SenderName = creatorSummary.UserName,
+                        SenderProfileImageUrl = creatorSummary.ProfilePictureUrl,
+                        Type = NotificationType.EventUpdate,
+                        Title = "Event Updated",
+                        Message = $"The event '{ev.Title}' has been updated with new details.",
+                        ReferenceId = ev.Id.ToString(),
+                        ImageThumbnailUrl = ev.ThumbnailUrl ?? ev.ImageUrl
+                    });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to send event update notification to {UserId}", attendeeId);
+                }
+            }
+        }
+        
+        logger.LogInformation("Event updated: {EventId} by {UserId}", ev.Id, userId);
+
         // Get attendees
         var attendeeIds = ev.Attendees.Select(a => a.UserId).Distinct().ToList();
         var attendeeUsers = await userManager.Users.Where(u => attendeeIds.Contains(u.Id)).ToListAsync();
@@ -332,7 +365,29 @@ public class EventService(
         });
 
         await appDb.SaveChangesAsync();
-        await appDb.SaveChangesAsync();
+
+        // Notify User
+        try
+        {
+            var sender = await userManager.FindByIdAsync(inviterId);
+            await notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = targetUserId,
+                SenderId = inviterId,
+                SenderName = sender?.UserName ?? "Someone",
+                SenderProfileImageUrl = sender?.ProfileThumbnailUrl ?? sender?.ProfileImageUrl,
+                Type = NotificationType.EventInvite,
+                Title = "New Invitation",
+                Message = $"{sender?.UserName ?? "Someone"} invited you to '{ev.Title}'.",
+                ReferenceId = eventId.ToString(),
+                ImageThumbnailUrl = ev.ThumbnailUrl ?? ev.ImageUrl
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send event invite notification to {UserId}", targetUserId);
+        }
+
         return true;
     }
 
@@ -494,12 +549,44 @@ public class EventService(
 
     public async Task<bool> DeleteEventAsync(int id, string userId)
     {
-        var ev = await appDb.Events.FindAsync(id);
+        var ev = await appDb.Events.Include(e => e.Attendees).FirstOrDefaultAsync(e => e.Id == id);
         if (ev is null) return false;
         if (ev.CreatedById != userId) throw new UnauthorizedAccessException("Not owner");
 
+        var eventTitle = ev.Title;
+        var attendees = ev.Attendees
+            .Where(a => a.Status == AttendeeStatus.Attending && a.UserId != userId)
+            .Select(a => a.UserId)
+            .ToList();
+
         appDb.Events.Remove(ev);
         await appDb.SaveChangesAsync();
+
+        // Notify attendees
+        var sender = await userManager.FindByIdAsync(userId);
+        foreach (var attendeeId in attendees)
+        {
+            try
+            {
+                await notificationService.SendNotificationAsync(new Notification
+                {
+                    UserId = attendeeId,
+                    SenderId = userId,
+                    SenderName = sender?.UserName ?? "Someone",
+                    SenderProfileImageUrl = sender?.ProfileThumbnailUrl ?? sender?.ProfileImageUrl,
+                    Type = NotificationType.EventCancelled,
+                    Title = "Event Cancelled",
+                    Message = $"The event '{eventTitle}' has been cancelled.",
+                    ReferenceId = id.ToString(),
+                    ImageThumbnailUrl = ev.ThumbnailUrl ?? ev.ImageUrl
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send event cancellation notification to {UserId}", attendeeId);
+            }
+        }
+
         logger.LogInformation("Event deleted: {EventId} by {UserId}", id, userId);
         return true;
     }
@@ -647,6 +734,30 @@ public class EventService(
         await appDb.SaveChangesAsync();
 
         var user = await userManager.FindByIdAsync(userId);
+
+        // Notify Creator
+        if (ev.CreatedById != userId)
+        {
+            try
+            {
+                await notificationService.SendNotificationAsync(new Notification
+                {
+                    UserId = ev.CreatedById,
+                    SenderId = userId,
+                    SenderName = user?.UserName ?? "Someone",
+                    SenderProfileImageUrl = user?.ProfileThumbnailUrl ?? user?.ProfileImageUrl,
+                    Type = NotificationType.NewEventComment,
+                    Title = "New Comment",
+                    Message = $"{user?.UserName ?? "Someone"} commented on your event '{ev.Title}'.",
+                    ReferenceId = eventId.ToString(),
+                    ImageThumbnailUrl = ev.ThumbnailUrl ?? ev.ImageUrl
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send event comment notification to creator");
+            }
+        }
 
         return new EventCommentDto(
             comment.Id,
@@ -920,6 +1031,30 @@ public class EventService(
         var user = await userManager.FindByIdAsync(userId);
         var senderName = user?.UserName ?? "Unknown";
 
+        // Notify Event Creator
+        if (ev != null && ev.CreatedById != userId && ev.CreatedById != parent.UserId)
+        {
+            try
+            {
+                await notificationService.SendNotificationAsync(new Notification
+                {
+                    UserId = ev.CreatedById,
+                    SenderId = userId,
+                    SenderName = senderName,
+                    SenderProfileImageUrl = user?.ProfileThumbnailUrl ?? user?.ProfileImageUrl,
+                    Type = NotificationType.NewEventComment,
+                    Title = "New Comment",
+                    Message = $"{senderName} commented on your event '{ev.Title}'.",
+                    ReferenceId = eventId.ToString(),
+                    ImageThumbnailUrl = ev.ThumbnailUrl ?? ev.ImageUrl
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send event comment (reply) notification to creator");
+            }
+        }
+
         // Notify parent comment author (skip if replying to self)
         if (parent.UserId != userId)
         {
@@ -934,7 +1069,8 @@ public class EventService(
                     Type = NotificationType.CommentReply,
                     Title = "New reply",
                     Message = $"{senderName} replied to your comment",
-                    ReferenceId = eventId.ToString()
+                    ReferenceId = eventId.ToString(),
+                    ImageThumbnailUrl = ev?.ThumbnailUrl ?? ev?.ImageUrl
                 });
             }
             catch (Exception ex)
@@ -1004,9 +1140,9 @@ public class EventService(
         if (!string.IsNullOrWhiteSpace(query))
         {
             var search = query.Trim().ToLowerInvariant();
-            friendsQuery = friendsQuery.Where(u => u.UserName.ToLower().Contains(search) || 
-                                                   u.FirstName.ToLower().Contains(search) || 
-                                                   u.LastName.ToLower().Contains(search));
+            friendsQuery = friendsQuery.Where(u => (u.UserName != null && u.UserName.ToLower().Contains(search)) || 
+                                                   (u.FirstName != null && u.FirstName.ToLower().Contains(search)) || 
+                                                   (u.LastName != null && u.LastName.ToLower().Contains(search)));
         }
 
         var totalCount = await friendsQuery.CountAsync();

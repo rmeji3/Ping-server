@@ -1,5 +1,6 @@
 using Ping.Data.App;
 using Ping.Models;
+using Ping.Models.Notifications;
 using Ping.Services.Notifications;
 using Ping.Services.Redis;
 using Microsoft.Extensions.Configuration;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Amazon.SimpleNotificationService;
 
 namespace Ping.Tests.Services;
 
@@ -15,6 +17,7 @@ public class NotificationServiceTests
     private readonly Mock<IRedisService> _mockRedis;
     private readonly Mock<IConfiguration> _mockConfig;
     private readonly Mock<ILogger<NotificationService>> _mockLogger;
+    private readonly Mock<IAmazonSimpleNotificationService> _mockSns;
     private readonly AppDbContext _context;
     private readonly NotificationService _service;
 
@@ -23,6 +26,7 @@ public class NotificationServiceTests
         _mockRedis = new Mock<IRedisService>();
         _mockConfig = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<NotificationService>>();
+        _mockSns = new Mock<IAmazonSimpleNotificationService>();
 
         // Config setup
         var mockSectionFriend = new Mock<IConfigurationSection>();
@@ -40,7 +44,7 @@ public class NotificationServiceTests
             .Options;
         _context = new AppDbContext(options);
 
-        _service = new NotificationService(_context, _mockRedis.Object, _mockConfig.Object, _mockLogger.Object);
+        _service = new NotificationService(_context, _mockRedis.Object, _mockConfig.Object, _mockLogger.Object, _mockSns.Object);
     }
 
     [Fact]

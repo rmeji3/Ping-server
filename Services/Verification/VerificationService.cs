@@ -1,14 +1,21 @@
 using Microsoft.EntityFrameworkCore;
+using Ping.Models.Notifications;
 using Ping.Data.App;
 using Ping.Dtos.Verification;
 using Ping.Dtos.Common;
 using Ping.Services.Follows;
 using Ping.Models.Users;
 using Ping.Models.AppUsers;
+using Ping.Services.Notifications;
+using Ping.Models;
 
 namespace Ping.Services.Verification
 {
-    public class VerificationService(AppDbContext context, IFollowService followService, Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager) : IVerificationService
+    public class VerificationService(
+        AppDbContext context, 
+        IFollowService followService, 
+        Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager,
+        INotificationService notificationService) : IVerificationService
     {
         public async Task ApplyAsync(string userId)
         {
@@ -98,6 +105,17 @@ namespace Ping.Services.Verification
             }
             
             await context.SaveChangesAsync();
+
+            // Notify User
+            await notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = request.UserId,
+                Type = NotificationType.VerificationResult,
+                Title = "Verification Approved!",
+                Message = "Your verification request has been approved. Welcome to the verified community!",
+                ReferenceId = requestId.ToString(),
+                ImageThumbnailUrl = request.User?.ProfileImageUrl
+            });
         }
 
         public async Task RejectRequestAsync(int requestId, string adminId, string reason)
@@ -114,6 +132,17 @@ namespace Ping.Services.Verification
             request.AdminComment = reason;
 
             await context.SaveChangesAsync();
+
+            // Notify User
+            await notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = request.UserId,
+                Type = NotificationType.VerificationResult,
+                Title = "Verification Update",
+                Message = $"Your verification request was not approved. Reason: {reason}",
+                ReferenceId = requestId.ToString(),
+                ImageThumbnailUrl = null
+            });
         }
 
         public async Task<VerificationStatus?> GetUserVerificationStatusAsync(string userId)

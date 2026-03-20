@@ -1,3 +1,4 @@
+using Ping.Models.Notifications;
 using Ping.Data.Auth;
 using Ping.Dtos.Common;
 using Ping.Dtos.Friends;
@@ -48,17 +49,51 @@ public class FollowService(
 
         // Notification
         var me = await userManager.FindByIdAsync(userId);
-        await notificationService.SendNotificationAsync(new Notification
+        
+        // Check if mutual (Friendship)
+        var followsMe = await authDb.Follows.AnyAsync(f => f.FollowerId == targetId && f.FolloweeId == userId);
+        if (followsMe)
         {
-            UserId = targetId,
-            SenderId = userId,
-            SenderName = me?.UserName ?? "Someone",
-            SenderProfileImageUrl = me?.ProfileImageUrl,
-            Type = NotificationType.NewFollower,
-            Title = "New Follower",
-            Message = $"{me?.UserName ?? "Someone"} started following you.",
-            ReferenceId = userId
-        });
+            // Notify BOTH that they are now friends
+            await notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = targetId,
+                SenderId = userId,
+                SenderName = me?.UserName ?? "Someone",
+                SenderProfileImageUrl = me?.ProfileImageUrl,
+                Type = NotificationType.MutualFollow,
+                Title = "New Friend!",
+                Message = $"You and {me?.UserName ?? "Someone"} are now friends!",
+                ReferenceId = userId
+            });
+
+            await notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = userId,
+                SenderId = targetId,
+                SenderName = targetUser?.UserName ?? "Someone",
+                SenderProfileImageUrl = targetUser?.ProfileImageUrl,
+                Type = NotificationType.MutualFollow,
+                Title = "New Friend!",
+                Message = $"You and {targetUser?.UserName ?? "Someone"} are now friends!",
+                ReferenceId = targetId
+            });
+        }
+        else
+        {
+            // Regular follow notification
+            await notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = targetId,
+                SenderId = userId,
+                SenderName = me?.UserName ?? "Someone",
+                SenderProfileImageUrl = me?.ProfileImageUrl,
+                Type = NotificationType.NewFollower,
+                Title = "New Follower",
+                Message = $"{me?.UserName ?? "Someone"} started following you.",
+                ReferenceId = userId
+            });
+        }
         
         logger.LogInformation("User {UserId} followed {TargetId}", userId, targetId);
 

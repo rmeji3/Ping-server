@@ -1,3 +1,4 @@
+using Ping.Models.Notifications;
 using Ping.Data.App;
 using Ping.Dtos.Business;
 using Ping.Models.Business;
@@ -5,6 +6,8 @@ using Ping.Models.Pings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Ping.Models.AppUsers;
+using Ping.Services.Notifications;
+using Ping.Models;
 
 namespace Ping.Services
 {
@@ -12,11 +15,13 @@ namespace Ping.Services
     {
         private readonly AppDbContext _context;
         private readonly UserManager<AppUser> _userManager;
+        private readonly INotificationService _notificationService;
 
-        public BusinessService(AppDbContext context, UserManager<AppUser> userManager)
+        public BusinessService(AppDbContext context, UserManager<AppUser> userManager, INotificationService notificationService)
         {
             _context = context;
             _userManager = userManager;
+            _notificationService = notificationService;
         }
 
         public async Task<PingClaim> SubmitClaimAsync(string userId, CreateClaimDto dto)
@@ -106,6 +111,17 @@ namespace Ping.Services
             }
 
             await _context.SaveChangesAsync();
+
+            // Notify User
+            await _notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = claim.UserId,
+                Type = NotificationType.BusinessClaimResult,
+                Title = "Business Claim Approved!",
+                Message = $"Your claim for {claim.Ping.Name} has been approved. You now have ownership and Business access.",
+                ReferenceId = claim.PingId.ToString(),
+                ImageThumbnailUrl = null // Ping model currently doesn't store media directly
+            });
         }
 
         public async Task RejectClaimAsync(int claimId, string reviewerId)
@@ -119,6 +135,17 @@ namespace Ping.Services
             claim.ReviewerId = reviewerId;
 
             await _context.SaveChangesAsync();
+
+            // Notify User
+            await _notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = claim.UserId,
+                Type = NotificationType.BusinessClaimResult,
+                Title = "Business Claim Update",
+                Message = $"Your claim for this place was not approved. Please contact support for more details.",
+                ReferenceId = claim.PingId.ToString(),
+                ImageThumbnailUrl = null
+            });
         }
     }
 }

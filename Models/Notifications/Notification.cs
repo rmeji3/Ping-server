@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Ping.Models;
+namespace Ping.Models.Notifications;
 
 public enum NotificationType
 {
@@ -12,7 +12,15 @@ public enum NotificationType
     NewFollower = 4,
     CommentReply = 5,
     CommentLike = 6,
-    CommentDislike = 7
+    CommentDislike = 7,
+    MutualFollow = 8,
+    NewReviewOnYourPing = 9,
+    EventUpdate = 10,
+    EventCancelled = 11,
+    NewEventComment = 12,
+    VerificationResult = 13,
+    BusinessClaimResult = 14,
+    EventStartsSoon = 15
 }
 
 public class Notification
@@ -41,6 +49,10 @@ public class Notification
 
     // e.g. ReviewId, PlaceId, EventId depending on context
     public string? ReferenceId { get; set; }
+    
+    // image for the review, event, etc.
+    [MaxLength(2048)]
+    public string? ImageThumbnailUrl { get; set; }
     
     // extra metadata if needed (JSON)
     public string? Metadata { get; set; }

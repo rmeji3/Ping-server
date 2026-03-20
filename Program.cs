@@ -252,6 +252,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<Ping.Services.Verification.IVerificationService, Ping.Services.Verification.VerificationService>();
 builder.Services.AddHostedService<AnalyticsBackgroundJob>();
 builder.Services.AddHostedService<Ping.Services.Background.UnverifiedUserCleanupService>();
+builder.Services.AddHostedService<Ping.Services.Background.EventReminderBackgroundService>();
 
 builder.Services.AddScoped<Ping.Services.Admin.IDbJanitorService, Ping.Services.Admin.DbJanitorService>();
 // --- AWS S3 & Storage & Email ---
@@ -266,6 +267,7 @@ builder.Services.AddDefaultAWSOptions(awsOptions);
 builder.Services.AddMemoryCache(); // Required for AppleAuthService JWKS caching
 builder.Services.AddAWSService<IAmazonS3>();
 builder.Services.AddAWSService<Amazon.SimpleEmail.IAmazonSimpleEmailService>(); // Add SES
+builder.Services.AddAWSService<Amazon.SimpleNotificationService.IAmazonSimpleNotificationService>(); // Add SNS
 builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddScoped<Ping.Services.Email.IEmailService, Ping.Services.Email.SesEmailService>(); // Add EmailService
 builder.Services.AddHttpClient<Ping.Services.Moderation.IModerationService, Ping.Services.Moderation.OpenAIModerationService>();

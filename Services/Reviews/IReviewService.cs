@@ -18,5 +18,6 @@ public interface IReviewService
     Task DeleteReviewAsAdminAsync(int id);
     Task DeleteReviewAsync(int reviewId, string userId);
     Task<ReviewDto> UpdateReviewAsync(int reviewId, string userId, UpdateReviewDto dto);
+    Task<ExploreReviewDto> GetReviewByIdAsync(int reviewId, string? userId);
 }
 

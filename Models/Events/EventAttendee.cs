@@ -9,6 +9,8 @@ public class EventAttendee
     public DateTime JoinedAt { get; set; }
     
     public AttendeeStatus Status { get; set; } = AttendeeStatus.Attending;
+
+    public bool ReminderSent { get; set; } = false;
 }
 
 public enum AttendeeStatus

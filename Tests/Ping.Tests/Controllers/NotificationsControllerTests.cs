@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using Ping.Data.App;
 using Ping.Models;
+using Ping.Models.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 

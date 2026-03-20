@@ -181,7 +181,7 @@ Indexes:
 
 ### AppDbContext
 DbSets:
-- `Pings`, `PingGenres`, `PingActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`, `Repings`, `SearchHistories`
+- `Pings`, `PingGenres`, `PingActivities`, `Reviews`, `Tags`, `ReviewTags`, `Events`, `EventAttendees`, `Favorited`, `Repings`, `SearchHistories`, `UserDevices`, `NotificationPreferences`
 
 Seed Data:
 - `PingGenre` seeded with ids 1–20 (Sports, Food, Outdoors, Art, etc.).
@@ -198,6 +198,8 @@ Indexes:
 - Composite PK `EventAttendee (EventId, UserId)`.
 - Unique composite `Reping (ReviewId, UserId)`.
 - Index `SearchHistory.UserId` for fetching history.
+- Index `UserDevice (UserId, DeviceToken)`.
+- Index `NotificationPreference (UserId, Type)`.
 
 Relationships & Cascades:
 - `Favorited` → `Ping` cascade delete.
@@ -244,6 +246,9 @@ Property Configuration:
 | DailySystemMetric | Id             | Date, MetricType, Value, Dimensions                                                                                      | (None)                                 | Stores historical aggregated stats (DAU, WAU, MAU, etc.)                                                              |
 | Reping        | Id                 | UserId, ReviewId, CreatedAt, Privacy                                                                                     | Review                                 | Unique per user per review; respects privacy settings                                                                 |
 | SearchHistory | Id                 | UserId, Query, Type, TargetId?, ImageUrl?, CreatedAt                                                                     | (None)                                 | Stores user search history. Type: Term/User/Ping.                                                                     |
+| UserDevice    | Id                 | UserId, DeviceToken, EndpointArn, Platform, CreatedAt                                                                   | (None)                                 | SNS Push Notification Endpoints                                                                                       |
+| NotificationPreference | Id        | UserId, Type, IsEnabled                                                                                                 | (None)                                 | User-specific opt-out settings                                                                                        |
+| Notification  | Id                 | UserId, Type, Title, Message, ReferenceId, ImageThumbnailUrl, IsRead, CreatedAt                                         | (None)                                 | In-app notification history                                                                                           |
 
 ---
 ## 7. DTO Contracts
@@ -377,7 +382,7 @@ Property Configuration:
 
 #### ReviewService (`IReviewService`)
 - Manages reviews, check-ins, likes, and feed retrieval.
-- **Methods**: `GetFriendsFeedAsync` (paginated friends' reviews), `GetExploreReviewsAsync`.
+- **Methods**: `GetFriendsFeedAsync` (paginated friends' reviews), `GetExploreReviewsAsync`, `GetReviewByIdAsync` (fetches a specific review by its unique ID).
 - **AI Moderation**: Checks Review Content and new Tags for offensive content.
 - **Tag Integration**: Automatically creates or links tags during review creation.
 
@@ -394,10 +399,14 @@ Property Configuration:
 - Manages follower relationships (follow, unfollow, get followers/following).
 - **Mutuals**: Users who follow each other are considered "Friends".
 
-#### BlockService (`IBlockService`)
-- Manages user blocking interactions.
-- Stores blocks in `AuthDbContext`.
 - **Bidirectional Filtering**: Ensures neither user can see the other's content (reviews, events, profile).
+- **Masking**: Removes blocked users from search results and feeds.
+
+#### NotificationService (`INotificationService`)
+- Manages in-app notifications and AWS SNS push notifications.
+- **Push Notifications**: Sends alerts via SNS EndpointArns.
+- **Preferences**: Allows users to opt-out of specific notification types.
+- **Rate Limiting**: Protects users from notification spam (Redis).
 - **Friendship Removal**: Automatically removes mutual follows upon blocking.
 
 #### ProfileService (`IProfileService`)
@@ -648,7 +657,13 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | DELETE | /api/reviews/{reviewId}/like                               | A    | —                         | 204 NoContent        | Unlike a review (idempotent)                       |
 | GET    | /api/reviews/liked (Q: pageNumber, pageSize)               | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's liked reviews (Alias for profiles/me/likes) |
 | GET    | /api/reviews/me (Q: pageNumber, pageSize)                  | A    | —                         | `PaginatedResult<ExploreReviewDto>` | User's own reviews                                 |
+| POST   | /api/notifications/register-device                         | A    | `RegisterDeviceDto`       | 200 OK               | Register SNS platform endpoint for push            |
+| GET    | /api/notifications/preferences                              | A    | —                         | `NotificationPreferenceDto[]` | Get current notification settings         |
+| PATCH  | /api/notifications/preferences                              | A    | `UpdateNotificationPreferenceDto` | 200 OK         | Update specific notification type setting         |
+| DELETE | /api/notifications/{id}                                    | A    | —                         | 200 OK               | Delete specific notification                      |
+| DELETE | /api/notifications                                         | A    | —                         | 200 OK               | Delete all notifications for user                 |
 | GET    | /api/reviews/friends (Q: pageNumber, pageSize)             | A    | —                         | `PaginatedResult<ExploreReviewDto>` | Friends' reviews sorted by date                    |
+| GET    | /api/reviews/{id}                                          | A    | —                         | `ReviewDto`          | Get specific review by ID                          |
 | DELETE | /api/reviews/{reviewId}                                    | A    | —                         | 204 NoContent        | Delete own review (Owner only)                     |
 | PATCH  | /api/reviews/{reviewId}                                    | A    | `UpdateReviewDto`         | `ReviewDto`          | Update own review (Partial, Owner only)            |
 
@@ -1307,3 +1322,35 @@ To prevent UI breakage (e.g., in `PingAlbumCard` or `ReviewCard`), the server im
    - If the user **Clicks a Result** (e.g., a Profile): Call `POST /api/search/history` with `Type: User`, `TargetId`, and `Query/Name`.
    - If the user **Presses Enter** (Submit): Call `POST /api/search/history` with `Type: Term` and the `Query` string.
 3. **Display**: fetching `GET /api/search/history` allows you to show "Recent Searches" before the user starts typing.
+
+---
+## 26. In-App Notifications
+
+### Overview
+The notification system handles real-time alerts and persistent history for user interactions. Notifications are currently stored in the database and delivered via the `/api/notifications` endpoints.
+
+### Notification Types (`NotificationType`)
+- **Social**: `Follower` (4), `MutualFollow` (8) - Triggered when two users follow each other (Friendship).
+- **Reviews**: `ReviewLike` (1), `NewReviewOnYourPing` (9) - Notifies Ping owner of new reviews.
+- **Events**: 
+  - `EventInvite` (3), `EventUpdate` (10), `EventCancelled` (11).
+  - `NewEventComment` (12), `CommentLike` (6), `CommentReply` (5).
+  - `EventStartsSoon` (15) - Automated reminder.
+- **Verification & Business**:
+  - `VerificationResult` (13) - Notifies user of Admin application decision.
+  - `BusinessClaimResult` (14) - Notifies user of Admin claim decision.
+
+### Automated System Tasks
+- **EventReminderBackgroundService**: Runs periodically (every 15 mins) to scan for events starting within the next 30-40 minutes. It dispatches a one-time `EventStartsSoon` notification to all users with `Attending` status.
+
+### Endpoints
+- `GET /api/notifications`: Get recent notifications (Paginated).
+- `POST /api/notifications/{id}/read`: Mark specific notification as read.
+- `POST /api/notifications/read-all`: Mark all as read.
+- `POST /api/notifications/register-device`: Register a push notification device (SNS).
+- `GET /api/notifications/preferences`: Get user notification preferences.
+- `PATCH /api/notifications/preferences`: Update a specific notification preference.
+- `DELETE /api/notifications/{id}`: Delete a specific notification.
+- `DELETE /api/notifications`: Delete all notifications for the current user.
+
+---

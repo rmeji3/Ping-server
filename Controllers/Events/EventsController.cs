@@ -117,7 +117,7 @@ namespace Ping.Controllers.Events
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             // Even if userId is null (not auth?), service handles null securely.
             // But controller has [Authorize], so userId should exist unless token issue.
-
+c
             var result = await eventService.GetEventByIdAsync(id, userId);
             if (result is null) return NotFound("Event not found.");
             return Ok(result);

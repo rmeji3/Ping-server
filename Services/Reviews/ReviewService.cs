@@ -1,3 +1,4 @@
+using Ping.Models.Notifications;
 using Ping.Data.App;
 using Ping.Dtos.Common;
 using Ping.Dtos.Reviews;
@@ -115,14 +116,31 @@ public class ReviewService(
 
         logger.LogInformation("Review created for Activity {PingActivityId} by {UserName}. Rating: {Rating}", pingActivityId, userName, dto.Rating);
 
+        // Fetch ping info for notification and DTO
+        var pingInfo = await appDb.PingActivities.AsNoTracking()
+            .Where(pa => pa.Id == pingActivityId)
+            .Select(pa => new { pa.Ping.OwnerUserId, pa.Ping.Name, pa.Ping.IsDeleted })
+            .FirstOrDefaultAsync();
+
+        // Notify Ping Owner
+        if (pingInfo != null && !string.IsNullOrEmpty(pingInfo.OwnerUserId) && pingInfo.OwnerUserId != userId)
+        {
+             await notificationService.SendNotificationAsync(new Notification
+            {
+                UserId = pingInfo.OwnerUserId,
+                SenderId = userId,
+                SenderName = userName,
+                SenderProfileImageUrl = review.ThumbnailUrl,
+                Type = NotificationType.NewReviewOnYourPing,
+                Title = "New Review",
+                Message = $"{userName} reviewed {pingInfo.Name}.",
+                ReferenceId = review.Id.ToString(),
+                ImageThumbnailUrl = review.ThumbnailUrl ?? review.ImageUrl
+            });
+        }
+
         var user = await userManager.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
         string? profileUrl = user?.ProfileImageUrl;
-
-        // Fetch the ping's deleted status (PingActivity is not loaded on the review entity)
-        var pingIsDeleted = await appDb.PingActivities.AsNoTracking()
-            .Where(pa => pa.Id == pingActivityId)
-            .Select(pa => pa.Ping.IsDeleted)
-            .FirstOrDefaultAsync();
 
         return new ReviewDto(
             review.Id,
@@ -138,7 +156,7 @@ public class ReviewService(
             false, // IsLiked
             true, // IsOwner
             dto.Tags ?? new List<string>(), // Return tags
-            pingIsDeleted
+            pingInfo?.IsDeleted ?? false
         );
     }
 
@@ -447,7 +465,8 @@ public class ReviewService(
                 Type = NotificationType.ReviewLike,
                 Title = "New Like",
                 Message = $"{sender?.UserName ?? "Someone"} liked your review.",
-                ReferenceId = reviewId.ToString()
+                ReferenceId = reviewId.ToString(),
+                ImageThumbnailUrl = review.ThumbnailUrl ?? review.ImageUrl
             });
         }
     }
@@ -1025,6 +1044,52 @@ public class ReviewService(
             true, // IsOwner
             review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
             review.PingActivity!.Ping.IsDeleted
+        );
+    }
+
+    public async Task<ExploreReviewDto> GetReviewByIdAsync(int reviewId, string? userId)
+    {
+        var review = await appDb.Reviews
+            .Include(r => r.ReviewTags)
+            .ThenInclude(rt => rt.Tag)
+            .Include(r => r.PingActivity)
+            .ThenInclude(pa => pa.Ping)
+            .ThenInclude(p => p.PingGenre)
+            .FirstOrDefaultAsync(r => r.Id == reviewId);
+
+        if (review == null) throw new KeyNotFoundException("Review not found.");
+
+        var reviewAuthor = await userManager.FindByIdAsync(review.UserId);
+        
+        bool isLiked = false;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            isLiked = await appDb.ReviewLikes.AnyAsync(rl => rl.ReviewId == review.Id && rl.UserId == userId);
+        }
+
+        return new ExploreReviewDto(
+            review.Id,
+            review.PingActivityId,
+            review.PingActivity!.PingId,
+            review.PingActivity.Ping.Name,
+            review.PingActivity.Ping.Address ?? string.Empty,
+            review.PingActivity.Name,
+            review.PingActivity.Ping.PingGenre?.Name,
+            review.PingActivity.Ping.Latitude,
+            review.PingActivity.Ping.Longitude,
+            review.Rating,
+            review.Content,
+            review.UserId,
+            review.UserName,
+            reviewAuthor?.ProfileImageUrl,
+            review.ImageUrl ?? "",
+            review.ThumbnailUrl ?? "",
+            review.CreatedAt,
+            review.Likes,
+            isLiked,
+            review.UserId == userId,
+            review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
+            review.PingActivity.Ping.IsDeleted
         );
     }
 }
