@@ -8,7 +8,8 @@ namespace Ping.Dtos.Auth
         public string Key { get; init; } = default!;
         public string Issuer { get; init; } = default!;
         public string Audience { get; init; } = default!;
-        public int AccessTokenMinutes { get; init; } = 60;
+        public int AccessTokenMinutes { get; init; } = 30;
+        public int RefreshTokenDays { get; init; } = 30;
     }
     public record RegisterDto(
         [Required, EmailAddress] string Email,
@@ -49,7 +50,10 @@ namespace Ping.Dtos.Auth
 
     public interface ITokenService
     {
-        Task<AuthResponse> CreateAuthResponseAsync(AppUser user);
+        Task<AuthResponse> CreateAuthResponseAsync(AppUser user, string? deviceId = null);
+        Task<AuthResponse> RefreshAsync(string refreshToken, string? deviceId = null);
+        Task RevokeRefreshTokenAsync(string refreshToken);
+        Task RevokeAllUserTokensAsync(string userId);
     }
 
     public record UserDto(
@@ -60,6 +64,18 @@ namespace Ping.Dtos.Auth
         string[] Roles
     );
 
-    public record AuthResponse(string AccessToken, DateTime ExpiresUtc, UserDto User);
+    // Refresh token request from the client
+    public record RefreshTokenRequest(
+        [Required] string RefreshToken,
+        string? DeviceId
+    );
+
+    public record AuthResponse(
+        string AccessToken,
+        DateTime ExpiresUtc,
+        string RefreshToken,
+        DateTime RefreshTokenExpiresUtc,
+        UserDto User
+    );
 }
 

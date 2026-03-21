@@ -13,7 +13,7 @@ namespace Ping.Controllers.Auth
     [ApiVersion("1.0")]
     [Route("api/[controller]")]
     [Route("api/v{version:apiVersion}/[controller]")]
-    public class AuthController(IAuthService authService) : ControllerBase
+    public class AuthController(IAuthService authService, ITokenService tokenService) : ControllerBase
     {
         [HttpPost("register")]
         [AllowAnonymous]
@@ -239,6 +239,43 @@ namespace Ping.Controllers.Auth
             {
                 return NotFound(ex.Message);
             }
+        }
+
+        // ===== Token Refresh =====
+        [HttpPost("refresh")]
+        [AllowAnonymous]
+        public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshTokenRequest dto)
+        {
+            try
+            {
+                var result = await tokenService.RefreshAsync(dto.RefreshToken, dto.DeviceId);
+                return result;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        // ===== Logout (revoke refresh token) =====
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest dto)
+        {
+            await tokenService.RevokeRefreshTokenAsync(dto.RefreshToken);
+            return Ok(new { message = "Logged out." });
+        }
+
+        // ===== Logout from all devices =====
+        [HttpPost("logout-all")]
+        [Authorize]
+        public async Task<IActionResult> LogoutAll()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            await tokenService.RevokeAllUserTokensAsync(userId);
+            return Ok(new { message = "Logged out from all devices." });
         }
     }
 }

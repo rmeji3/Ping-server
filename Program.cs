@@ -99,6 +99,10 @@ var jwtAccessTokenMinutes = Environment.GetEnvironmentVariable("JWT_ACCESS_TOKEN
 if (!string.IsNullOrEmpty(jwtAccessTokenMinutes))
     builder.Configuration["Jwt:AccessTokenMinutes"] = jwtAccessTokenMinutes;
 
+var jwtRefreshTokenDays = Environment.GetEnvironmentVariable("JWT_REFRESH_TOKEN_DAYS");
+if (!string.IsNullOrEmpty(jwtRefreshTokenDays))
+    builder.Configuration["Jwt:RefreshTokenDays"] = jwtRefreshTokenDays;
+
 // Google API Key
 var googleApiKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY");
 if (!string.IsNullOrEmpty(googleApiKey))

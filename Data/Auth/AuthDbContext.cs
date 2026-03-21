@@ -13,6 +13,7 @@ namespace Ping.Data.Auth
         public DbSet<IpBan> IpBans => Set<IpBan>();
         public DbSet<Ping.Models.Analytics.UserActivityLog> UserActivityLogs => Set<Ping.Models.Analytics.UserActivityLog>();
         public DbSet<Ping.Models.Analytics.DailySystemMetric> DailySystemMetrics => Set<Ping.Models.Analytics.DailySystemMetric>();
+        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -74,6 +75,19 @@ namespace Ping.Data.Auth
 
             builder.Entity<Ping.Models.Analytics.DailySystemMetric>()
                 .HasIndex(m => m.Date);
+
+            // RefreshToken
+            builder.Entity<RefreshToken>(entity =>
+            {
+                entity.HasOne(rt => rt.User)
+                    .WithMany()
+                    .HasForeignKey(rt => rt.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(rt => rt.TokenHash).IsUnique();
+                entity.HasIndex(rt => rt.UserId);
+                entity.HasIndex(rt => rt.ExpiresUtc); // For cleanup queries
+            });
         }
     }
 }

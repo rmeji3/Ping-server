@@ -396,6 +396,9 @@ public class AuthService(
             throw new ArgumentException(errors);
         }
 
+        // Revoke all refresh tokens on password change (security best practice)
+        await tokens.RevokeAllUserTokensAsync(userId);
+
         logger.LogInformation("Password changed for {UserId}", user.Id);
         return "Password changed.";
     }

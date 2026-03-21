@@ -139,8 +139,12 @@ Required `appsettings.json` keys:
 
 ### JWT
 - Claims added: `sub`, `email`, `nameidentifier`, `name`, plus each role.
-- Token lifespan: `AccessTokenMinutes` from config (default 60).
-- `AuthResponse` returns: `AccessToken`, `ExpiresUtc`, `User` (`UserDto`).
+- Access token lifespan: `AccessTokenMinutes` from config (default 30).
+- Refresh token lifespan: `RefreshTokenDays` from config (default 30).
+- **Token rotation**: Each refresh exchange revokes the old refresh token and issues a new pair.
+- Refresh tokens are stored as SHA-256 hashes in the `RefreshTokens` table (never stored raw).
+- `AuthResponse` returns: `AccessToken`, `ExpiresUtc`, `RefreshToken`, `RefreshTokenExpiresUtc`, `User` (`UserDto`).
+- Password changes revoke all active refresh tokens for the user.
 
 ### Password Flows
 - Register: validates uniqueness of normalized `UserName` manually. Usernames are reserved for 12 hours pending verification.
@@ -170,6 +174,7 @@ DbSets:
 - `Follows` (composite PK: `{FollowerId, FolloweeId}`)
 - `UserBlocks` (composite PK: `{BlockerId, BlockedId}`)
 - `IpBans` (PK: `IpAddress`)
+- `RefreshTokens` (PK: `Id`, FK: `UserId` → `AspNetUsers`, unique index on `TokenHash`, indexes on `UserId` and `ExpiresUtc`)
 Relationships:
 - `Follow.Follower` and `Follow.Followee` each `Restrict` delete.
 - `UserBlock.Blocker` and `UserBlock.Blocked` each `Cascade` delete.
@@ -276,8 +281,9 @@ Property Configuration:
 - `ChangePasswordDto(CurrentPassword, NewPassword)`
 - `ChangeUsernameDto(NewUserName)`
 - `UserDto(Id, Email, DisplayName, ProfileImageUrl, Roles[])`
-- `AuthResponse(AccessToken, ExpiresUtc, User)`
-- `JwtOptions(Key, Issuer, Audience, AccessTokenMinutes)`
+- `AuthResponse(AccessToken, ExpiresUtc, RefreshToken, RefreshTokenExpiresUtc, User)`
+- `RefreshTokenRequest(RefreshToken, DeviceId?)`
+- `JwtOptions(Key, Issuer, Audience, AccessTokenMinutes, RefreshTokenDays)`
 
 ### Events
 - `EventDto(Id, Title, Description?, IsPublic, StartTime, EndTime, Location, CreatedBy(UserSummaryDto), CreatedAt, Attendees[List<UserSummaryDto>], Status, Latitude, Longitude, PingId, EventGenreId?, EventGenreName?, ImageUrl?, ThumbnailUrl?, Price?, IsHosting, IsAttending, FriendThumbnails, Address?)`
@@ -364,7 +370,11 @@ Property Configuration:
 ### Service Interfaces & Implementations
 
 #### TokenService (`ITokenService`)
-- Generates JWT with configured options, includes roles and identity claims.
+- `CreateAuthResponseAsync(user, deviceId?)` — Generates access + refresh token pair. Revokes existing refresh token for the same device.
+- `RefreshAsync(refreshToken, deviceId?)` — Validates refresh token, revokes it (rotation), and issues a new access + refresh pair.
+- `RevokeRefreshTokenAsync(refreshToken)` — Revokes a single refresh token (used on logout).
+- `RevokeAllUserTokensAsync(userId)` — Revokes all active refresh tokens for a user (used on password change).
+- Refresh tokens are hashed with SHA-256 before storage; raw tokens are never persisted.
 
 #### PingService (`IPingService`)
 - Manages pings, geo-spatial search, favoriting, and visibility rules.
@@ -535,6 +545,9 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | POST   | /api/auth/google          | An   | `GoogleLoginDto`    | `AuthResponse`    | Google Sign-In (Login or Register)        |
 | POST   | /api/auth/apple           | An   | `AppleLoginDto`     | `AuthResponse`    | Apple Sign-In (Login or Register)         |
 | DELETE | /api/auth/me              | A    | —                   | Msg               | Self-delete account                       |
+| POST   | /api/auth/refresh         | An   | `RefreshTokenRequest` | `AuthResponse`  | Exchange refresh token for new token pair (rotation) |
+| POST   | /api/auth/logout          | A    | `RefreshTokenRequest` | Msg             | Revoke the provided refresh token         |
+| POST   | /api/auth/logout-all      | A    | —                   | Msg               | Revoke all refresh tokens for current user |
 
 ### BlocksController (`/api/blocks`)
 | Method | Route                       | Auth | Body | Returns     | Notes                                           |
