@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e  # Exit immediately on any error
 # ============================================================
 # Build and Push multi-platform image to ECR
 # Run this from your local development machine

@@ -24,6 +24,7 @@ server {
     server_name $DOMAIN;
 
     location / {
+        client_max_body_size 20M;
         proxy_pass http://localhost:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;

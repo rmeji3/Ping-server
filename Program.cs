@@ -129,7 +129,22 @@ var rateLimitPlaceCreation = Environment.GetEnvironmentVariable("RATE_LIMIT_PLAC
 if (!string.IsNullOrEmpty(rateLimitPlaceCreation))
     builder.Configuration["RateLimiting:PlaceCreationLimitPerDay"] = rateLimitPlaceCreation;
 
+// AWS Configuration mapping from Environment Variables
+var awsAccessKeyEnv = Environment.GetEnvironmentVariable("AWS__AccessKey")?.Trim();
+if (!string.IsNullOrEmpty(awsAccessKeyEnv))
+    builder.Configuration["AWS:AccessKey"] = awsAccessKeyEnv;
 
+var awsSecretKeyEnv = Environment.GetEnvironmentVariable("AWS__SecretKey")?.Trim();
+if (!string.IsNullOrEmpty(awsSecretKeyEnv))
+    builder.Configuration["AWS:SecretKey"] = awsSecretKeyEnv;
+
+var awsRegionEnv = Environment.GetEnvironmentVariable("AWS__Region");
+if (!string.IsNullOrEmpty(awsRegionEnv))
+    builder.Configuration["AWS:Region"] = awsRegionEnv;
+
+var awsBucketNameEnv = Environment.GetEnvironmentVariable("AWS__BucketName");
+if (!string.IsNullOrEmpty(awsBucketNameEnv))
+    builder.Configuration["AWS:BucketName"] = awsBucketNameEnv;
 
 
 // --- EF Core (SQLite / PostgreSQL Hybrid) ---
@@ -263,10 +278,18 @@ builder.Services.AddScoped<Ping.Services.Admin.IDbJanitorService, Ping.Services.
 var awsOptions = builder.Configuration.GetAWSOptions();
 var awsAccessKey = builder.Configuration["AWS:AccessKey"];
 var awsSecretKey = builder.Configuration["AWS:SecretKey"];
+var awsRegion = builder.Configuration["AWS:Region"];
+
 if (!string.IsNullOrEmpty(awsAccessKey) && !string.IsNullOrEmpty(awsSecretKey))
 {
     awsOptions.Credentials = new Amazon.Runtime.BasicAWSCredentials(awsAccessKey, awsSecretKey);
 }
+
+if (!string.IsNullOrEmpty(awsRegion))
+{
+    awsOptions.Region = Amazon.RegionEndpoint.GetBySystemName(awsRegion);
+}
+
 builder.Services.AddDefaultAWSOptions(awsOptions);
 builder.Services.AddMemoryCache(); // Required for AppleAuthService JWKS caching
 builder.Services.AddAWSService<IAmazonS3>();

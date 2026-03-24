@@ -16,7 +16,7 @@ read_secret() {
   local prompt="$1"
   local var
   read -sp "$prompt: " var
-  echo ""
+  echo "" >&2
   echo "$var"
 }
 
@@ -66,8 +66,8 @@ put_string "DatabaseProvider" 'Postgres'
 
 # JWT
 put_secret "JWT_KEY"                  "$JWT_KEY"
-put_string "JWT_ISSUER"               'PingServer'
-put_string "JWT_AUDIENCE"             'PingApp'
+put_string "JWT_ISSUER"               'api.ping-app.net'
+put_string "JWT_AUDIENCE"             'api.ping-app.net'
 put_string "JWT_ACCESS_TOKEN_MINUTES" '30'
 put_string "JWT_REFRESH_TOKEN_DAYS"    '30'
 
@@ -76,7 +76,7 @@ put_secret "GOOGLE_API_KEY"   "$GOOGLE_KEY"
 put_secret "GOOGLE_CLIENT_ID" "$GOOGLE_CID"
 
 # OpenAI
-put_secret "OPENAI_API_KEY" "$OPENAI_KEY"
+put_secret "OPENAI_API_KEY" "$(echo "$OPENAI_KEY" | tr -d '\r\n')"
 
 # Rate Limiting
 put_string "RATE_LIMIT_GLOBAL_PER_MINUTE"          '10000'
