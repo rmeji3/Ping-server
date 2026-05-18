@@ -49,6 +49,35 @@ dotnet run
 The API will be available at `http://localhost:5055` (or similar, check launch logs).
 Swagger UI is available at the root URL.
 
+## Docker Deployment (SSH -> Pull -> Run)
+
+This repo includes a production compose stack in `docker-compose.server.yml` and a server startup script at `scripts/start-server.sh`.
+
+### 1) Build and push image from your local machine
+```bash
+./scripts/build-and-push.sh
+```
+
+### 2) SSH into your server and deploy latest image
+```bash
+ssh <user>@<server>
+cd /path/to/Ping-server
+./scripts/start-server.sh
+```
+
+What `start-server.sh` does:
+- Authenticates Docker to ECR.
+- Pulls latest image.
+- Fetches runtime secrets from AWS SSM Parameter Store.
+- Writes `.env.server` and starts `ping-server` + `redis` via Docker Compose.
+
+Useful commands on the server:
+```bash
+docker compose -f docker-compose.server.yml --env-file .env.server ps
+docker compose -f docker-compose.server.yml --env-file .env.server logs -f ping-server
+docker compose -f docker-compose.server.yml --env-file .env.server restart ping-server
+```
+
 ## � Observability
 
 ### Logging

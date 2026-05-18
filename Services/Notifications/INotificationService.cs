@@ -14,7 +14,7 @@ public interface INotificationService
     Task DeleteAllNotificationsAsync(string userId);
     
     // Device management
-    Task RegisterDeviceAsync(string userId, string deviceToken, DevicePlatform platform);
+    Task RegisterDeviceAsync(string userId, string deviceToken, DevicePlatform platform, bool isProduction);
     
     // Preferences
     Task<List<Ping.Dtos.Notifications.NotificationPreferenceDto>> GetPreferencesAsync(string userId);

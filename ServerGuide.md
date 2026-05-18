@@ -336,7 +336,7 @@ Property Configuration:
 
 
 ### Recommendations
-- `RecommendationDto(Name, Address, Latitude?, Longitude?, Source, LocalPingId?)`
+- `RecommendationDto(Name, Address, Latitude?, Longitude?, Source, LocalPingId?, Reasoning?, Genre)`
 
 ### Pagination
 - `PaginationParams(PageNumber=1, PageSize=20)` - Max PageSize 50
@@ -382,6 +382,7 @@ Property Configuration:
 
 #### GooglePingsService (`IPingNameService`)
 - Fetches official ping names from Google Places API for verified pings.
+- Uses Places API (v1) for server-side place search/name lookup.
 
 #### RecommendationService (`RecommendationService`)
 - Provides AI-powered ping recommendations based on "vibe" using Semantic Kernel + Google Pings fallback.
@@ -693,6 +694,14 @@ Notation: `[]` = route parameter, `(Q)` = query parameter, `(Body)` = JSON body.
 | Method | Route                                            | Auth | Body | Returns               | Notes                                   |
 | ------ | ------------------------------------------------ | ---- | ---- | --------------------- | --------------------------------------- |
 | GET    | /api/recommendations (Q: vibe, lat, lng, radius) | A    | —    | `RecommendationDto[]` | AI-powered search. Radius default 10km. |
+
+### GooglePlacesController (`/api/googleplaces`)
+| Method | Route | Auth | Body | Returns | Notes |
+| ------ | ----- | ---- | ---- | ------- | ----- |
+| GET | /api/googleplaces/autocomplete/json (Q: input, types?, location?, radius?, components?) | An | — | Google Places autocomplete JSON | Proxies legacy autocomplete first; falls back to Places API v1 and returns legacy-compatible `predictions` payload. |
+| GET | /api/googleplaces/details/json (Q: place_id, fields?) | An | — | Google Place details JSON | Proxies legacy details first; falls back to Places API v1 and returns legacy-compatible `result` payload. |
+| GET | /api/googleplaces/geocode/json (Q: address? \/ latlng? \/ place_id?) | An | — | Google Geocode JSON | Pass-through proxy to Geocoding API; requires at least one of `address`, `latlng`, or `place_id`. |
+| GET | /api/googleplaces/nearbysearch/json (Q: location, radius?, keyword?, type?, rankby?, pagetoken?) | An | — | Google Nearby Search JSON | Pass-through proxy to Places Nearby Search; validates Google `rankby=distance` requirements. |
  
 ### ModerationController (`/api/moderation`)
 | Method | Route                       | Auth | Body | Returns     | Notes                        |

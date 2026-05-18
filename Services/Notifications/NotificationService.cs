@@ -131,10 +131,10 @@ public class NotificationService : INotificationService
         });
     }
 
-    public async Task RegisterDeviceAsync(string userId, string deviceToken, DevicePlatform platform)
+    public async Task RegisterDeviceAsync(string userId, string deviceToken, DevicePlatform platform, bool isProduction)
     {
         var platformArn = platform == DevicePlatform.Apple
-            ? _config.GetValue<string>("AWS:SNS:ApnsSandboxArn")
+            ? (isProduction ? _config.GetValue<string>("AWS:SNS:ApnsProductionArn") : _config.GetValue<string>("AWS:SNS:ApnsSandboxArn"))
             : _config.GetValue<string>("AWS:SNS:FcmArn");
 
         if (string.IsNullOrEmpty(platformArn))

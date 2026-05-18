@@ -5,7 +5,8 @@ namespace Ping.Dtos.Notifications;
 
 public record RegisterDeviceDto(
     [Required] string DeviceToken,
-    [Required] DevicePlatform Platform
+    [Required] DevicePlatform Platform,
+    bool? IsProduction = null
 );
 
 public record NotificationPreferenceDto(

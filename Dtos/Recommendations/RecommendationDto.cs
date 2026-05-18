@@ -8,5 +8,7 @@ public class RecommendationDto
     public double? Longitude { get; set; }
     public string Source { get; set; } = "Local"; // "Local" or "Google"
     public int? LocalPingId { get; set; } // ID if it's a local ping
+    public string? Reasoning { get; set; } // Why this place was recommended
+    public string Genre { get; set; } = "General"; // Suggested or actual genre
 }
 

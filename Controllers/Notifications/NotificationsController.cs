@@ -89,7 +89,7 @@ public class NotificationsController : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userId == null) return Unauthorized();
 
-        await _notificationService.RegisterDeviceAsync(userId, dto.DeviceToken, dto.Platform);
+        await _notificationService.RegisterDeviceAsync(userId, dto.DeviceToken, dto.Platform, dto.IsProduction ?? false);
         return Ok();
     }
 
