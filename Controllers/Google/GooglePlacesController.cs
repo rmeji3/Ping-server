@@ -31,10 +31,25 @@ public class GooglePlacesController : ControllerBase
     [HttpGet("autocomplete/json")]
     public async Task<IActionResult> Autocomplete([FromQuery] string input, [FromQuery] string? types, [FromQuery] string? location, [FromQuery] string? radius, [FromQuery] string? components)
     {
-        if (string.IsNullOrWhiteSpace(input))
+
+        // Enforce minimum input length
+        if (string.IsNullOrWhiteSpace(input) || input.Trim().Length < 3)
         {
-            return BadRequest("Query parameter 'input' is required.");
+            _logger.LogWarning("Autocomplete abuse: input too short from IP {IP}", HttpContext.Connection.RemoteIpAddress);
+            return BadRequest("Query parameter 'input' is required and must be at least 3 characters.");
         }
+
+        // Enforce max radius
+        if (!string.IsNullOrEmpty(radius) && int.TryParse(radius, out var r) && r > 50000)
+        {
+            _logger.LogWarning("Autocomplete abuse: radius too large ({Radius}) from IP {IP}", radius, HttpContext.Connection.RemoteIpAddress);
+            return BadRequest("Radius must not exceed 50000 meters.");
+        }
+
+        // Endpoint-level quota: simple in-memory/IP counter (for demo, use Redis in prod)
+        // (Pseudo: increment a counter in Redis, block if exceeded)
+        // Example: 1000 req/hour/IP
+        // (Assume RateLimitMiddleware covers this in prod)
 
         var apiKey = _config["Google:ApiKey"];
         if (string.IsNullOrEmpty(apiKey))
@@ -74,9 +89,11 @@ public class GooglePlacesController : ControllerBase
     [HttpGet("details/json")]
     public async Task<IActionResult> Details([FromQuery] string place_id, [FromQuery] string? fields)
     {
-        if (string.IsNullOrWhiteSpace(place_id))
+
+        if (string.IsNullOrWhiteSpace(place_id) || place_id.Trim().Length < 5)
         {
-            return BadRequest("Query parameter 'place_id' is required.");
+            _logger.LogWarning("Details abuse: invalid place_id from IP {IP}", HttpContext.Connection.RemoteIpAddress);
+            return BadRequest("Query parameter 'place_id' is required and must be at least 5 characters.");
         }
 
         var apiKey = _config["Google:ApiKey"];
@@ -117,9 +134,18 @@ public class GooglePlacesController : ControllerBase
     [HttpGet("geocode/json")]
     public async Task<IActionResult> Geocode([FromQuery] string? address, [FromQuery] string? latlng, [FromQuery] string? place_id)
     {
+
         if (string.IsNullOrWhiteSpace(address) && string.IsNullOrWhiteSpace(latlng) && string.IsNullOrWhiteSpace(place_id))
         {
+            _logger.LogWarning("Geocode abuse: missing all params from IP {IP}", HttpContext.Connection.RemoteIpAddress);
             return BadRequest("One of 'address', 'latlng', or 'place_id' is required.");
+        }
+
+        // Enforce minimum input length for address
+        if (!string.IsNullOrWhiteSpace(address) && address.Trim().Length < 3)
+        {
+            _logger.LogWarning("Geocode abuse: address too short from IP {IP}", HttpContext.Connection.RemoteIpAddress);
+            return BadRequest("Address must be at least 3 characters.");
         }
 
         var apiKey = _config["Google:ApiKey"];
@@ -172,9 +198,30 @@ public class GooglePlacesController : ControllerBase
         [FromQuery] string? rankby,
         [FromQuery] string? pagetoken)
     {
+
         if (string.IsNullOrWhiteSpace(location))
         {
+            _logger.LogWarning("NearbySearch abuse: missing location from IP {IP}", HttpContext.Connection.RemoteIpAddress);
             return BadRequest("Query parameter 'location' is required.");
+        }
+
+        // Enforce max radius
+        if (!string.IsNullOrEmpty(radius) && int.TryParse(radius, out var r) && r > 50000)
+        {
+            _logger.LogWarning("NearbySearch abuse: radius too large ({Radius}) from IP {IP}", radius, HttpContext.Connection.RemoteIpAddress);
+            return BadRequest("Radius must not exceed 50000 meters.");
+        }
+
+        // Enforce min keyword/type length if present
+        if (!string.IsNullOrWhiteSpace(keyword) && keyword.Trim().Length < 2)
+        {
+            _logger.LogWarning("NearbySearch abuse: keyword too short from IP {IP}", HttpContext.Connection.RemoteIpAddress);
+            return BadRequest("Keyword must be at least 2 characters.");
+        }
+        if (!string.IsNullOrWhiteSpace(type) && type.Trim().Length < 2)
+        {
+            _logger.LogWarning("NearbySearch abuse: type too short from IP {IP}", HttpContext.Connection.RemoteIpAddress);
+            return BadRequest("Type must be at least 2 characters.");
         }
 
         var apiKey = _config["Google:ApiKey"];
