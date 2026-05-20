@@ -11,11 +11,11 @@ using Ping.Data.App;
 
 #nullable disable
 
-namespace Ping.Data.App.Migrations.Postgres
+namespace Ping.Migrations.AppDb
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260206030820_AddCollectionImages")]
-    partial class AddCollectionImages
+    [Migration("20260520194954_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -274,6 +274,9 @@ namespace Ping.Data.App.Migrations.Postgres
                     b.Property<DateTime>("JoinedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("ReminderSent")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -298,7 +301,19 @@ namespace Ping.Data.App.Migrations.Postgres
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("DislikeCount")
+                        .HasColumnType("integer");
+
                     b.Property<int>("EventId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LikeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ParentCommentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReplyCount")
                         .HasColumnType("integer");
 
                     b.Property<string>("UserId")
@@ -309,9 +324,41 @@ namespace Ping.Data.App.Migrations.Postgres
 
                     b.HasIndex("EventId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("ParentCommentId");
 
                     b.ToTable("EventComments");
+                });
+
+            modelBuilder.Entity("Ping.Models.Events.EventCommentReaction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CommentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Value")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommentId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("EventCommentReactions", t =>
+                        {
+                            t.HasCheckConstraint("CK_EventCommentReaction_Value", "\"Value\" IN (-1, 1)");
+                        });
                 });
 
             modelBuilder.Entity("Ping.Models.Events.EventGenre", b =>
@@ -402,13 +449,17 @@ namespace Ping.Data.App.Migrations.Postgres
                         });
                 });
 
-            modelBuilder.Entity("Ping.Models.Notification", b =>
+            modelBuilder.Entity("Ping.Models.Notifications.Notification", b =>
                 {
                     b.Property<string>("Id")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ImageThumbnailUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("boolean");
@@ -450,6 +501,60 @@ namespace Ping.Data.App.Migrations.Postgres
                     b.ToTable("Notifications");
                 });
 
+            modelBuilder.Entity("Ping.Models.Notifications.NotificationPreference", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Type")
+                        .IsUnique();
+
+                    b.ToTable("NotificationPreferences");
+                });
+
+            modelBuilder.Entity("Ping.Models.Notifications.UserDevice", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceToken")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("EndpointArn")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Platform")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DeviceToken")
+                        .IsUnique();
+
+                    b.ToTable("UserDevices");
+                });
+
             modelBuilder.Entity("Ping.Models.Pings.Collection", b =>
                 {
                     b.Property<int>("Id")
@@ -466,6 +571,9 @@ namespace Ping.Data.App.Migrations.Postgres
                         .HasColumnType("character varying(2048)");
 
                     b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSystem")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
@@ -764,6 +872,35 @@ namespace Ping.Data.App.Migrations.Postgres
                             Id = 23,
                             Name = "Other"
                         });
+                });
+
+            modelBuilder.Entity("Ping.Models.Pings.SavedCollection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CollectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SavedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CollectionId");
+
+                    b.HasIndex("UserId", "CollectionId")
+                        .IsUnique();
+
+                    b.ToTable("SavedCollections");
                 });
 
             modelBuilder.Entity("Ping.Models.Reports.Report", b =>
@@ -1100,15 +1237,25 @@ namespace Ping.Data.App.Migrations.Postgres
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Ping.Models.AppUsers.AppUser", "User")
+                    b.HasOne("Ping.Models.Events.EventComment", "ParentComment")
                         .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("ParentCommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Event");
 
-                    b.Navigation("User");
+                    b.Navigation("ParentComment");
+                });
+
+            modelBuilder.Entity("Ping.Models.Events.EventCommentReaction", b =>
+                {
+                    b.HasOne("Ping.Models.Events.EventComment", "Comment")
+                        .WithMany("Reactions")
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Comment");
                 });
 
             modelBuilder.Entity("Ping.Models.Pings.CollectionPing", b =>
@@ -1160,6 +1307,17 @@ namespace Ping.Data.App.Migrations.Postgres
                         .IsRequired();
 
                     b.Navigation("Ping");
+                });
+
+            modelBuilder.Entity("Ping.Models.Pings.SavedCollection", b =>
+                {
+                    b.HasOne("Ping.Models.Pings.Collection", "Collection")
+                        .WithMany()
+                        .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Collection");
                 });
 
             modelBuilder.Entity("Ping.Models.Reviews.Reping", b =>
@@ -1243,6 +1401,11 @@ namespace Ping.Data.App.Migrations.Postgres
             modelBuilder.Entity("Ping.Models.Events.Event", b =>
                 {
                     b.Navigation("Attendees");
+                });
+
+            modelBuilder.Entity("Ping.Models.Events.EventComment", b =>
+                {
+                    b.Navigation("Reactions");
                 });
 
             modelBuilder.Entity("Ping.Models.Events.EventGenre", b =>

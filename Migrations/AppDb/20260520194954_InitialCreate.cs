@@ -8,10 +8,10 @@ using NpgsqlTypes;
 
 #pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
 
-namespace Ping.Data.App.Migrations.Postgres
+namespace Ping.Migrations.AppDb
 {
     /// <inheritdoc />
-    public partial class AddReportScreenshotAndNullableTargetId : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -24,10 +24,10 @@ namespace Ping.Data.App.Migrations.Postgres
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "text", nullable: false),
-                    FirstName = table.Column<string>(type: "text", nullable: false),
-                    LastName = table.Column<string>(type: "text", nullable: false),
-                    ProfileImageUrl = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
-                    ProfileThumbnailUrl = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    FirstName = table.Column<string>(type: "character varying(24)", maxLength: 24, nullable: false),
+                    LastName = table.Column<string>(type: "character varying(24)", maxLength: 24, nullable: false),
+                    ProfileImageUrl = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
+                    ProfileThumbnailUrl = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
                     Bio = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     ReviewsPrivacy = table.Column<int>(type: "integer", nullable: false),
                     PingsPrivacy = table.Column<int>(type: "integer", nullable: false),
@@ -68,7 +68,10 @@ namespace Ping.Data.App.Migrations.Postgres
                     UserId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     IsPublic = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    IsSystem = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ImageUrl = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
+                    ThumbnailUrl = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -89,6 +92,20 @@ namespace Ping.Data.App.Migrations.Postgres
                 });
 
             migrationBuilder.CreateTable(
+                name: "NotificationPreferences",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "text", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    Type = table.Column<int>(type: "integer", nullable: false),
+                    IsEnabled = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_NotificationPreferences", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Notifications",
                 columns: table => new
                 {
@@ -101,6 +118,7 @@ namespace Ping.Data.App.Migrations.Postgres
                     Title = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Message = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     ReferenceId = table.Column<string>(type: "text", nullable: true),
+                    ImageThumbnailUrl = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
                     Metadata = table.Column<string>(type: "text", nullable: true),
                     IsRead = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
@@ -116,7 +134,7 @@ namespace Ping.Data.App.Migrations.Postgres
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false)
+                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -128,11 +146,11 @@ namespace Ping.Data.App.Migrations.Postgres
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ReporterId = table.Column<Guid>(type: "uuid", nullable: false),
-                    TargetId = table.Column<string>(type: "text", nullable: true),
+                    ReporterId = table.Column<string>(type: "text", nullable: false),
+                    TargetId = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     TargetType = table.Column<int>(type: "integer", nullable: false),
-                    Reason = table.Column<string>(type: "text", nullable: false),
-                    Description = table.Column<string>(type: "text", nullable: true),
+                    Reason = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     ScreenshotUrl = table.Column<string>(type: "text", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false)
@@ -140,6 +158,24 @@ namespace Ping.Data.App.Migrations.Postgres
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Reports", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SearchHistory",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    Query = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Type = table.Column<int>(type: "integer", nullable: false),
+                    TargetId = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    ImageUrl = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SearchHistory", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -164,6 +200,22 @@ namespace Ping.Data.App.Migrations.Postgres
                 });
 
             migrationBuilder.CreateTable(
+                name: "UserDevices",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "text", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    DeviceToken = table.Column<string>(type: "text", nullable: false),
+                    EndpointArn = table.Column<string>(type: "text", nullable: false),
+                    Platform = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserDevices", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "VerificationRequests",
                 columns: table => new
                 {
@@ -172,7 +224,7 @@ namespace Ping.Data.App.Migrations.Postgres
                     UserId = table.Column<string>(type: "text", nullable: false),
                     SubmittedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
-                    AdminComment = table.Column<string>(type: "text", nullable: true),
+                    AdminComment = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     AdminId = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
@@ -192,14 +244,35 @@ namespace Ping.Data.App.Migrations.Postgres
                 });
 
             migrationBuilder.CreateTable(
+                name: "SavedCollections",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    CollectionId = table.Column<int>(type: "integer", nullable: false),
+                    SavedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SavedCollections", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SavedCollections_Collections_CollectionId",
+                        column: x => x.CollectionId,
+                        principalTable: "Collections",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Pings",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Address = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
-                    GooglePlaceId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Address = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    GooglePlaceId = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Location = table.Column<Point>(type: "geometry", nullable: false),
                     OwnerUserId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Visibility = table.Column<int>(type: "integer", nullable: false),
@@ -209,7 +282,6 @@ namespace Ping.Data.App.Migrations.Postgres
                     IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
                     Favorites = table.Column<int>(type: "integer", nullable: false),
                     PingGenreId = table.Column<int>(type: "integer", nullable: true),
-                    ThumbnailUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     SearchVector = table.Column<NpgsqlTsVector>(type: "tsvector", nullable: true, computedColumnSql: "to_tsvector('english', coalesce(\"Name\", '') || ' ' || coalesce(\"Address\", ''))", stored: true)
                 },
                 constraints: table =>
@@ -254,17 +326,17 @@ namespace Ping.Data.App.Migrations.Postgres
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Title = table.Column<string>(type: "text", nullable: false),
-                    Description = table.Column<string>(type: "text", nullable: true),
+                    Title = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     IsPublic = table.Column<bool>(type: "boolean", nullable: false),
                     StartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     EndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ImageUrl = table.Column<string>(type: "text", nullable: true),
-                    ThumbnailUrl = table.Column<string>(type: "text", nullable: true),
-                    Price = table.Column<double>(type: "double precision", nullable: true),
+                    ImageUrl = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
+                    ThumbnailUrl = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
+                    Price = table.Column<decimal>(type: "numeric(5,2)", nullable: true),
                     CreatedById = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Status = table.Column<string>(type: "text", nullable: false),
+                    Status = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     EventGenreId = table.Column<int>(type: "integer", nullable: true),
                     PingId = table.Column<int>(type: "integer", nullable: false)
                 },
@@ -311,7 +383,7 @@ namespace Ping.Data.App.Migrations.Postgres
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     PingId = table.Column<int>(type: "integer", nullable: false),
-                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     CreatedUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -333,7 +405,7 @@ namespace Ping.Data.App.Migrations.Postgres
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     UserId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     PingId = table.Column<int>(type: "integer", nullable: false),
-                    Proof = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    Proof = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
                     CreatedUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     ReviewedUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -378,7 +450,8 @@ namespace Ping.Data.App.Migrations.Postgres
                     EventId = table.Column<int>(type: "integer", nullable: false),
                     UserId = table.Column<string>(type: "text", nullable: false),
                     JoinedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Status = table.Column<int>(type: "integer", nullable: false)
+                    Status = table.Column<int>(type: "integer", nullable: false),
+                    ReminderSent = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -400,15 +473,19 @@ namespace Ping.Data.App.Migrations.Postgres
                     Content = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     EventId = table.Column<int>(type: "integer", nullable: false),
-                    UserId = table.Column<string>(type: "text", nullable: false)
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    LikeCount = table.Column<int>(type: "integer", nullable: false),
+                    DislikeCount = table.Column<int>(type: "integer", nullable: false),
+                    ParentCommentId = table.Column<int>(type: "integer", nullable: true),
+                    ReplyCount = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_EventComments", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_EventComments_AppUser_UserId",
-                        column: x => x.UserId,
-                        principalTable: "AppUser",
+                        name: "FK_EventComments_EventComments_ParentCommentId",
+                        column: x => x.ParentCommentId,
+                        principalTable: "EventComments",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
@@ -445,6 +522,29 @@ namespace Ping.Data.App.Migrations.Postgres
                         name: "FK_Reviews_PingActivities_PingActivityId",
                         column: x => x.PingActivityId,
                         principalTable: "PingActivities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "EventCommentReactions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    CommentId = table.Column<int>(type: "integer", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    Value = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_EventCommentReactions", x => x.Id);
+                    table.CheckConstraint("CK_EventCommentReaction_Value", "\"Value\" IN (-1, 1)");
+                    table.ForeignKey(
+                        name: "FK_EventCommentReactions_EventComments_CommentId",
+                        column: x => x.CommentId,
+                        principalTable: "EventComments",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -560,7 +660,10 @@ namespace Ping.Data.App.Migrations.Postgres
                     { 17, "Dating" },
                     { 18, "Fashion" },
                     { 19, "Automotive" },
-                    { 20, "Home" }
+                    { 20, "Home" },
+                    { 21, "Cafe" },
+                    { 22, "Parking" },
+                    { 23, "Other" }
                 });
 
             migrationBuilder.CreateIndex(
@@ -574,14 +677,20 @@ namespace Ping.Data.App.Migrations.Postgres
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_EventCommentReactions_CommentId_UserId",
+                table: "EventCommentReactions",
+                columns: new[] { "CommentId", "UserId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_EventComments_EventId",
                 table: "EventComments",
                 column: "EventId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_EventComments_UserId",
+                name: "IX_EventComments_ParentCommentId",
                 table: "EventComments",
-                column: "UserId");
+                column: "ParentCommentId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_EventGenres_Name",
@@ -608,6 +717,12 @@ namespace Ping.Data.App.Migrations.Postgres
                 name: "IX_Favorited_UserId_PingId",
                 table: "Favorited",
                 columns: new[] { "UserId", "PingId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NotificationPreferences_UserId_Type",
+                table: "NotificationPreferences",
+                columns: new[] { "UserId", "Type" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -672,6 +787,22 @@ namespace Ping.Data.App.Migrations.Postgres
                 column: "TagId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_SavedCollections_CollectionId",
+                table: "SavedCollections",
+                column: "CollectionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SavedCollections_UserId_CollectionId",
+                table: "SavedCollections",
+                columns: new[] { "UserId", "CollectionId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SearchHistory_UserId",
+                table: "SearchHistory",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Tags_CanonicalTagId",
                 table: "Tags",
                 column: "CanonicalTagId");
@@ -680,6 +811,12 @@ namespace Ping.Data.App.Migrations.Postgres
                 name: "IX_Tags_Name",
                 table: "Tags",
                 column: "Name",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserDevices_UserId_DeviceToken",
+                table: "UserDevices",
+                columns: new[] { "UserId", "DeviceToken" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -703,10 +840,13 @@ namespace Ping.Data.App.Migrations.Postgres
                 name: "EventAttendees");
 
             migrationBuilder.DropTable(
-                name: "EventComments");
+                name: "EventCommentReactions");
 
             migrationBuilder.DropTable(
                 name: "Favorited");
+
+            migrationBuilder.DropTable(
+                name: "NotificationPreferences");
 
             migrationBuilder.DropTable(
                 name: "Notifications");
@@ -730,13 +870,19 @@ namespace Ping.Data.App.Migrations.Postgres
                 name: "ReviewTags");
 
             migrationBuilder.DropTable(
+                name: "SavedCollections");
+
+            migrationBuilder.DropTable(
+                name: "SearchHistory");
+
+            migrationBuilder.DropTable(
+                name: "UserDevices");
+
+            migrationBuilder.DropTable(
                 name: "VerificationRequests");
 
             migrationBuilder.DropTable(
-                name: "Collections");
-
-            migrationBuilder.DropTable(
-                name: "Events");
+                name: "EventComments");
 
             migrationBuilder.DropTable(
                 name: "Reviews");
@@ -745,13 +891,19 @@ namespace Ping.Data.App.Migrations.Postgres
                 name: "Tags");
 
             migrationBuilder.DropTable(
+                name: "Collections");
+
+            migrationBuilder.DropTable(
                 name: "AppUser");
 
             migrationBuilder.DropTable(
-                name: "EventGenres");
+                name: "Events");
 
             migrationBuilder.DropTable(
                 name: "PingActivities");
+
+            migrationBuilder.DropTable(
+                name: "EventGenres");
 
             migrationBuilder.DropTable(
                 name: "Pings");

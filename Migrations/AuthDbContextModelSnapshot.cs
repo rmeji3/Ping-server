@@ -2,21 +2,18 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Ping.Data.Auth;
 
 #nullable disable
 
-namespace Ping.Data.Auth.Migrations.Postgres
+namespace Ping.Migrations
 {
     [DbContext(typeof(AuthDbContext))]
-    [Migration("20251229030610_AddBioToAppUser")]
-    partial class AddBioToAppUser
+    partial class AuthDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -253,7 +250,8 @@ namespace Ping.Data.Auth.Migrations.Postgres
 
                     b.Property<string>("FirstName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
 
                     b.Property<bool>("IsBanned")
                         .HasColumnType("boolean");
@@ -270,7 +268,8 @@ namespace Ping.Data.Auth.Migrations.Postgres
 
                     b.Property<string>("LastName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
 
                     b.Property<int>("LikesPrivacy")
                         .HasColumnType("integer");
@@ -302,12 +301,12 @@ namespace Ping.Data.Auth.Migrations.Postgres
                         .HasColumnType("integer");
 
                     b.Property<string>("ProfileImageUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<string>("ProfileThumbnailUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<int>("ReviewsPrivacy")
                         .HasColumnType("integer");
@@ -374,6 +373,48 @@ namespace Ping.Data.Auth.Migrations.Postgres
                     b.HasKey("IpAddress");
 
                     b.ToTable("IpBans");
+                });
+
+            modelBuilder.Entity("Ping.Models.Users.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("ExpiresUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RevokedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresUtc");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("Ping.Models.Users.UserBlock", b =>
@@ -473,6 +514,17 @@ namespace Ping.Data.Auth.Migrations.Postgres
                     b.Navigation("Followee");
 
                     b.Navigation("Follower");
+                });
+
+            modelBuilder.Entity("Ping.Models.Users.RefreshToken", b =>
+                {
+                    b.HasOne("Ping.Models.AppUsers.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Ping.Models.Users.UserBlock", b =>
