@@ -9,6 +9,7 @@ public record SearchHistoryDto(
     SearchType Type,
     string? TargetId,
     string? ImageUrl,
+    string? PingGenreName,
     DateTime CreatedAt
 );
 
@@ -16,5 +17,6 @@ public record CreateSearchHistoryDto(
     [Required, MaxLength(100)] string Query,
     SearchType Type,
     [MaxLength(256)] string? TargetId = null,
-    [MaxLength(2048)] string? ImageUrl = null
+    [MaxLength(2048)] string? ImageUrl = null,
+    [MaxLength(100)] string? PingGenreName = null
 );

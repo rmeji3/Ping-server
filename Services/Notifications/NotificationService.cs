@@ -143,11 +143,30 @@ public class NotificationService : INotificationService
             throw new InvalidOperationException("Push notifications not configured.");
         }
 
+        // The endpoint must belong to the SAME SNS platform application we're targeting now
+        // (e.g. APNS vs APNS_SANDBOX). The platform app segment of the endpoint ARN
+        // (".../endpoint/<APP>/<NAME>/...") mirrors the platform application ARN
+        // (".../app/<APP>/<NAME>"). Devices registered under the old sandbox app must be
+        // re-created under the production app, not reused.
+        var expectedAppSegment = platformArn.Contains(":app/")
+            ? "/endpoint/" + platformArn.Substring(platformArn.IndexOf(":app/") + ":app/".Length) + "/"
+            : null;
+
         // Check if device already registered
         var existingDevice = await _context.UserDevices
             .FirstOrDefaultAsync(d => d.UserId == userId && d.DeviceToken == deviceToken);
 
-        if (existingDevice != null)
+        if (existingDevice != null
+            && expectedAppSegment != null
+            && !existingDevice.EndpointArn.Contains(expectedAppSegment))
+        {
+            // Endpoint belongs to a different platform application (e.g. sandbox). Don't reuse
+            // it — fall through to recreate under the correct app and update the row in place.
+            _logger.LogInformation(
+                "Existing endpoint {EndpointArn} does not match target platform app for User {UserId}. Re-creating.",
+                existingDevice.EndpointArn, userId);
+        }
+        else if (existingDevice != null)
         {
             // Ensure endpoint is enabled in SNS
             try
@@ -161,28 +180,93 @@ public class NotificationService : INotificationService
             }
             catch (Exception ex)
             {
+                // Old endpoint is stale/deleted (e.g. created under a different platform app).
+                // Re-create the SNS endpoint and update this row IN PLACE below — do NOT
+                // remove+insert, which collides with the UserId+DeviceToken unique index.
                 _logger.LogWarning(ex, "Failed to update existing SNS endpoint {EndpointArn}. Re-creating.", existingDevice.EndpointArn);
-                _context.UserDevices.Remove(existingDevice);
             }
         }
 
         // Create new endpoint
-        var response = await _snsClient.CreatePlatformEndpointAsync(new CreatePlatformEndpointRequest
+        CreatePlatformEndpointResponse response;
+        try
         {
-            PlatformApplicationArn = platformArn,
-            Token = deviceToken
-        });
-
-        var newDevice = new UserDevice
+            response = await _snsClient.CreatePlatformEndpointAsync(new CreatePlatformEndpointRequest
+            {
+                PlatformApplicationArn = platformArn,
+                Token = deviceToken
+            });
+        }
+        catch (Exception ex)
         {
-            UserId = userId,
-            DeviceToken = deviceToken,
-            EndpointArn = response.EndpointArn,
-            Platform = platform
-        };
+            _logger.LogError(
+                ex,
+                "SNS CreatePlatformEndpoint failed for User {UserId} Platform {Platform} IsProduction {IsProduction} Arn {PlatformArn}. Device NOT registered.",
+                userId, platform, isProduction, platformArn);
+            throw;
+        }
 
-        _context.UserDevices.Add(newDevice);
-        await _context.SaveChangesAsync();
+        if (existingDevice != null)
+        {
+            // Update the existing row in place to avoid a unique-constraint collision.
+            existingDevice.EndpointArn = response.EndpointArn;
+            existingDevice.Platform = platform;
+        }
+        else
+        {
+            _context.UserDevices.Add(new UserDevice
+            {
+                UserId = userId,
+                DeviceToken = deviceToken,
+                EndpointArn = response.EndpointArn,
+                Platform = platform
+            });
+        }
+
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // A concurrent register-device request already inserted this (UserId, DeviceToken).
+            // Registration is idempotent — make sure the surviving row points at this endpoint
+            // and treat it as success instead of returning a 500.
+            _logger.LogInformation(
+                "Concurrent device registration detected for User {UserId}; reconciling endpoint.",
+                userId);
+
+            foreach (var entry in _context.ChangeTracker.Entries<UserDevice>().ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            var winner = await _context.UserDevices
+                .FirstOrDefaultAsync(d => d.UserId == userId && d.DeviceToken == deviceToken);
+
+            if (winner != null && winner.EndpointArn != response.EndpointArn)
+            {
+                winner.EndpointArn = response.EndpointArn;
+                winner.Platform = platform;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        _logger.LogInformation(
+            "Registered push device for User {UserId} Platform {Platform} Endpoint {EndpointArn}",
+            userId, platform, response.EndpointArn);
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException ex)
+    {
+        // PostgreSQL SQLSTATE 23505 = unique_violation. Checked via the exception name to
+        // avoid a hard compile-time dependency on the Npgsql type here.
+        var inner = ex.InnerException;
+        return inner is not null
+            && inner.GetType().Name == "PostgresException"
+            && (inner.Data["SqlState"] as string == "23505"
+                || inner.Message.Contains("23505")
+                || inner.Message.Contains("duplicate key"));
     }
 
     public async Task<List<NotificationPreferenceDto>> GetPreferencesAsync(string userId)

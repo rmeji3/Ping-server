@@ -30,5 +30,11 @@ public class SearchHistory
     [MaxLength(500)]
     public string? ImageUrl { get; set; }
 
+    /// <summary>
+    /// Optional ping genre (Ping-type entries only) used to render the result icon.
+    /// </summary>
+    [MaxLength(100)]
+    public string? PingGenreName { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -73,6 +73,7 @@ public class SearchService(
                 sh.Type,
                 sh.TargetId,
                 sh.ImageUrl,
+                sh.PingGenreName,
                 sh.CreatedAt
             ))
             .ToListAsync();
@@ -101,6 +102,7 @@ public class SearchService(
             Type = input.Type,
             TargetId = input.TargetId,
             ImageUrl = UrlUtils.SanitizeUrl(input.ImageUrl),
+            PingGenreName = input.PingGenreName,
             CreatedAt = DateTime.UtcNow
         };
 
