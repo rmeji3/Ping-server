@@ -34,6 +34,12 @@ namespace Ping.Controllers.Reviews
             // Allow manual URL overrides if needed, though Image file takes precedence
             public string? ImageUrl { get; set; }
             public string? ThumbnailUrl { get; set; }
+
+            // When provided (non-null), the client is authoritative over the full, ordered image
+            // set. Each entry is either an existing image URL (to keep) or a "new:<n>" token that
+            // references the n-th newly uploaded file in Images. The first entry becomes the cover.
+            // An empty list clears all images. When null, legacy behavior applies.
+            public List<string>? ImageOrder { get; set; }
         }
 
         [HttpPost]
@@ -307,42 +313,85 @@ namespace Ping.Controllers.Reviews
 
             string? imgUrl = request.ImageUrl;
             string? thumbUrl = request.ThumbnailUrl;
-            var additionalImages = new List<string>();
+            List<string>? additionalToSave;
 
-            var allImagesToProcess = new List<IFormFile>();
-            if (request.Image != null) allImagesToProcess.Add(request.Image);
-            if (request.Images != null) allImagesToProcess.AddRange(request.Images);
-            allImagesToProcess = allImagesToProcess.Take(6).ToList();
+            // Upload any new image files first, preserving order (Image, then Images).
+            var newImageFiles = new List<IFormFile>();
+            if (request.Image != null) newImageFiles.Add(request.Image);
+            if (request.Images != null) newImageFiles.AddRange(request.Images);
+            newImageFiles = newImageFiles.Take(6).ToList();
 
-            // Handle Image Upload
-            if (allImagesToProcess.Any())
+            var uploaded = new List<(string original, string thumb)>();
+            if (newImageFiles.Any())
             {
-                try 
+                try
                 {
-                    bool isFirst = true;
-                    foreach(var imgFile in allImagesToProcess)
+                    foreach (var imgFile in newImageFiles)
                     {
                         var (original, thumb) = await imageService.ProcessAndUploadImageAsync(imgFile, "reviews", userId);
-                        if (isFirst) {
-                            imgUrl = original;
-                            thumbUrl = thumb;
-                            isFirst = false;
-                        } else {
-                            additionalImages.Add(original);
-                        }
+                        uploaded.Add((original, thumb));
                     }
                 }
                 catch (Exception ex)
                 {
-                     logger.LogError(ex, "Failed to upload image for review update.");
-                     return BadRequest("Failed to process image.");
+                    logger.LogError(ex, "Failed to upload image for review update.");
+                    return BadRequest("Failed to process image.");
                 }
             }
-            else 
+
+            if (request.ImageOrder != null)
             {
-                // Sanitize manual URLs to prevent file:// pollution
-                imgUrl = Ping.Utils.UrlUtils.SanitizeUrl(imgUrl);
-                thumbUrl = Ping.Utils.UrlUtils.SanitizeUrl(thumbUrl);
+                // Client-authoritative: reconstruct the full ordered set from the tokens.
+                var final = new List<(string url, string? thumb)>();
+                foreach (var token in request.ImageOrder)
+                {
+                    if (token != null && token.StartsWith("new:"))
+                    {
+                        if (int.TryParse(token.Substring(4), out var n) && n >= 0 && n < uploaded.Count)
+                        {
+                            final.Add((uploaded[n].original, uploaded[n].thumb));
+                        }
+                    }
+                    else
+                    {
+                        var clean = Ping.Utils.UrlUtils.SanitizeUrl(token);
+                        if (!string.IsNullOrWhiteSpace(clean)) final.Add((clean, null));
+                    }
+                }
+                final = final.Take(6).ToList();
+
+                if (final.Count > 0)
+                {
+                    imgUrl = final[0].url;
+                    // Use the freshly generated thumbnail for an uploaded cover, otherwise the
+                    // client-provided thumbnail (preserved primary) or the image itself.
+                    thumbUrl = final[0].thumb
+                        ?? (Ping.Utils.UrlUtils.SanitizeUrl(request.ThumbnailUrl) ?? final[0].url);
+                    additionalToSave = final.Skip(1).Select(f => f.url).ToList(); // may be empty to clear extras
+                }
+                else
+                {
+                    imgUrl = Ping.Utils.UrlUtils.SanitizeUrl(null);
+                    thumbUrl = imgUrl;
+                    additionalToSave = new List<string>();
+                }
+            }
+            else
+            {
+                // Legacy behavior: only newly uploaded files are considered.
+                if (uploaded.Any())
+                {
+                    imgUrl = uploaded[0].original;
+                    thumbUrl = uploaded[0].thumb;
+                    var extras = uploaded.Skip(1).Select(u => u.original).ToList();
+                    additionalToSave = extras.Count > 0 ? extras : null;
+                }
+                else
+                {
+                    imgUrl = Ping.Utils.UrlUtils.SanitizeUrl(imgUrl);
+                    thumbUrl = Ping.Utils.UrlUtils.SanitizeUrl(thumbUrl);
+                    additionalToSave = null;
+                }
             }
 
             // Map to DTO
@@ -352,7 +401,7 @@ namespace Ping.Controllers.Reviews
                 imgUrl,
                 thumbUrl,
                 request.Tags,
-                additionalImages.Count > 0 ? additionalImages : null
+                additionalToSave
             );
 
             try

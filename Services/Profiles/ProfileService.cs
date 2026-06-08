@@ -67,7 +67,9 @@ public class ProfileService(
             eventCount,
             followersCount,
             followingCount,
-            roles.ToArray()
+            roles.ToArray(),
+            user.IsFoundingMember && user.EmailConfirmed,
+            user.IsVerified
         );
     }
 
@@ -156,7 +158,9 @@ public class ProfileService(
                 isFriend,
                 u.ReviewsPrivacy,
                 u.PingsPrivacy,
-                u.LikesPrivacy
+                u.LikesPrivacy,
+                u.IsFoundingMember && u.EmailConfirmed,
+                u.IsVerified
              );
         }).ToList();
 
@@ -266,7 +270,9 @@ public class ProfileService(
             isFriend,
             user.ReviewsPrivacy,
             user.PingsPrivacy,
-            user.LikesPrivacy
+            user.LikesPrivacy,
+            user.IsFoundingMember && user.EmailConfirmed,
+            user.IsVerified
         );
     }
 
@@ -326,9 +332,12 @@ public class ProfileService(
             isFriend,
             user.ReviewsPrivacy,
             user.PingsPrivacy,
-            user.LikesPrivacy
+            user.LikesPrivacy,
+            user.IsFoundingMember && user.EmailConfirmed,
+            user.IsVerified
         );
     }
+
     public async Task<PaginatedResult<PingDetailsDto>> GetUserPingsAsync(string targetUserId, string currentUserId, PaginationParams pagination)
     {
         var user = await userManager.FindByIdAsync(targetUserId);

@@ -64,6 +64,9 @@ namespace Ping.Migrations.AppDb
                     b.Property<bool>("IsBanned")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsFoundingMember")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsVerified")
                         .HasColumnType("boolean");
 

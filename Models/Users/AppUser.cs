@@ -33,7 +33,9 @@ namespace Ping.Models.AppUsers
 
         public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
-        public bool IsVerified { get; set; }
+        public bool IsVerified { get; set; } = true;
+
+        public bool IsFoundingMember { get; set; }
     }
 
     public enum PrivacyConstraint

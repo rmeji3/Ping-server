@@ -20,7 +20,9 @@ public record ProfileDto(
     bool IsFriends,
     PrivacyConstraint ReviewsPrivacy,
     PrivacyConstraint PingsPrivacy,
-    PrivacyConstraint LikesPrivacy
+    PrivacyConstraint LikesPrivacy,
+    bool IsFoundingMember,
+    bool IsVerified
 );
 
 public enum FriendshipStatus
@@ -46,7 +48,9 @@ public record QuickProfileDto(
     bool IsFriends,
     PrivacyConstraint ReviewsPrivacy,
     PrivacyConstraint PingsPrivacy,
-    PrivacyConstraint LikesPrivacy
+    PrivacyConstraint LikesPrivacy,
+    bool IsFoundingMember,
+    bool IsVerified
 );
 
 public record PersonalProfileDto(
@@ -60,7 +64,9 @@ public record PersonalProfileDto(
     int EventCount,
     int FollowersCount,
     int FollowingCount,
-    string[] Roles
+    string[] Roles,
+    bool IsFoundingMember,
+    bool IsVerified
 );
 
 public record UpdateBioDto(

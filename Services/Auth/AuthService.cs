@@ -25,6 +25,8 @@ public class AuthService(
     Ping.Services.Apple.AppleAuthService appleAuthService,
     Ping.Services.Redis.IRedisService redis) : IAuthService
 {
+    private const int FoundingMemberLimit = 20;
+
     public async Task<object> RegisterAsync(RegisterDto dto)
     {
         var normalizedEmail = dto.Email.ToLowerInvariant();
@@ -181,6 +183,8 @@ public class AuthService(
                 ProfileImageUrl = Ping.Utils.UrlUtils.SanitizeProfileUrl(payload.Picture)
             };
 
+            await TryAssignFoundingMemberAsync(user);
+
             var result = await users.CreateAsync(user);
             if (!result.Succeeded)
             {
@@ -225,20 +229,24 @@ public class AuthService(
         if (user == null)
         {
             // 3. Register new user
-            // NOTE: Apple only sends FirstName/LastName on the FIRST login. 
+            // NOTE: Apple only sends FirstName/LastName on the FIRST login.
             // If we missed it (e.g. user re-installing app), these might be null.
-            string firstName = !string.IsNullOrWhiteSpace(dto.FirstName) ? dto.FirstName : "Apple";
-            string lastName = !string.IsNullOrWhiteSpace(dto.LastName) ? dto.LastName : "User";
+            var firstName = dto.FirstName?.Trim() ?? "";
+            var lastName = dto.LastName?.Trim() ?? "";
+            var fullName = $"{firstName} {lastName}".Trim();
+            var emailLocalPart = payload.Email.Split('@')[0];
 
             user = new AppUser
             {
-                UserName = await GenerateUniqueUsernameAsync(firstName, payload.Email),
+                UserName = await GenerateUniqueUsernameAsync(fullName, payload.Email),
                 Email = payload.Email,
-                FirstName = firstName,
+                FirstName = !string.IsNullOrWhiteSpace(firstName) ? firstName : emailLocalPart,
                 LastName = lastName,
                 EmailConfirmed = true,
                 CreatedUtc = DateTimeOffset.UtcNow
             };
+
+            await TryAssignFoundingMemberAsync(user);
 
             var result = await users.CreateAsync(user);
             if (!result.Succeeded)
@@ -488,8 +496,9 @@ public class AuthService(
         if (user.EmailConfirmed) return await tokens.CreateAuthResponseAsync(user);
 
         user.EmailConfirmed = true;
+        await TryAssignFoundingMemberAsync(user);
         await users.UpdateAsync(user);
-        
+
         await redis.DeleteAsync(redisKey);
 
         logger.LogInformation("Email verified for user {UserId}", user.Id);
@@ -588,6 +597,20 @@ public class AuthService(
         }
 
         await DeleteAccountAsync(user.Id);
+    }
+
+    private async Task TryAssignFoundingMemberAsync(AppUser user)
+    {
+        if (!user.EmailConfirmed || user.IsFoundingMember)
+        {
+            return;
+        }
+
+        var foundingCount = await users.Users.CountAsync(u => u.IsFoundingMember);
+        if (foundingCount < FoundingMemberLimit)
+        {
+            user.IsFoundingMember = true;
+        }
     }
 }
 

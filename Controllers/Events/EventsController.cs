@@ -39,6 +39,9 @@ namespace Ping.Controllers.Events
              public new string? ThumbnailUrl { get; set; }
 
              public IFormFile? Image { get; set; }
+
+             // When true (and no new Image is uploaded), clear the existing event image.
+             public bool RemoveImage { get; set; }
         }
         // POST /api/Events/create
         // POST /api/Events/create
@@ -367,11 +370,19 @@ namespace Ping.Controllers.Events
                     return BadRequest("Image upload failed: " + ex.Message);
                 }
             }
-            else 
+            else if (request.RemoveImage)
             {
-                // Sanitize manual URLs
-                imgUrl = Ping.Utils.UrlUtils.SanitizeUrl(imgUrl);
-                thumbUrl = Ping.Utils.UrlUtils.SanitizeUrl(thumbUrl);
+                // Explicitly clear the image (stores the "no image" placeholder).
+                imgUrl = Ping.Utils.UrlUtils.SanitizeUrl(null);
+                thumbUrl = imgUrl;
+            }
+            else
+            {
+                // No new image uploaded. Only sanitize when the client explicitly provided a URL;
+                // otherwise leave null so the service keeps the existing image. (SanitizeUrl(null)
+                // returns a placeholder, which would wipe the image on a description-only edit.)
+                imgUrl = string.IsNullOrWhiteSpace(imgUrl) ? null : Ping.Utils.UrlUtils.SanitizeUrl(imgUrl);
+                thumbUrl = string.IsNullOrWhiteSpace(thumbUrl) ? null : Ping.Utils.UrlUtils.SanitizeUrl(thumbUrl);
             }
 
             var dto = new UpdateEventDto
