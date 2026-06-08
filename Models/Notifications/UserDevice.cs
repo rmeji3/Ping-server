@@ -19,9 +19,6 @@ public class UserDevice
     [Required]
     public string DeviceToken { get; set; } = string.Empty;
 
-    [Required]
-    public string EndpointArn { get; set; } = string.Empty;
-
     public DevicePlatform Platform { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
