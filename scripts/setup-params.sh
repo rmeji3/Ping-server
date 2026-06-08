@@ -71,10 +71,14 @@ GOOGLE_CID=$(read_value "Google Client ID" "")
 OPENAI_KEY=$(read_secret "OpenAI API Key")
 
 echo ""
-echo "--- AWS (S3/SNS/SES) ---"
+echo "--- AWS (S3/SES) ---"
 AWS_AK=$(read_secret "AWS Access Key")
 AWS_SK=$(read_secret "AWS Secret Key")
 AWS_BUCKET=$(read_value "S3 Bucket" "ping-app")
+
+echo ""
+echo "--- Expo ---"
+EXPO_TOKEN=$(read_secret "Expo Access Token")
 
 echo ""
 echo "=== Storing parameters in SSM ($REGION) ==="
@@ -115,6 +119,9 @@ put_secret "AWS__AccessKey"   "$AWS_AK"
 put_secret "AWS__SecretKey"   "$AWS_SK"
 put_string "AWS__Region"      'us-east-1'
 put_string "AWS__BucketName"  "$AWS_BUCKET"
+
+# Expo
+put_secret "Expo__AccessToken" "$EXPO_TOKEN"
 
 echo ""
 echo "=== Done! All AWS SSM updates complete ==="
