@@ -3,8 +3,9 @@ using Ping.Models;
 using Ping.Models.Notifications;
 using Ping.Services.Redis;
 using Microsoft.EntityFrameworkCore;
-using Amazon.SimpleNotificationService;
-using Amazon.SimpleNotificationService.Model;
+using System.Text.Json;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using Ping.Dtos.Notifications;
 using Ping.Dtos.Common;
@@ -17,20 +18,20 @@ public class NotificationService : INotificationService
     private readonly IRedisService _redis;
     private readonly IConfiguration _config;
     private readonly ILogger<NotificationService> _logger;
-    private readonly IAmazonSimpleNotificationService _snsClient;
+    private readonly HttpClient _httpClient;
 
     public NotificationService(
         AppDbContext context,
         IRedisService redis,
         IConfiguration config,
         ILogger<NotificationService> logger,
-        IAmazonSimpleNotificationService snsClient)
+        HttpClient httpClient)
     {
         _context = context;
         _redis = redis;
         _config = config;
         _logger = logger;
-        _snsClient = snsClient;
+        _httpClient = httpClient;
     }
 
     public async Task SendNotificationAsync(Notification notification)
@@ -74,11 +75,8 @@ public class NotificationService : INotificationService
             {
                 _logger.LogError(ex, "Failed to send push notification to device {DeviceId} for user {UserId}", device.Id, device.UserId);
                 // If endpoint is disabled/invalid, we remove it here
-                if (ex is EndpointDisabledException || 
-                    ex is NotFoundException || 
-                    ex.Message.Contains("Endpoint is disabled") || 
-                    ex.Message.Contains("EndpointDisabled") || 
-                    ex.Message.Contains("NotFound"))
+                if (ex.Message.Contains("DeviceNotRegistered") || 
+                    ex.Message.Contains("Expo push failed"))
                 {
                     _logger.LogInformation("Removing invalid/disabled device {DeviceId} for user {UserId}", device.Id, device.UserId);
                     _context.UserDevices.Remove(device);
@@ -90,131 +88,60 @@ public class NotificationService : INotificationService
 
     private async Task SendPushNotificationAsync(UserDevice device, Notification notification, int badgeCount)
     {
-        string messagePayload;
-
-        if (device.Platform == DevicePlatform.Apple)
+        var payload = new
         {
-            var aps = new
+            to = device.DeviceToken,
+            title = notification.Title,
+            body = notification.Message,
+            sound = "default",
+            badge = badgeCount,
+            data = new
             {
-                aps = new
-                {
-                    alert = new
-                    {
-                        title = notification.Title,
-                        body = notification.Message
-                    },
-                    sound = "default",
-                    badge = badgeCount,
-                    category = notification.Type.ToString()
-                },
                 notificationId = notification.Id,
                 referenceId = notification.ReferenceId,
                 imageThumbnailUrl = notification.ImageThumbnailUrl,
                 type = notification.Type.ToString()
-            };
+            }
+        };
 
-            var payload = new Dictionary<string, string>
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://exp.host/--/api/v2/push/send");
+        request.Content = new StringContent(JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
+
+        var token = _config.GetValue<string>("Expo:AccessToken");
+        if (!string.IsNullOrEmpty(token))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        var response = await _httpClient.SendAsync(request);
+        var responseContent = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Expo push HTTP request failed: {Response}", responseContent);
+            throw new Exception("Expo push failed: " + responseContent);
+        }
+
+        // Check Expo specific error in the response body
+        // Response format: { "data": { "status": "ok" | "error", "message": "...", "details": { "error": "DeviceNotRegistered" } } }
+        if (responseContent.Contains("\"status\":\"error\"") || responseContent.Contains("\"status\": \"error\""))
+        {
+            _logger.LogError("Expo push API returned error: {Response}", responseContent);
+            
+            if (responseContent.Contains("DeviceNotRegistered"))
             {
-                { "default", notification.Message },
-                { "APNS_SANDBOX", JsonSerializer.Serialize(aps) },
-                { "APNS", JsonSerializer.Serialize(aps) }
-            };
-
-            messagePayload = JsonSerializer.Serialize(payload);
+                throw new Exception("DeviceNotRegistered");
+            }
         }
-        else
-        {
-            // Android/FCM (if needed later)
-            return;
-        }
-
-        await _snsClient.PublishAsync(new PublishRequest
-        {
-            TargetArn = device.EndpointArn,
-            Message = messagePayload,
-            MessageStructure = "json"
-        });
     }
 
     public async Task RegisterDeviceAsync(string userId, string deviceToken, DevicePlatform platform, bool isProduction)
     {
-        var platformArn = platform == DevicePlatform.Apple
-            ? (isProduction ? _config.GetValue<string>("AWS:SNS:ApnsProductionArn") : _config.GetValue<string>("AWS:SNS:ApnsSandboxArn"))
-            : _config.GetValue<string>("AWS:SNS:FcmArn");
-
-        if (string.IsNullOrEmpty(platformArn))
-        {
-            _logger.LogError("SNS Platform Application ARN not configured for {Platform}", platform);
-            throw new InvalidOperationException("Push notifications not configured.");
-        }
-
-        // The endpoint must belong to the SAME SNS platform application we're targeting now
-        // (e.g. APNS vs APNS_SANDBOX). The platform app segment of the endpoint ARN
-        // (".../endpoint/<APP>/<NAME>/...") mirrors the platform application ARN
-        // (".../app/<APP>/<NAME>"). Devices registered under the old sandbox app must be
-        // re-created under the production app, not reused.
-        var expectedAppSegment = platformArn.Contains(":app/")
-            ? "/endpoint/" + platformArn.Substring(platformArn.IndexOf(":app/") + ":app/".Length) + "/"
-            : null;
-
-        // Check if device already registered
         var existingDevice = await _context.UserDevices
             .FirstOrDefaultAsync(d => d.UserId == userId && d.DeviceToken == deviceToken);
 
-        if (existingDevice != null
-            && expectedAppSegment != null
-            && !existingDevice.EndpointArn.Contains(expectedAppSegment))
-        {
-            // Endpoint belongs to a different platform application (e.g. sandbox). Don't reuse
-            // it — fall through to recreate under the correct app and update the row in place.
-            _logger.LogInformation(
-                "Existing endpoint {EndpointArn} does not match target platform app for User {UserId}. Re-creating.",
-                existingDevice.EndpointArn, userId);
-        }
-        else if (existingDevice != null)
-        {
-            // Ensure endpoint is enabled in SNS
-            try
-            {
-                await _snsClient.SetEndpointAttributesAsync(new SetEndpointAttributesRequest
-                {
-                    EndpointArn = existingDevice.EndpointArn,
-                    Attributes = new Dictionary<string, string> { { "Enabled", "true" }, { "Token", deviceToken } }
-                });
-                return;
-            }
-            catch (Exception ex)
-            {
-                // Old endpoint is stale/deleted (e.g. created under a different platform app).
-                // Re-create the SNS endpoint and update this row IN PLACE below — do NOT
-                // remove+insert, which collides with the UserId+DeviceToken unique index.
-                _logger.LogWarning(ex, "Failed to update existing SNS endpoint {EndpointArn}. Re-creating.", existingDevice.EndpointArn);
-            }
-        }
-
-        // Create new endpoint
-        CreatePlatformEndpointResponse response;
-        try
-        {
-            response = await _snsClient.CreatePlatformEndpointAsync(new CreatePlatformEndpointRequest
-            {
-                PlatformApplicationArn = platformArn,
-                Token = deviceToken
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "SNS CreatePlatformEndpoint failed for User {UserId} Platform {Platform} IsProduction {IsProduction} Arn {PlatformArn}. Device NOT registered.",
-                userId, platform, isProduction, platformArn);
-            throw;
-        }
-
         if (existingDevice != null)
         {
-            // Update the existing row in place to avoid a unique-constraint collision.
-            existingDevice.EndpointArn = response.EndpointArn;
             existingDevice.Platform = platform;
         }
         else
@@ -223,7 +150,6 @@ public class NotificationService : INotificationService
             {
                 UserId = userId,
                 DeviceToken = deviceToken,
-                EndpointArn = response.EndpointArn,
                 Platform = platform
             });
         }
@@ -234,32 +160,10 @@ public class NotificationService : INotificationService
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // A concurrent register-device request already inserted this (UserId, DeviceToken).
-            // Registration is idempotent — make sure the surviving row points at this endpoint
-            // and treat it as success instead of returning a 500.
-            _logger.LogInformation(
-                "Concurrent device registration detected for User {UserId}; reconciling endpoint.",
-                userId);
-
-            foreach (var entry in _context.ChangeTracker.Entries<UserDevice>().ToList())
-            {
-                entry.State = EntityState.Detached;
-            }
-
-            var winner = await _context.UserDevices
-                .FirstOrDefaultAsync(d => d.UserId == userId && d.DeviceToken == deviceToken);
-
-            if (winner != null && winner.EndpointArn != response.EndpointArn)
-            {
-                winner.EndpointArn = response.EndpointArn;
-                winner.Platform = platform;
-                await _context.SaveChangesAsync();
-            }
+            _logger.LogInformation("Concurrent device registration detected for User {UserId}", userId);
         }
 
-        _logger.LogInformation(
-            "Registered push device for User {UserId} Platform {Platform} Endpoint {EndpointArn}",
-            userId, platform, response.EndpointArn);
+        _logger.LogInformation("Registered push device for User {UserId} Platform {Platform}", userId, platform);
     }
 
     private static bool IsUniqueViolation(DbUpdateException ex)

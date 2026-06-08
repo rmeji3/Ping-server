@@ -313,9 +313,9 @@ if (!string.IsNullOrEmpty(awsRegion))
 
 builder.Services.AddDefaultAWSOptions(awsOptions);
 builder.Services.AddMemoryCache(); // Required for AppleAuthService JWKS caching
-builder.Services.AddAWSService<IAmazonS3>();
+builder.Services.AddAWSService<Amazon.S3.IAmazonS3>(); // Add S3
 builder.Services.AddAWSService<Amazon.SimpleEmail.IAmazonSimpleEmailService>(); // Add SES
-builder.Services.AddAWSService<Amazon.SimpleNotificationService.IAmazonSimpleNotificationService>(); // Add SNS
+builder.Services.AddHttpClient<INotificationService, NotificationService>();
 builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddScoped<Ping.Services.Email.IEmailService, Ping.Services.Email.SesEmailService>(); // Add EmailService
 builder.Services.AddHttpClient<Ping.Services.Moderation.IModerationService, Ping.Services.Moderation.OpenAIModerationService>();
