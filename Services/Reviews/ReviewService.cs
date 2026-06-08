@@ -76,6 +76,7 @@ public class ReviewService(
             Content = dto.Content,
             ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl),
             ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl ?? dto.ImageUrl),
+            AdditionalImageUrls = dto.AdditionalImageUrls ?? new List<string>(),
             CreatedAt = DateTime.UtcNow,
             Likes = 0,
         };
@@ -156,7 +157,8 @@ public class ReviewService(
             false, // IsLiked
             true, // IsOwner
             dto.Tags ?? new List<string>(), // Return tags
-            pingInfo?.IsDeleted ?? false
+            pingInfo?.IsDeleted ?? false,
+            review.AdditionalImageUrls
         );
     }
 
@@ -251,7 +253,8 @@ public class ReviewService(
             likedReviewIds.Contains(r.Id), 
             r.UserId == userId, // IsOwner
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
-            r.PingActivity!.Ping.IsDeleted
+            r.PingActivity!.Ping.IsDeleted,
+            r.AdditionalImageUrls
         )).ToList();
 
         return new PaginatedResult<ReviewDto>(reviewDtos, count, pagination.PageNumber, pagination.PageSize);
@@ -409,7 +412,8 @@ public class ReviewService(
             likedReviewIds.Contains(r.Id), 
             r.UserId == userId, // IsOwner
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
-            r.PingActivity.Ping.IsDeleted
+            r.PingActivity.Ping.IsDeleted,
+            r.AdditionalImageUrls
         )).ToList();
 
         logger.LogInformation("Explore reviews fetched: Page {PageNumber}, Size {PageSize}, Count {Count}", 
@@ -626,7 +630,8 @@ public class ReviewService(
                 viewerLikedIds.Contains(rl.Review.Id), // IsLiked by Viewer
                 rl.Review.UserId == viewerUserId, // IsOwner
                 rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
-                rl.Review.PingActivity.Ping.IsDeleted
+                rl.Review.PingActivity.Ping.IsDeleted,
+                rl.Review.AdditionalImageUrls
             )).ToList();
 
         return result.ToPaginatedResult(pagination);
@@ -692,7 +697,8 @@ public class ReviewService(
                 true, // IsLiked
                 rl.Review.UserId == userId, // IsOwner
                 rl.Review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
-                rl.Review.PingActivity.Ping.IsDeleted
+                rl.Review.PingActivity.Ping.IsDeleted,
+                rl.Review.AdditionalImageUrls
             )).ToList();
 
         logger.LogInformation("Liked reviews for {UserId} retrieved: {Count} reviews", userId, result.Count);
@@ -756,7 +762,8 @@ public class ReviewService(
             likedReviewIds.Contains(r.Id),
             true, // IsOwner (My Review)
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
-            r.PingActivity.Ping.IsDeleted
+            r.PingActivity.Ping.IsDeleted,
+            r.AdditionalImageUrls
         )).ToList();
 
         logger.LogInformation("My reviews fetched for {UserId}: {Count} reviews", userId, result.Count);
@@ -825,7 +832,8 @@ public class ReviewService(
             likedReviewIds.Contains(r.Id), 
             r.UserId == currentUserId, // IsOwner
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
-            r.PingActivity.Ping.IsDeleted
+            r.PingActivity.Ping.IsDeleted,
+            r.AdditionalImageUrls
         )).ToList();
 
         logger.LogInformation("User reviews fetched for {UserId}: {Count} reviews", targetUserId, result.Count);
@@ -906,7 +914,8 @@ public class ReviewService(
             likedReviewIds.Contains(r.Id), 
             r.UserId == userId, // IsOwner
             r.ReviewTags.Select(rt => rt.Tag.Name).ToList(), 
-            r.PingActivity.Ping.IsDeleted
+            r.PingActivity.Ping.IsDeleted,
+            r.AdditionalImageUrls
         )).ToList();
 
         logger.LogInformation("Friends feed fetched for {UserId}: {Count} reviews", userId, result.Count);
@@ -989,6 +998,12 @@ public class ReviewService(
             updated = true;
         }
 
+        if (dto.AdditionalImageUrls != null)
+        {
+            review.AdditionalImageUrls = dto.AdditionalImageUrls;
+            updated = true;
+        }
+
         if (dto.Tags != null)
         {
             // Simplified Tag Update: clear existing, add new
@@ -1043,7 +1058,8 @@ public class ReviewService(
             await appDb.ReviewLikes.AnyAsync(rl => rl.ReviewId == review.Id && rl.UserId == userId),
             true, // IsOwner
             review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
-            review.PingActivity!.Ping.IsDeleted
+            review.PingActivity!.Ping.IsDeleted,
+            review.AdditionalImageUrls
         );
     }
 
@@ -1087,10 +1103,10 @@ public class ReviewService(
             review.CreatedAt,
             review.Likes,
             isLiked,
-            review.UserId == userId,
+            review.UserId == userId, // IsOwner
             review.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
-            review.PingActivity.Ping.IsDeleted
+            review.PingActivity.Ping.IsDeleted,
+            review.AdditionalImageUrls
         );
     }
 }
-

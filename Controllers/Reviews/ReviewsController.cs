@@ -19,6 +19,7 @@ namespace Ping.Controllers.Reviews
             public int Rating { get; set; }
             public string? Content { get; set; }
             public IFormFile? Image { get; set; }
+            public List<IFormFile>? Images { get; set; }
             public List<string>? Tags { get; set; }
         }
 
@@ -27,6 +28,7 @@ namespace Ping.Controllers.Reviews
             public int? Rating { get; set; }
             public string? Content { get; set; }
             public IFormFile? Image { get; set; }
+            public List<IFormFile>? Images { get; set; }
             public List<string>? Tags { get; set; }
             
             // Allow manual URL overrides if needed, though Image file takes precedence
@@ -48,15 +50,30 @@ namespace Ping.Controllers.Reviews
 
             string imageUrl = "";
             string thumbnailUrl = "";
+            var additionalImages = new List<string>();
+
+            var allImagesToProcess = new List<IFormFile>();
+            if (request.Image != null) allImagesToProcess.Add(request.Image);
+            if (request.Images != null) allImagesToProcess.AddRange(request.Images);
+            allImagesToProcess = allImagesToProcess.Take(6).ToList();
 
             // Handle Image Upload
-            if (request.Image != null)
+            if (allImagesToProcess.Any())
             {
                 try 
                 {
-                    var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "reviews", userId);
-                    imageUrl = original;
-                    thumbnailUrl = thumb;
+                    bool isFirst = true;
+                    foreach(var imgFile in allImagesToProcess)
+                    {
+                        var (original, thumb) = await imageService.ProcessAndUploadImageAsync(imgFile, "reviews", userId);
+                        if (isFirst) {
+                            imageUrl = original;
+                            thumbnailUrl = thumb;
+                            isFirst = false;
+                        } else {
+                            additionalImages.Add(original);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -78,7 +95,8 @@ namespace Ping.Controllers.Reviews
                 request.Content,
                 imageUrl,
                 thumbnailUrl,
-                request.Tags
+                request.Tags,
+                additionalImages
             );
 
             try
@@ -289,15 +307,30 @@ namespace Ping.Controllers.Reviews
 
             string? imgUrl = request.ImageUrl;
             string? thumbUrl = request.ThumbnailUrl;
+            var additionalImages = new List<string>();
+
+            var allImagesToProcess = new List<IFormFile>();
+            if (request.Image != null) allImagesToProcess.Add(request.Image);
+            if (request.Images != null) allImagesToProcess.AddRange(request.Images);
+            allImagesToProcess = allImagesToProcess.Take(6).ToList();
 
             // Handle Image Upload
-            if (request.Image != null)
+            if (allImagesToProcess.Any())
             {
                 try 
                 {
-                    var (original, thumb) = await imageService.ProcessAndUploadImageAsync(request.Image, "reviews", userId);
-                    imgUrl = original;
-                    thumbUrl = thumb;
+                    bool isFirst = true;
+                    foreach(var imgFile in allImagesToProcess)
+                    {
+                        var (original, thumb) = await imageService.ProcessAndUploadImageAsync(imgFile, "reviews", userId);
+                        if (isFirst) {
+                            imgUrl = original;
+                            thumbUrl = thumb;
+                            isFirst = false;
+                        } else {
+                            additionalImages.Add(original);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -318,7 +351,8 @@ namespace Ping.Controllers.Reviews
                 request.Content,
                 imgUrl,
                 thumbUrl,
-                request.Tags
+                request.Tags,
+                additionalImages.Count > 0 ? additionalImages : null
             );
 
             try

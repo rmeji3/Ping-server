@@ -16,7 +16,8 @@ public record ReviewDto(
     bool IsLiked,
     bool IsOwner,
     List<string> Tags,
-    bool IsPingDeleted
+    bool IsPingDeleted,
+    List<string>? AdditionalImageUrls = null
 );
 
 public record CreateReviewDto(
@@ -28,7 +29,8 @@ public record CreateReviewDto(
     string? ImageUrl,
     [MaxLength(2048)]
     string? ThumbnailUrl,
-    List<string>? Tags = null
+    List<string>? Tags = null,
+    List<string>? AdditionalImageUrls = null
 );
 
 public record UpdateReviewDto(
@@ -40,7 +42,8 @@ public record UpdateReviewDto(
     string? ImageUrl,
     [MaxLength(2048)]
     string? ThumbnailUrl,
-    List<string>? Tags
+    List<string>? Tags,
+    List<string>? AdditionalImageUrls = null
 );
 
 public record ExploreReviewDto(
@@ -65,7 +68,8 @@ public record ExploreReviewDto(
     bool IsLiked,
     bool IsOwner,
     List<string> Tags,
-    bool IsPingDeleted
+    bool IsPingDeleted,
+    List<string>? AdditionalImageUrls = null
 );
 
 public class ExploreReviewsFilterDto

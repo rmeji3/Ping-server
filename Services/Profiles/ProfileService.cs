@@ -838,7 +838,8 @@ public class ProfileService(
                 r.LikesList.Any(l => l.UserId == currentUserId),
                 r.UserId == currentUserId, // IsOwner
                 r.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
-                ping.IsDeleted
+                ping.IsDeleted,
+                r.AdditionalImageUrls
             ))
             .ToListAsync();
 
