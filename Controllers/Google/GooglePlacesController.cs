@@ -56,6 +56,10 @@ public class GooglePlacesController : ControllerBase
         {
             return StatusCode(500, "Google API Key not configured on server.");
         }
+        if (apiKey == "dummy-google-api-key-for-local-dev")
+        {
+            return Content("{\"status\":\"OK\",\"predictions\":[],\"results\":[]}", "application/json");
+        }
 
         var client = _httpClientFactory.CreateClient();
         var url = $"https://maps.googleapis.com/maps/api/place/autocomplete/json?input={Uri.EscapeDataString(input)}&key={apiKey}&language=en";
@@ -100,6 +104,10 @@ public class GooglePlacesController : ControllerBase
         if (string.IsNullOrEmpty(apiKey))
         {
             return StatusCode(500, "Google API Key not configured on server.");
+        }
+        if (apiKey == "dummy-google-api-key-for-local-dev")
+        {
+            return Content("{\"status\":\"OK\",\"result\":{}}", "application/json");
         }
 
         var client = _httpClientFactory.CreateClient();
@@ -152,6 +160,10 @@ public class GooglePlacesController : ControllerBase
         if (string.IsNullOrEmpty(apiKey))
         {
             return StatusCode(500, "Google API Key not configured on server.");
+        }
+        if (apiKey == "dummy-google-api-key-for-local-dev")
+        {
+            return Content("{\"status\":\"OK\",\"results\":[]}", "application/json");
         }
 
         var queryParts = new List<string>();
@@ -228,6 +240,10 @@ public class GooglePlacesController : ControllerBase
         if (string.IsNullOrEmpty(apiKey))
         {
             return StatusCode(500, "Google API Key not configured on server.");
+        }
+        if (apiKey == "dummy-google-api-key-for-local-dev")
+        {
+            return Content("{\"status\":\"OK\",\"results\":[]}", "application/json");
         }
 
         if (string.Equals(rankby, "distance", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(keyword) && string.IsNullOrWhiteSpace(type))

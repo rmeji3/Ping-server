@@ -73,9 +73,14 @@ public class NotificationService : INotificationService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send push notification to device {DeviceId} for user {UserId}", device.Id, device.UserId);
-                // If endpoint is disabled/invalid, we could remove it here
-                if (ex.Message.Contains("EndpointDisabled") || ex.Message.Contains("NotFound"))
+                // If endpoint is disabled/invalid, we remove it here
+                if (ex is EndpointDisabledException || 
+                    ex is NotFoundException || 
+                    ex.Message.Contains("Endpoint is disabled") || 
+                    ex.Message.Contains("EndpointDisabled") || 
+                    ex.Message.Contains("NotFound"))
                 {
+                    _logger.LogInformation("Removing invalid/disabled device {DeviceId} for user {UserId}", device.Id, device.UserId);
                     _context.UserDevices.Remove(device);
                     await _context.SaveChangesAsync();
                 }

@@ -112,6 +112,13 @@ var googleClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
 if (!string.IsNullOrEmpty(googleClientId))
     builder.Configuration["Google:ClientId"] = googleClientId;
 
+// Fallback if no Google API Key provided in Development (prevents crash)
+if (string.IsNullOrEmpty(builder.Configuration["Google:ApiKey"]) && builder.Environment.IsDevelopment())
+{
+    Console.WriteLine("WARNING: Google API Key is missing. Using a dummy key for local development.");
+    builder.Configuration["Google:ApiKey"] = "dummy-google-api-key-for-local-dev";
+}
+
 // Rate Limiting
 var rateLimitGlobal = Environment.GetEnvironmentVariable("RATE_LIMIT_GLOBAL_PER_MINUTE");
 if (!string.IsNullOrEmpty(rateLimitGlobal))
@@ -145,6 +152,13 @@ if (!string.IsNullOrEmpty(awsRegionEnv))
 var awsBucketNameEnv = Environment.GetEnvironmentVariable("AWS__BucketName");
 if (!string.IsNullOrEmpty(awsBucketNameEnv))
     builder.Configuration["AWS:BucketName"] = awsBucketNameEnv;
+
+// Fallback if no AWS Bucket Name provided in Development (prevents crash)
+if (string.IsNullOrEmpty(builder.Configuration["AWS:BucketName"]) && builder.Environment.IsDevelopment())
+{
+    Console.WriteLine("WARNING: AWS:BucketName is missing. Using a dummy bucket name for local development.");
+    builder.Configuration["AWS:BucketName"] = "dummy-bucket-name-for-local-dev";
+}
 
 
 // --- EF Core (SQLite / PostgreSQL Hybrid) ---
@@ -191,6 +205,13 @@ builder.Services.AddIdentityCore<AppUser>(opt =>
 .AddDefaultTokenProviders();
 
 // --- JwtOptions bound from config ---
+// Fallback if no JWT key provided in Development (prevents crash when running locally)
+if (string.IsNullOrEmpty(builder.Configuration["Jwt:Key"]) && builder.Environment.IsDevelopment())
+{
+    Console.WriteLine("WARNING: JWT Key is missing. Using a dummy key for local development.");
+    builder.Configuration["Jwt:Key"] = "ThisIsADummySecretKeyForLocalDevelopmentOnlyPleaseDoNotUseInProd!";
+}
+
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
 JwtOptions jwt;
@@ -314,17 +335,15 @@ builder.Services.AddHealthChecks()
 // --- Semantic Kernel ---
 builder.Services.AddKernel(); // Always register Kernel
 
-var openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-if (!string.IsNullOrEmpty(openAiKey))
+var openAiKey = builder.Configuration["OPENAI_API_KEY"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+if (string.IsNullOrEmpty(openAiKey))
 {
-    builder.Services.AddOpenAIChatCompletion("gpt-3.5-turbo", openAiKey);
-}
-else
-{
-    // Fallback if no key provided (prevents crash, but AI features won't work)
-    // In production you might want to throw or log a warning
+    // Fallback if no key provided (prevents crash, but AI features will fail if called)
     Console.WriteLine("WARNING: OPENAI_API_KEY is missing. AI features will be disabled.");
+    openAiKey = "sk-dummykey1234567890123456789012345678901234567890"; // Dummy key to satisfy DI
 }
+
+builder.Services.AddOpenAIChatCompletion("gpt-3.5-turbo", openAiKey);
 
 // --- JWT Auth ---
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
