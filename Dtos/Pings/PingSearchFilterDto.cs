@@ -8,7 +8,7 @@ public record PingSearchFilterDto
 {
     public double? Latitude { get; init; }
     public double? Longitude { get; init; }
-    public double? RadiusKm { get; init; } = 5;
+    public double? RadiusKm { get; init; }
     public string? Query { get; init; }
     
     [MaxLength(10)]

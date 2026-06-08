@@ -93,7 +93,9 @@ namespace Ping.Controllers.Pings
         public async Task<ActionResult<PaginatedResult<PingDetailsDto>>> Nearby([FromQuery] PingSearchFilterDto filter)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await pingService.SearchPingsAsync(filter, userId);
+            // Nearby search should always have a radius, even when omitted by callers.
+            var effectiveFilter = filter with { RadiusKm = filter.RadiusKm ?? 5 };
+            var result = await pingService.SearchPingsAsync(effectiveFilter, userId);
             return Ok(result);
         }
 
