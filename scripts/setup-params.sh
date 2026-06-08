@@ -8,15 +8,29 @@
 REGION="us-east-1"
 PREFIX="/ping-server"
 
-put_secret() { aws ssm put-parameter --name "$PREFIX/$1" --type SecureString --region $REGION --overwrite --value "$2"; }
-put_string() { aws ssm put-parameter --name "$PREFIX/$1" --type String --region $REGION --overwrite --value "$2"; }
+put_secret() {
+  if [ -n "$2" ]; then
+    echo "Updating $1..."
+    aws ssm put-parameter --name "$PREFIX/$1" --type SecureString --region $REGION --overwrite --value "$2" > /dev/null
+  else
+    echo "Skipping $1 (kept previous value)"
+  fi
+}
 
-# Read a secret from user input (hidden)
+put_string() {
+  if [ -n "$2" ]; then
+    echo "Updating $1..."
+    aws ssm put-parameter --name "$PREFIX/$1" --type String --region $REGION --overwrite --value "$2" > /dev/null
+  else
+    echo "Skipping $1 (kept previous value)"
+  fi
+}
+
+# Read a secret from user input
 read_secret() {
   local prompt="$1"
   local var
-  read -sp "$prompt: " var
-  echo "" >&2
+  read -p "$prompt (Leave empty to keep current): " var
   echo "$var"
 }
 
@@ -25,16 +39,23 @@ read_value() {
   local prompt="$1"
   local default="$2"
   local var
-  read -p "$prompt [$default]: " var
+  read -p "$prompt [$default] (Leave empty to keep default): " var
   echo "${var:-$default}"
 }
 
 echo "=== Ping Server — SSM Parameter Setup ==="
 echo ""
+echo "NOTE: If you just press Enter, the script will skip updating that variable and keep your existing AWS SSM value."
+echo ""
 
 # Generate JWT Key automatically
-JWT_KEY=$(openssl rand -base64 64 | tr -d '\n')
-echo "Generated JWT Key: ${JWT_KEY:0:20}... (truncated)"
+read -p "Regenerate JWT Key? (This will log everyone out) [y/N]: " REGEN_JWT
+if [[ "$REGEN_JWT" =~ ^[Yy]$ ]]; then
+  JWT_KEY=$(openssl rand -base64 64 | tr -d '\n')
+  echo "Generated new JWT Key: ${JWT_KEY:0:20}... (truncated)"
+else
+  JWT_KEY=""
+fi
 
 # Prompt for secrets
 echo ""
@@ -59,8 +80,13 @@ echo ""
 echo "=== Storing parameters in SSM ($REGION) ==="
 
 # Connection Strings
-put_secret "AUTH_CONNECTION" "Host=$RDS_HOST;Database=ping_auth;Username=$RDS_USER;Password=$RDS_PASS"
-put_secret "APP_CONNECTION"  "Host=$RDS_HOST;Database=ping_app;Username=$RDS_USER;Password=$RDS_PASS"
+if [ -n "$RDS_PASS" ]; then
+  put_secret "AUTH_CONNECTION" "Host=$RDS_HOST;Database=ping_auth;Username=$RDS_USER;Password=$RDS_PASS"
+  put_secret "APP_CONNECTION"  "Host=$RDS_HOST;Database=ping_app;Username=$RDS_USER;Password=$RDS_PASS"
+else
+  echo "Skipping AUTH_CONNECTION & APP_CONNECTION (no password provided)"
+fi
+
 put_string "REDIS_CONNECTION" 'localhost:6379,abortConnect=false'
 put_string "DatabaseProvider" 'Postgres'
 
@@ -69,7 +95,7 @@ put_secret "JWT_KEY"                  "$JWT_KEY"
 put_string "JWT_ISSUER"               'api.ping-app.net'
 put_string "JWT_AUDIENCE"             'api.ping-app.net'
 put_string "JWT_ACCESS_TOKEN_MINUTES" '30'
-put_string "JWT_REFRESH_TOKEN_DAYS"    '30'
+put_string "JWT_REFRESH_TOKEN_DAYS"   '30'
 
 # Google
 put_secret "GOOGLE_API_KEY"   "$GOOGLE_KEY"
@@ -91,5 +117,5 @@ put_string "AWS__Region"      'us-east-1'
 put_string "AWS__BucketName"  "$AWS_BUCKET"
 
 echo ""
-echo "=== Done! All secrets stored in SSM ==="
-echo "Now SSH into EC2 and run: ~/start-server.sh"
+echo "=== Done! All AWS SSM updates complete ==="
+echo "To apply changes, SSH into EC2 and run: ~/start-server.sh"
