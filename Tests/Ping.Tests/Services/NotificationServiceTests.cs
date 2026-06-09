@@ -99,6 +99,17 @@ public class NotificationServiceTests
     }
 
     [Fact]
+    public async Task RegisterDeviceAsync_ShouldBeIdempotent_ForSameUserAndToken()
+    {
+        await _service.RegisterDeviceAsync("user1", "ExponentPushToken[abc]", DevicePlatform.Apple, isProduction: true);
+        await _service.RegisterDeviceAsync("user1", "ExponentPushToken[abc]", DevicePlatform.Apple, isProduction: true);
+
+        var devices = await _context.UserDevices.Where(d => d.UserId == "user1").ToListAsync();
+        Assert.Single(devices);
+        Assert.Equal(DevicePlatform.Apple, devices[0].Platform);
+    }
+
+    [Fact]
     public async Task GetUnreadCountAsync_ShouldReturnCorrectCount()
     {
         // Arrange

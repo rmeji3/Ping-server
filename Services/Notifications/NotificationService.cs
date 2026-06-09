@@ -137,14 +137,17 @@ public class NotificationService : INotificationService
 
     public async Task RegisterDeviceAsync(string userId, string deviceToken, DevicePlatform platform, bool isProduction)
     {
-        var existingDevice = await _context.UserDevices
-            .FirstOrDefaultAsync(d => d.UserId == userId && d.DeviceToken == deviceToken);
+        var updated = await _context.UserDevices
+            .Where(d => d.UserId == userId && d.DeviceToken == deviceToken)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.Platform, platform));
 
-        if (existingDevice != null)
+        if (updated > 0)
         {
-            existingDevice.Platform = platform;
+            _logger.LogInformation("Updated push device for User {UserId} Platform {Platform}", userId, platform);
+            return;
         }
-        else
+
+        try
         {
             _context.UserDevices.Add(new UserDevice
             {
@@ -152,15 +155,15 @@ public class NotificationService : INotificationService
                 DeviceToken = deviceToken,
                 Platform = platform
             });
-        }
-
-        try
-        {
             await _context.SaveChangesAsync();
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            _logger.LogInformation("Concurrent device registration detected for User {UserId}", userId);
+            _context.ChangeTracker.Clear();
+            await _context.UserDevices
+                .Where(d => d.UserId == userId && d.DeviceToken == deviceToken)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.Platform, platform));
+            _logger.LogInformation("Concurrent device registration resolved for User {UserId}", userId);
         }
 
         _logger.LogInformation("Registered push device for User {UserId} Platform {Platform}", userId, platform);
