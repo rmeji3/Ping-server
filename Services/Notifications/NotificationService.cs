@@ -71,17 +71,15 @@ public class NotificationService : INotificationService
             {
                 await SendPushNotificationAsync(device, notification, unreadCount);
             }
+            catch (Exception ex) when (ex.Message.Contains("DeviceNotRegistered"))
+            {
+                _logger.LogWarning("Removing unregistered push device {DeviceId} for user {UserId}", device.Id, device.UserId);
+                _context.UserDevices.Remove(device);
+                await _context.SaveChangesAsync();
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send push notification to device {DeviceId} for user {UserId}", device.Id, device.UserId);
-                // If endpoint is disabled/invalid, we remove it here
-                if (ex.Message.Contains("DeviceNotRegistered") || 
-                    ex.Message.Contains("Expo push failed"))
-                {
-                    _logger.LogInformation("Removing invalid/disabled device {DeviceId} for user {UserId}", device.Id, device.UserId);
-                    _context.UserDevices.Remove(device);
-                    await _context.SaveChangesAsync();
-                }
             }
         }
     }
@@ -119,7 +117,11 @@ public class NotificationService : INotificationService
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogError("Expo push HTTP request failed: {Response}", responseContent);
-            throw new Exception("Expo push failed: " + responseContent);
+            if (responseContent.Contains("DeviceNotRegistered"))
+            {
+                throw new Exception("DeviceNotRegistered");
+            }
+            throw new InvalidOperationException("Expo push failed: " + responseContent);
         }
 
         // Check Expo specific error in the response body

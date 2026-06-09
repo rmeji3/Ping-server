@@ -8,7 +8,15 @@ set -euo pipefail
 REGION="us-east-1"
 PREFIX="/ping-server"
 IMAGE="084128132616.dkr.ecr.us-east-1.amazonaws.com/ping-server:latest"
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/docker-compose.server.yml" ]]; then
+  ROOT_DIR="$SCRIPT_DIR"
+elif [[ -f "$SCRIPT_DIR/../docker-compose.server.yml" ]]; then
+  ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+  echo "ERROR: docker-compose.server.yml not found next to or above $SCRIPT_DIR" >&2
+  exit 1
+fi
 ENV_FILE="$ROOT_DIR/.env.server"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.server.yml"
 
@@ -44,6 +52,7 @@ AWS__AccessKey=$(p AWS__AccessKey)
 AWS__SecretKey=$(p AWS__SecretKey)
 AWS__Region=$(p AWS__Region)
 AWS__BucketName=$(p AWS__BucketName)
+Expo__AccessToken=$(p Expo__AccessToken)
 EOF
 
 echo "=== Restarting services with Docker Compose ==="
