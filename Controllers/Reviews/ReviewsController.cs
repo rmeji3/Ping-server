@@ -363,10 +363,28 @@ namespace Ping.Controllers.Reviews
                 if (final.Count > 0)
                 {
                     imgUrl = final[0].url;
-                    // Use the freshly generated thumbnail for an uploaded cover, otherwise the
-                    // client-provided thumbnail (preserved primary) or the image itself.
-                    thumbUrl = final[0].thumb
-                        ?? (Ping.Utils.UrlUtils.SanitizeUrl(request.ThumbnailUrl) ?? final[0].url);
+                    // Resolve the cover thumbnail in priority order:
+                    //  1. freshly uploaded cover -> its generated thumbnail
+                    //  2. client preserved the original primary -> the client-provided thumbnail
+                    //  3. an existing image was promoted to cover (no thumbnail anywhere) ->
+                    //     generate one from the cover image so the feed shows a real thumbnail
+                    //     instead of falling back to the (possibly missing) placeholder.
+                    var hasClientThumb = !string.IsNullOrWhiteSpace(request.ThumbnailUrl)
+                        && !Ping.Utils.UrlUtils.IsLocalPath(request.ThumbnailUrl);
+
+                    if (final[0].thumb != null)
+                    {
+                        thumbUrl = final[0].thumb;
+                    }
+                    else if (hasClientThumb)
+                    {
+                        thumbUrl = request.ThumbnailUrl;
+                    }
+                    else
+                    {
+                        thumbUrl = await imageService.GenerateThumbnailFromUrlAsync(final[0].url, "reviews", userId);
+                    }
+
                     additionalToSave = final.Skip(1).Select(f => f.url).ToList(); // may be empty to clear extras
                 }
                 else

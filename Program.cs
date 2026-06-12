@@ -323,8 +323,7 @@ builder.Services.AddScoped<Ping.Services.AI.ISemanticService, Ping.Services.AI.O
 builder.Services.AddScoped<Ping.Services.Apple.AppleAuthService>();
 builder.Services.AddScoped<Ping.Services.Google.GoogleAuthService>();
 builder.Services.AddScoped<RecommendationService>();
-builder.Services.AddScoped<Ping.Services.Images.IImageService, Ping.Services.Images.ImageService>();
-
+builder.Services.AddHttpClient<Ping.Services.Images.IImageService, Ping.Services.Images.ImageService>();
 
 // --- Health Checks ---
 builder.Services.AddHealthChecks()

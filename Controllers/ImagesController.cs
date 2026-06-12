@@ -30,7 +30,7 @@ public class ImagesController(IImageService imageService, IModerationService mod
         }
 
         // Validate content type before reading
-        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp", "image/gif" };
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif" };
         if (!allowedTypes.Contains(file.ContentType))
              return BadRequest("Invalid file type.");
 
