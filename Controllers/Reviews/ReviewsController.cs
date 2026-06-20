@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Ping.Dtos.Reviews;
 using Ping.Services.Reviews;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 using Ping.Dtos.Common;
@@ -150,6 +151,11 @@ namespace Ping.Controllers.Reviews
         }
 
         // GET /api/reviews/explore
+        // Requires auth: the feed is user-relative (IsOwner, liked state), and the client
+        // only calls it while authenticated. Without this, an expired token is silently
+        // treated as anonymous (userId=null) -> IsOwner=false on the user's own reviews,
+        // and no 401 is returned so the client's refresh-on-401 flow never fires.
+        [Authorize]
         [HttpGet("/api/reviews/explore")]
         [HttpGet("/api/v{version:apiVersion}/reviews/explore")]
         public async Task<ActionResult<PaginatedResult<ExploreReviewDto>>> GetExploreReviews(
