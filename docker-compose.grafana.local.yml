@@ -1,0 +1,36 @@
+# Local Grafana — runs on your laptop, NOT on the prod box.
+#
+# Usage:
+#   1. Open the tunnel to the prod box's Prometheus (keep it running):
+#        aws ssm start-session --region us-east-1 --target i-045de5c119d8b5574 \
+#          --document-name AWS-StartPortForwardingSession \
+#          --parameters '{"portNumber":["9090"],"localPortNumber":["9090"]}'
+#   2. Start Grafana:
+#        docker compose -f docker-compose.grafana.local.yml up -d
+#   3. Open http://localhost:3000  (login: admin / admin)
+#      The Prometheus datasource + dashboards are pre-provisioned.
+#   4. When done:
+#        docker compose -f docker-compose.grafana.local.yml down
+#      (add -v to also wipe the local Grafana state volume)
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-local
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    # Lets the container resolve the laptop host on Linux too (built-in on macOS).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Local datasource points at the tunnel (host.docker.internal:9090).
+      - ./grafana-local/datasources:/etc/grafana/provisioning/datasources:ro
+      # Reuse the same dashboards that were provisioned on the box.
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana-local-data:/var/lib/grafana
+
+volumes:
+  grafana-local-data:

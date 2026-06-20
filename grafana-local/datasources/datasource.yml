@@ -1,0 +1,15 @@
+apiVersion: 1
+
+# Local Grafana datasource. Points at the Prometheus that runs on the prod box,
+# reached through an SSM port-forward tunnel:
+#   aws ssm start-session --region us-east-1 --target <INSTANCE_ID> \
+#     --document-name AWS-StartPortForwardingSession \
+#     --parameters '{"portNumber":["9090"],"localPortNumber":["9090"]}'
+# host.docker.internal = the laptop host from inside the Grafana container.
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://host.docker.internal:9090
+    isDefault: true
+    editable: false
