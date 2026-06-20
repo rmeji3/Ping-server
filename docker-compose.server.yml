@@ -51,21 +51,9 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
     mem_limit: 160m
 
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    restart: always
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-    # Localhost-only. Reach it via an SSH tunnel, not a public port.
-    ports:
-      - "127.0.0.1:3000:3000"
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
-    depends_on:
-      - prometheus
-    mem_limit: 160m
+  # Grafana is intentionally NOT run on the prod box — on ~1GB it OOMs alongside
+  # app + redis + prometheus. Run it on your laptop instead, pointed at Prometheus
+  # over an SSM port-forward tunnel (localhost:9090 -> 127.0.0.1:9090 on the box).
 
 volumes:
   dataprotection-keys:
