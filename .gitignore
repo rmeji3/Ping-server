@@ -5,6 +5,7 @@
 
 # ENV
 .env
+.env.server
 
 # User-specific files
 *.rsuser

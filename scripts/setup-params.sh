@@ -65,6 +65,22 @@ RDS_USER=$(read_value "RDS Username" "rmeji3")
 RDS_PASS=$(read_secret "RDS Password")
 
 echo ""
+echo "--- Redis ---"
+read -p "Regenerate Redis password? (requires app restart) [y/N]: " REGEN_REDIS
+if [[ "$REGEN_REDIS" =~ ^[Yy]$ ]]; then
+  # hex only — safe inside the comma-delimited connection string
+  REDIS_PASS=$(openssl rand -hex 32)
+  echo "Generated new Redis password: ${REDIS_PASS:0:8}... (truncated)"
+else
+  REDIS_PASS=$(read_secret "Redis password")
+fi
+
+echo ""
+echo "--- Monitoring (Grafana) ---"
+GRAFANA_USER=$(read_value "Grafana admin username" "admin")
+GRAFANA_PASS=$(read_secret "Grafana admin password")
+
+echo ""
 echo "--- API Keys ---"
 GOOGLE_KEY=$(read_secret "Google API Key")
 GOOGLE_CID=$(read_value "Google Client ID" "")
@@ -91,7 +107,19 @@ else
   echo "Skipping AUTH_CONNECTION & APP_CONNECTION (no password provided)"
 fi
 
-put_string "REDIS_CONNECTION" 'localhost:6379,abortConnect=false'
+# Redis — password must be embedded in the connection string so the app can auth.
+# Host is the compose service name "redis" (reachable over the Docker network).
+if [ -n "$REDIS_PASS" ]; then
+  put_secret "REDIS_PASSWORD"   "$REDIS_PASS"
+  put_string "REDIS_CONNECTION" "redis:6379,password=$REDIS_PASS,abortConnect=false"
+else
+  echo "Skipping REDIS_PASSWORD & REDIS_CONNECTION (kept previous values)"
+fi
+
+# Grafana admin
+put_string "GRAFANA_ADMIN_USER" "$GRAFANA_USER"
+put_secret "GRAFANA_ADMIN_PASSWORD" "$GRAFANA_PASS"
+
 put_string "DatabaseProvider" 'Postgres'
 
 # JWT

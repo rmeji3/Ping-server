@@ -47,7 +47,9 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.AspNetCore.Hosting", LogEventLevel.Information)
+    // UseSerilogRequestLogging emits one clean summary line per request, so the
+    // built-in "Request starting/finished" Diagnostics pair is redundant noise.
+    .MinimumLevel.Override("Microsoft.AspNetCore.Hosting", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.AspNetCore.Mvc", LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .Enrich.WithMachineName()
@@ -453,7 +455,24 @@ app.UseSerilogRequestLogging(options =>
 {
     // Customize the message template
     options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000}ms";
-    
+
+    // Drop the noise: Prometheus scrapes /metrics every 15s and load balancers
+    // hit /health constantly. Demote those to Verbose so they don't flood the logs
+    // (errors on those paths still surface as Error).
+    options.GetLevel = (httpContext, elapsed, ex) =>
+    {
+        if (ex != null || httpContext.Response.StatusCode >= 500)
+            return LogEventLevel.Error;
+
+        var path = httpContext.Request.Path.Value;
+        if (path != null &&
+            (path.StartsWith("/metrics", StringComparison.OrdinalIgnoreCase) ||
+             path.StartsWith("/health", StringComparison.OrdinalIgnoreCase)))
+            return LogEventLevel.Verbose;
+
+        return LogEventLevel.Information;
+    };
+
     // Attach additional properties to the request completion event
     options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
     {
@@ -462,12 +481,17 @@ app.UseSerilogRequestLogging(options =>
     };
 });
 
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// Swagger exposes a full map of endpoints, params, and schemas — keep it out of
+// production where it's free recon for an attacker. Dev-only.
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Ping API v1");
-    c.RoutePrefix = string.Empty; // Swagger UI at "/"
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Ping API v1");
+        c.RoutePrefix = string.Empty; // Swagger UI at "/"
+    });
+}
 
 // Log Redis connection status
 using (var scope = app.Services.CreateScope())
