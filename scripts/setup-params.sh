@@ -76,11 +76,6 @@ else
 fi
 
 echo ""
-echo "--- Monitoring (Grafana) ---"
-GRAFANA_USER=$(read_value "Grafana admin username" "admin")
-GRAFANA_PASS=$(read_secret "Grafana admin password")
-
-echo ""
 echo "--- API Keys ---"
 GOOGLE_KEY=$(read_secret "Google API Key")
 GOOGLE_CID=$(read_value "Google Client ID" "")
@@ -115,10 +110,6 @@ if [ -n "$REDIS_PASS" ]; then
 else
   echo "Skipping REDIS_PASSWORD & REDIS_CONNECTION (kept previous values)"
 fi
-
-# Grafana admin
-put_string "GRAFANA_ADMIN_USER" "$GRAFANA_USER"
-put_secret "GRAFANA_ADMIN_PASSWORD" "$GRAFANA_PASS"
 
 put_string "DatabaseProvider" 'Postgres'
 
