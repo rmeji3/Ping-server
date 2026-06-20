@@ -23,6 +23,14 @@ server {
     listen 80;
     server_name $DOMAIN;
 
+    # Never expose Prometheus metrics on the public edge — they leak the RDS host,
+    # db name, and username. Prometheus still scrapes ping-server over the internal
+    # Docker network, so this only blocks the public route.
+    location /metrics {
+        deny all;
+        return 404;
+    }
+
     location / {
         client_max_body_size 20M;
         proxy_pass http://localhost:8080;
