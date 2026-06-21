@@ -1,4 +1,5 @@
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Processing;
 using Ping.Services.Storage;
 using Microsoft.Extensions.Logging;
@@ -26,70 +27,67 @@ public class ImageService(IStorageService storageService, HttpClient httpClient,
         var originalKey = $"{folder}/{userId}/{timestamp}_orig{ext}";
         var thumbKey = $"{folder}/{userId}/{timestamp}_thumb{ext}";
 
-        // 3. Upload Original (Stream copy)
+        // 3. Decode the image so we can bake in EXIF orientation. Link unfurlers
+        //    / OG-image fetchers (and other non-EXIF-aware consumers) render the
+        //    raw pixels, so a photo carrying a "rotate 90°" EXIF tag shows up
+        //    sideways unless we apply the rotation to the pixels here.
         string originalUrl;
-        using (var stream = file.OpenReadStream())
-        {
-             // We need to copy the stream because UploadFileAsync might dispose or read it to end, 
-             // and we need to read it again for thumbnail generation if we don't want to load fully into memory first.
-             // Actually, Image.LoadAsync accepts a stream. 
-             // Let's upload original first.
-             originalUrl = await storageService.UploadFileAsync(file, originalKey);
-        }
-
-        // 4. Generate & Upload Thumbnail
         string thumbUrl;
         try
         {
-            using (var imageStream = file.OpenReadStream())
-            using (var image = await Image.LoadAsync(imageStream))
+            // Detect the source format so we can re-save the original in kind.
+            IImageFormat format;
+            using (var detectStream = file.OpenReadStream())
+                format = await Image.DetectFormatAsync(detectStream);
+
+            using var imageStream = file.OpenReadStream();
+            using var image = await Image.LoadAsync(imageStream);
+
+            // Bake EXIF orientation into the pixels, then drop the now-stale tag.
+            image.Mutate(x => x.AutoOrient());
+
+            // Upload the orientation-corrected original in its original format.
+            using (var origOut = new MemoryStream())
             {
-                // Resize if larger than max
-                if (image.Width > MaxThumbnailSize || image.Height > MaxThumbnailSize)
+                await image.SaveAsync(origOut, format);
+                origOut.Position = 0;
+                var origFile = new FormFile(origOut, 0, origOut.Length, "file", $"original{ext}")
                 {
-                    image.Mutate(x => x.Resize(new ResizeOptions
-                    {
-                        Mode = ResizeMode.Max,
-                        Size = new Size(MaxThumbnailSize, MaxThumbnailSize)
-                    }));
-                }
+                    Headers = new HeaderDictionary(),
+                    ContentType = file.ContentType
+                };
+                originalUrl = await storageService.UploadFileAsync(origFile, originalKey);
+            }
 
-                using (var outStream = new MemoryStream())
+            // Generate & upload the thumbnail (already upright after AutoOrient).
+            if (image.Width > MaxThumbnailSize || image.Height > MaxThumbnailSize)
+            {
+                image.Mutate(x => x.Resize(new ResizeOptions
                 {
-                    // Save as WebP for efficiency or keep original format?
-                    // Let's keep original format to avoid complexity, or default to WebP.
-                    // WebP is good for thumbnails.
-                    await image.SaveAsWebpAsync(outStream);
-                    outStream.Position = 0;
+                    Mode = ResizeMode.Max,
+                    Size = new Size(MaxThumbnailSize, MaxThumbnailSize)
+                }));
+            }
 
-                    // We need to wrap MemoryStream in an IFormFile-like wrapper or overload UploadFileAsync to take stream.
-                    // Assuming IStorageService has Stream overload?
-                    // Let's check IStorageService. If not, we might need a dummy IFormFile or update IStorageService.
-                    // Checking previous code... ProfileService used IFormFile directly.
-                    // I will assume IStorageService needs IFormFile, so I will create a simple wrapper or update IStorageService.
-
-                    // Wait, S3StorageService likely uses TransferUtility which takes Stream.
-                    // I should verify ISotrageService signature.
-                    // For now, I'll assume I need to implement a Stream->Upload adapter or update the interface.
-                    // To be safe and fast, I'll update IStorageService to accept Stream if it doesn't, OR
-                    // I'll create a FormFile wrapper.
-
-                    // Check IStorageService first? No, I'll just write a FormFile wrapper here, it's safer than modifying existing interfaces extensively right now.
-                    var thumbFile = new FormFile(outStream, 0, outStream.Length, "file", $"thumbnail.webp")
-                    {
-                        Headers = new HeaderDictionary(),
-                        ContentType = "image/webp"
-                    };
-
-                    thumbUrl = await storageService.UploadFileAsync(thumbFile, Path.ChangeExtension(thumbKey, ".webp"));
-                }
+            using (var outStream = new MemoryStream())
+            {
+                await image.SaveAsWebpAsync(outStream);
+                outStream.Position = 0;
+                var thumbFile = new FormFile(outStream, 0, outStream.Length, "file", $"thumbnail.webp")
+                {
+                    Headers = new HeaderDictionary(),
+                    ContentType = "image/webp"
+                };
+                thumbUrl = await storageService.UploadFileAsync(thumbFile, Path.ChangeExtension(thumbKey, ".webp"));
             }
         }
         catch (UnknownImageFormatException)
         {
-            // For unsupported formats like HEIC, use original URL as thumbnail
+            // For formats ImageSharp can't decode (e.g. HEIC), upload the raw
+            // original and reuse it as its own thumbnail.
+            originalUrl = await storageService.UploadFileAsync(file, originalKey);
             thumbUrl = originalUrl;
-            logger.LogInformation("Unsupported image format for thumbnail generation, using original as thumbnail");
+            logger.LogInformation("Unsupported image format for processing, using raw original as thumbnail");
         }
 
         logger.LogInformation("Uploaded image {OriginalKey} and thumbnail {ThumbKey}", originalKey, thumbKey);
@@ -106,6 +104,9 @@ public class ImageService(IStorageService storageService, HttpClient httpClient,
 
             await using var sourceStream = await response.Content.ReadAsStreamAsync();
             using var image = await Image.LoadAsync(sourceStream);
+
+            // Bake in EXIF orientation so the thumbnail is always upright.
+            image.Mutate(x => x.AutoOrient());
 
             if (image.Width > MaxThumbnailSize || image.Height > MaxThumbnailSize)
             {

@@ -183,15 +183,32 @@ public class NotificationService : INotificationService
                 || inner.Message.Contains("duplicate key"));
     }
 
+    // Types that should never be shown as user-configurable preferences.
+    private static readonly HashSet<NotificationType> HiddenPreferenceTypes = new()
+    {
+        NotificationType.FriendRequest, // Deprecated
+        // Account & system notifications are essential and always delivered.
+        NotificationType.System,
+        NotificationType.VerificationResult,
+        NotificationType.BusinessClaimResult,
+    };
+
     public async Task<List<NotificationPreferenceDto>> GetPreferencesAsync(string userId)
     {
-        var prefs = await _context.NotificationPreferences
+        var stored = await _context.NotificationPreferences
             .Where(p => p.UserId == userId)
-            .ToListAsync();
-            
-        // If empty, return defaults (all enabled) 
-        // Or we could seed them. For now, returning existing ones.
-        return prefs.Select(p => new NotificationPreferenceDto(p.Type, p.Type.ToString(), p.IsEnabled)).ToList();
+            .ToDictionaryAsync(p => p.Type, p => p.IsEnabled);
+
+        // Return every configurable notification type, merging in any stored
+        // overrides. Types without a stored row default to enabled. This means
+        // a brand-new user still sees the full list of toggles.
+        return Enum.GetValues<NotificationType>()
+            .Where(type => !HiddenPreferenceTypes.Contains(type))
+            .Select(type => new NotificationPreferenceDto(
+                type,
+                type.ToString(),
+                stored.TryGetValue(type, out var isEnabled) ? isEnabled : true))
+            .ToList();
     }
 
     public async Task UpdatePreferenceAsync(string userId, NotificationType type, bool isEnabled)
