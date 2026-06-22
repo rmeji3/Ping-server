@@ -1,5 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Ping.Dtos.Auth;
+using Ping.Data.Auth;
 using Asp.Versioning;
 using System.Security.Claims;
 using Ping.Services.Pings;
@@ -10,9 +14,11 @@ using Ping.Services.Tags;
 using Ping.Services.Moderation;
 using Ping.Services;
 using Ping.Services.Auth;
+using Ping.Services.Stickers;
 using Ping.Dtos.Business;
 using Ping.Dtos.Tags;
 using Ping.Dtos.Verification;
+using Ping.Dtos.Stickers;
 using Ping.Services.Verification;
 using Ping.Dtos.Common;
 using Ping.Models.AppUsers;
@@ -34,14 +40,43 @@ namespace Ping.Controllers
         IBusinessService businessService,
         IVerificationService verificationService,
         IAuthService authService,
+        IStickerService stickerService,
 
         Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager,
-        Ping.Services.Admin.IDbJanitorService janitorService
+        Ping.Services.Admin.IDbJanitorService janitorService,
+        AuthDbContext authDbContext,
+        Ping.Services.Admin.IAnnouncementService announcementService
         ) : ControllerBase
     {
         // ==========================================
         // Resource Deletion
         // ==========================================
+
+        [HttpGet("pings/search")]
+        public async Task<IActionResult> SearchPings([FromQuery] string q, [FromQuery] int limit = 10)
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return BadRequest(new { message = "Query parameter 'q' is required." });
+
+            var search = q.Trim().ToLowerInvariant();
+            var results = await pingService.SearchPingsAsync(
+                new Ping.Dtos.Pings.PingSearchFilterDto { Query = q, PageSize = limit * 3, PageNumber = 1 },
+                userId: null);
+
+            // Prioritise name matches over address-only matches
+            var items = results.Items
+                .OrderByDescending(p => p.Name != null && p.Name.ToLowerInvariant().Contains(search))
+                .Take(limit)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Name,
+                    p.Address,
+                    GenreName = p.PingGenreName,
+                });
+
+            return Ok(items);
+        }
 
         [HttpDelete("pings/{id}")]
         public async Task<IActionResult> DeletePing(int id)
@@ -211,6 +246,54 @@ namespace Ping.Controllers
             return Ok(result);
         }
 
+        [HttpGet("users")]
+        public async Task<ActionResult<PaginatedResult<UserDto>>> GetUsers(
+            [FromQuery] int page = 1,
+            [FromQuery] int limit = 20,
+            [FromQuery] string? search = null)
+        {
+            var query = userManager.Users;
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var lowerSearch = search.Trim().ToLower();
+                query = query.Where(u => 
+                    (u.UserName != null && u.UserName.ToLower().Contains(lowerSearch)) ||
+                    (u.Email != null && u.Email.ToLower().Contains(lowerSearch)) ||
+                    (u.FirstName != null && u.FirstName.ToLower().Contains(lowerSearch)) ||
+                    (u.LastName != null && u.LastName.ToLower().Contains(lowerSearch))
+                );
+            }
+
+            query = query.OrderBy(u => u.UserName);
+
+            var count = await query.CountAsync();
+            var items = await query.Skip((page - 1) * limit).Take(limit).ToListAsync();
+
+            // Resolve all roles in a single batch query to prevent N+1 lag
+            var userIds = items.Select(u => u.Id).ToList();
+            var rolesQuery = from userRole in authDbContext.UserRoles
+                             join role in authDbContext.Roles on userRole.RoleId equals role.Id
+                             where userIds.Contains(userRole.UserId)
+                             select new { userRole.UserId, RoleName = role.Name };
+
+            var rolesList = await rolesQuery.ToListAsync();
+            var rolesLookup = rolesList
+                .GroupBy(ur => ur.UserId)
+                .ToDictionary(g => g.Key, g => g.Select(ur => ur.RoleName).ToArray());
+
+            var userDtos = items.Select(user => new UserDto(
+                user.Id,
+                user.Email ?? "",
+                user.UserName!,
+                user.ProfileImageUrl,
+                rolesLookup.TryGetValue(user.Id, out var roles) ? roles! : Array.Empty<string>(),
+                user.TwoFactorEnabled
+            )).ToList();
+
+            return Ok(new PaginatedResult<UserDto>(userDtos, count, page, limit));
+        }
+
         [HttpPost("moderation/ip/ban")]
         public async Task<IActionResult> BanIp([FromBody] IpBanRequest request)
         {
@@ -354,6 +437,123 @@ namespace Ping.Controllers
             var result = await janitorService.CleanupFileUrlsAsync();
             return Ok(result);
         }
+
+        // ==========================================
+        // Stickers Management
+        // ==========================================
+
+        [HttpPost("stickers")]
+        [Consumes("multipart/form-data")]
+        public async Task<ActionResult<StickerDto>> CreateSticker(
+            [FromForm] string key,
+            [FromForm] string name,
+            [FromForm] string? category,
+            IFormFile? file)
+        {
+            var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (adminId == null) return Unauthorized();
+
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(name))
+                return BadRequest("Sticker Key and Name are required.");
+
+            try
+            {
+                var sticker = await stickerService.CreateStickerAsync(key, name, category, file, adminId);
+                return CreatedAtAction(nameof(GetStickerById), new { id = sticker.Id }, sticker);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("stickers")]
+        public async Task<ActionResult<List<StickerDto>>> GetAllStickers()
+        {
+            var stickers = await stickerService.GetAllStickersForAdminAsync();
+            return Ok(stickers);
+        }
+
+        [HttpGet("stickers/{id}")]
+        public async Task<ActionResult<StickerDto>> GetStickerById(string id)
+        {
+            var sticker = await stickerService.GetStickerByIdAsync(id);
+            if (sticker == null) return NotFound();
+            return Ok(sticker);
+        }
+
+        [HttpPut("stickers/{id}/toggle")]
+        public async Task<ActionResult<StickerDto>> ToggleSticker(string id)
+        {
+            try
+            {
+                var sticker = await stickerService.ToggleStickerActiveAsync(id);
+                return Ok(sticker);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"Sticker with ID {id} not found.");
+            }
+        }
+
+        [HttpPut("stickers/{id}/rotation")]
+        public async Task<ActionResult<StickerDto>> SetStickerRotation(string id, [FromBody] StickerRotationRequest request)
+        {
+            try
+            {
+                var sticker = await stickerService.SetStickerRotationAsync(id, request.InRotation);
+                return Ok(sticker);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"Sticker with ID {id} not found.");
+            }
+        }
+
+        [HttpDelete("stickers/{id}")]
+        public async Task<IActionResult> DeleteSticker(string id)
+        {
+            try
+            {
+                await stickerService.DeleteStickerAsync(id);
+                return NoContent();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"Sticker with ID {id} not found.");
+            }
+        }
+
+        [HttpPost("users/{userIdentifier}/stickers/{stickerId}")]
+        public async Task<IActionResult> GrantSticker(string userIdentifier, string stickerId)
+        {
+            try
+            {
+                await stickerService.GrantStickerOwnershipAsync(userIdentifier, stickerId);
+                return Ok(new { message = "Sticker ownership granted successfully." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("announcement")]
+        public async Task<IActionResult> SetAnnouncement([FromBody] AnnouncementRequest request)
+        {
+            await announcementService.SetAnnouncementAsync(request.Message);
+            return Ok(new { message = "Announcement updated successfully." });
+        }
+    }
+
+    public class AnnouncementRequest
+    {
+        public string? Message { get; set; }
+    }
+
+    public class StickerRotationRequest
+    {
+        public bool InRotation { get; set; }
     }
 
     public class IpBanRequest

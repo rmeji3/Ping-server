@@ -277,6 +277,87 @@ namespace Ping.Controllers.Auth
             await tokenService.RevokeAllUserTokensAsync(userId);
             return Ok(new { message = "Logged out from all devices." });
         }
+
+        // ===== 2FA Verification (during Login) =====
+        [HttpPost("verify-2fa")]
+        [AllowAnonymous]
+        public async Task<ActionResult<AuthResponse>> VerifyTwoFactor(VerifyTwoFactorDto dto)
+        {
+            try
+            {
+                var result = await authService.VerifyTwoFactorLoginAsync(dto);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        // ===== 2FA Setup (generates secret QR code URI) =====
+        [HttpGet("2fa/setup")]
+        [Authorize]
+        public async Task<ActionResult<TwoFactorSetupDto>> SetupTwoFactor()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            try
+            {
+                var result = await authService.GetTwoFactorSetupAsync(userId);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
+
+        // ===== 2FA Enable (verify code and activate 2FA) =====
+        [HttpPost("2fa/enable")]
+        [Authorize]
+        public async Task<IActionResult> EnableTwoFactor([FromBody] EnableTwoFactorDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            try
+            {
+                var success = await authService.EnableTwoFactorAsync(userId, dto.Code);
+                if (!success)
+                {
+                    return BadRequest(new { message = "Invalid verification code." });
+                }
+                return Ok(new { message = "Two-Factor Authentication enabled successfully." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
+
+        // ===== 2FA Disable =====
+        [HttpPost("2fa/disable")]
+        [Authorize]
+        public async Task<IActionResult> DisableTwoFactor()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null) return Unauthorized();
+
+            try
+            {
+                var success = await authService.DisableTwoFactorAsync(userId);
+                if (!success)
+                {
+                    return BadRequest(new { message = "Failed to disable Two-Factor Authentication." });
+                }
+                return Ok(new { message = "Two-Factor Authentication disabled successfully." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+        }
     }
 }
 

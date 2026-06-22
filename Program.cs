@@ -291,12 +291,14 @@ builder.Services.AddScoped<IBusinessAnalyticsService, BusinessAnalyticsService>(
 builder.Services.AddScoped<IBanningService, BanningService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<Ping.Services.Stickers.IStickerService, Ping.Services.Stickers.StickerService>();
 builder.Services.AddScoped<Ping.Services.Verification.IVerificationService, Ping.Services.Verification.VerificationService>();
 builder.Services.AddHostedService<AnalyticsBackgroundJob>();
 builder.Services.AddHostedService<Ping.Services.Background.UnverifiedUserCleanupService>();
 builder.Services.AddHostedService<Ping.Services.Background.EventReminderBackgroundService>();
 
 builder.Services.AddScoped<Ping.Services.Admin.IDbJanitorService, Ping.Services.Admin.DbJanitorService>();
+builder.Services.AddSingleton<Ping.Services.Admin.IAnnouncementService, Ping.Services.Admin.AnnouncementService>();
 // --- AWS S3 & Storage & Email ---
 var awsOptions = builder.Configuration.GetAWSOptions();
 var awsAccessKey = builder.Configuration["AWS:AccessKey"];
@@ -382,6 +384,18 @@ builder.Services.AddApiVersioning(options =>
         options.SubstituteApiVersionInUrl = true;
     });
 
+var allowedOrigins = builder.Configuration["CorsAllowedOrigins"]?.Split(',') ?? new[] { "http://localhost:3000" };
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAdminApp", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -444,6 +458,33 @@ using (var scope = app.Services.CreateScope())
             await roleManager.CreateAsync(new IdentityRole(roleName));
         }
     }
+
+    // 3. Seed sticker catalog (idempotent by Key). Badge stickers are granted to
+    //    qualifying users lazily by StickerService on first fetch.
+    var seedDb = scope.ServiceProvider.GetRequiredService<Ping.Data.App.AppDbContext>();
+    var seedStickers = new[]
+    {
+        new Ping.Models.Stickers.Sticker
+        {
+            Key = Ping.Services.Stickers.StickerService.VerifiedBadgeKey,
+            Name = "Verified",
+            Category = "badge",
+        },
+        new Ping.Models.Stickers.Sticker
+        {
+            Key = Ping.Services.Stickers.StickerService.FounderBadgeKey,
+            Name = "Founding Member",
+            Category = "badge",
+        },
+    };
+    foreach (var sticker in seedStickers)
+    {
+        if (!await seedDb.Stickers.AnyAsync(s => s.Key == sticker.Key))
+        {
+            seedDb.Stickers.Add(sticker);
+        }
+    }
+    await seedDb.SaveChangesAsync();
 }
 
 
@@ -531,6 +572,7 @@ using (var scope = app.Services.CreateScope())
 
 app.UseMiddleware<Ping.Middleware.ResponseMetricMiddleware>();
 app.UseRouting();
+app.UseCors("AllowAdminApp");
 app.UseHttpMetrics();
 app.UseSession();
 app.UseAuthentication();

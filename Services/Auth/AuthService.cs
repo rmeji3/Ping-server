@@ -113,6 +113,19 @@ public class AuthService(
         }
 
         var result = await signIn.CheckPasswordSignInAsync(user, dto.Password, lockoutOnFailure: true);
+        if (result.RequiresTwoFactor)
+        {
+            logger.LogInformation("Login requires Two-Factor Authentication for user '{Identifier}'.", dto.UserNameOrEmail);
+            return new AuthResponse(
+                AccessToken: null,
+                ExpiresUtc: null,
+                RefreshToken: null,
+                RefreshTokenExpiresUtc: null,
+                User: null,
+                RequiresTwoFactor: true
+            );
+        }
+
         if (!result.Succeeded)
         {
             logger.LogWarning("Login failed: Invalid password for '{Identifier}'.", dto.UserNameOrEmail);
@@ -306,7 +319,7 @@ public class AuthService(
         if (user is null) throw new KeyNotFoundException("User not found.");
 
         var roles = await users.GetRolesAsync(user);
-        return new UserDto(user.Id, user.Email ?? "", user.UserName!, user.ProfileImageUrl, roles.ToArray());
+        return new UserDto(user.Id, user.Email ?? "", user.UserName!, user.ProfileImageUrl, roles.ToArray(), user.TwoFactorEnabled);
     }
 
     public async Task<object> ForgotPasswordAsync(ForgotPasswordDto dto, string scheme, string host)
@@ -611,6 +624,103 @@ public class AuthService(
         {
             user.IsFoundingMember = true;
         }
+    }
+
+    public async Task<TwoFactorSetupDto> GetTwoFactorSetupAsync(string userId)
+    {
+        var user = await users.FindByIdAsync(userId);
+        if (user == null) throw new KeyNotFoundException($"User with ID {userId} not found.");
+
+        var key = await users.GetAuthenticatorKeyAsync(user);
+        if (string.IsNullOrEmpty(key))
+        {
+            await users.ResetAuthenticatorKeyAsync(user);
+            key = await users.GetAuthenticatorKeyAsync(user);
+        }
+
+        var qrCodeUri = $"otpauth://totp/Ping:{user.Email}?secret={key ?? ""}&issuer=Ping";
+        return new TwoFactorSetupDto(key ?? "", qrCodeUri);
+    }
+
+    public async Task<bool> EnableTwoFactorAsync(string userId, string code)
+    {
+        var user = await users.FindByIdAsync(userId);
+        if (user == null) throw new KeyNotFoundException($"User with ID {userId} not found.");
+
+        var cleanCode = code.Replace(" ", string.Empty).Replace("-", string.Empty);
+        var isValid = await users.VerifyUserTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, "AuthenticatorKey", cleanCode);
+        if (!isValid) return false;
+
+        await users.SetTwoFactorEnabledAsync(user, true);
+        logger.LogInformation("Two-Factor Authentication enabled for user: {UserId}", userId);
+        return true;
+    }
+
+    public async Task<bool> DisableTwoFactorAsync(string userId)
+    {
+        var user = await users.FindByIdAsync(userId);
+        if (user == null) throw new KeyNotFoundException($"User with ID {userId} not found.");
+
+        await users.SetTwoFactorEnabledAsync(user, false);
+        logger.LogInformation("Two-Factor Authentication disabled for user: {UserId}", userId);
+        return true;
+    }
+
+    public async Task<AuthResponse> VerifyTwoFactorLoginAsync(VerifyTwoFactorDto dto)
+    {
+        var user = await users.FindByEmailAsync(dto.UserNameOrEmail) 
+                   ?? await users.FindByNameAsync(dto.UserNameOrEmail);
+
+        if (user is null)
+        {
+            logger.LogWarning("2FA login failed: User '{Identifier}' not found.", dto.UserNameOrEmail);
+            throw new UnauthorizedAccessException("Invalid credentials.");
+        }
+
+        if (user.IsBanned)
+        {
+            logger.LogWarning("2FA login failed: User '{Identifier}' is banned.", dto.UserNameOrEmail);
+            var msg = string.IsNullOrWhiteSpace(user.BanReason) ? "Your account has been banned." : $"Your account has been banned: {user.BanReason}";
+            throw new UnauthorizedAccessException(msg);
+        }
+
+        var isValid = await users.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
+        if (!isValid)
+        {
+            logger.LogWarning("2FA login failed: Invalid token code for '{Identifier}'.", dto.UserNameOrEmail);
+            throw new UnauthorizedAccessException("Invalid 2FA code.");
+        }
+
+        // Log the success login
+        var now = DateTimeOffset.UtcNow;
+        var today = DateOnly.FromDateTime(now.DateTime);
+        user.LastLoginUtc = now;
+        await users.UpdateAsync(user);
+
+        var log = await db.UserActivityLogs
+            .FirstOrDefaultAsync(l => l.UserId == user.Id && l.Date == today);
+
+        if (log == null)
+        {
+            log = new UserActivityLog
+            {
+                UserId = user.Id,
+                Date = today,
+                LoginCount = 1,
+                LastActivityUtc = now
+            };
+            db.UserActivityLogs.Add(log);
+        }
+        else
+        {
+            log.LoginCount++;
+            log.LastActivityUtc = now;
+        }
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("User logged in with 2FA Authenticator: {UserId}", user.Id);
+        
+        return await tokens.CreateAuthResponseAsync(user);
     }
 }
 

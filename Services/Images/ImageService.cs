@@ -17,12 +17,37 @@ public class ImageService(IStorageService storageService, HttpClient httpClient,
         if (file.Length > MaxFileSize)
             throw new ArgumentException($"File size exceeds {MaxFileSize / 1024 / 1024}MB limit.");
 
-        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif" };
+        var ext = Path.GetExtension(file.FileName);
+        var extLower = ext?.ToLowerInvariant();
+        bool isLottie = extLower == ".json";
+        bool isShader = extLower == ".sksl";
+
+        if (isLottie || isShader)
+        {
+            if (folder != "stickers")
+                throw new ArgumentException("Lottie and Shader files are only allowed for stickers.");
+
+            var assetTimestamp = DateTime.UtcNow.Ticks;
+            var assetKey = $"{folder}/{userId}/{assetTimestamp}_orig{extLower}";
+
+            var contentType = isLottie ? "application/json" : "text/plain";
+            using var fileStream = file.OpenReadStream();
+            var uploadFile = new FormFile(fileStream, 0, file.Length, file.Name, file.FileName)
+            {
+                Headers = new HeaderDictionary(),
+                ContentType = contentType
+            };
+
+            var assetUrl = await storageService.UploadFileAsync(uploadFile, assetKey);
+            logger.LogInformation("Uploaded non-image asset {OriginalKey} directly as Lottie/Shader", assetKey);
+            return (assetUrl, assetUrl);
+        }
+
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif", "image/svg+xml" };
         if (!allowedTypes.Contains(file.ContentType))
-            throw new ArgumentException("Invalid file type. Only JPEG, PNG, WebP, GIF, HEIC, and HEIF are allowed.");
+            throw new ArgumentException("Invalid file type. Only JPEG, PNG, WebP, GIF, HEIC, HEIF, and SVG are allowed.");
 
         // 2. Generate Keys
-        var ext = Path.GetExtension(file.FileName);
         var timestamp = DateTime.UtcNow.Ticks;
         var originalKey = $"{folder}/{userId}/{timestamp}_orig{ext}";
         var thumbKey = $"{folder}/{userId}/{timestamp}_thumb{ext}";

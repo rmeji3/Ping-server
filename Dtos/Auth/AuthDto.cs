@@ -61,7 +61,8 @@ namespace Ping.Dtos.Auth
         string Email, 
         string? DisplayName, 
         string? ProfileImageUrl,
-        string[] Roles
+        string[] Roles,
+        bool TwoFactorEnabled
     );
 
     // Refresh token request from the client
@@ -71,11 +72,26 @@ namespace Ping.Dtos.Auth
     );
 
     public record AuthResponse(
-        string AccessToken,
-        DateTime ExpiresUtc,
-        string RefreshToken,
-        DateTime RefreshTokenExpiresUtc,
-        UserDto User
+        string? AccessToken,
+        DateTime? ExpiresUtc,
+        string? RefreshToken,
+        DateTime? RefreshTokenExpiresUtc,
+        UserDto? User,
+        bool RequiresTwoFactor = false
+    );
+
+    public record VerifyTwoFactorDto(
+        [Required] string UserNameOrEmail,
+        [Required] string Code
+    );
+
+    public record EnableTwoFactorDto(
+        [Required] string Code
+    );
+
+    public record TwoFactorSetupDto(
+        string SharedKey,
+        string QrCodeUri
     );
 }
 

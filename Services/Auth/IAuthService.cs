@@ -19,5 +19,9 @@ public interface IAuthService
     Task RemoveAdminAsync(string email);
     Task DeleteAccountAsync(string userId);
     Task DeleteAccountByEmailOrUsernameAsync(string identifier);
+    Task<TwoFactorSetupDto> GetTwoFactorSetupAsync(string userId);
+    Task<bool> EnableTwoFactorAsync(string userId, string code);
+    Task<bool> DisableTwoFactorAsync(string userId);
+    Task<AuthResponse> VerifyTwoFactorLoginAsync(VerifyTwoFactorDto dto);
 }
 

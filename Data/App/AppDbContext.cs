@@ -8,6 +8,7 @@ using Ping.Models.Business;
 using Ping.Models.Search;
 using Ping.Models;
 using Ping.Models.Notifications;
+using Ping.Models.Stickers;
 using NpgsqlTypes; // For NpgsqlTsVector
 using Npgsql.EntityFrameworkCore.PostgreSQL; // For HasGeneratedTsVectorColumn extensions
 
@@ -40,6 +41,9 @@ namespace Ping.Data.App
         public DbSet<SearchHistory> SearchHistories => Set<SearchHistory>();
         public DbSet<UserDevice> UserDevices => Set<UserDevice>();
         public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+        public DbSet<Sticker> Stickers => Set<Sticker>();
+        public DbSet<UserSticker> UserStickers => Set<UserSticker>();
+        public DbSet<ProfileStickerPlacement> ProfileStickerPlacements => Set<ProfileStickerPlacement>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -177,6 +181,30 @@ namespace Ping.Data.App
             builder.Entity<NotificationPreference>()
                 .HasIndex(np => new { np.UserId, np.Type })
                 .IsUnique();
+
+            // Sticker: unique catalog key
+            builder.Entity<Sticker>()
+                .HasIndex(s => s.Key)
+                .IsUnique();
+
+            // UserSticker: unique ownership per user per sticker
+            builder.Entity<UserSticker>()
+                .HasIndex(us => new { us.UserId, us.StickerId })
+                .IsUnique();
+            builder.Entity<UserSticker>()
+                .HasOne(us => us.Sticker)
+                .WithMany()
+                .HasForeignKey(us => us.StickerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // ProfileStickerPlacement: lookups by user; FK to sticker
+            builder.Entity<ProfileStickerPlacement>()
+                .HasIndex(p => p.UserId);
+            builder.Entity<ProfileStickerPlacement>()
+                .HasOne(p => p.Sticker)
+                .WithMany()
+                .HasForeignKey(p => p.StickerId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // PingClaim
             builder.Entity<PingClaim>()

@@ -804,19 +804,15 @@ public class ProfileService(
         var ping = await appDb.Pings.AsNoTracking().FirstOrDefaultAsync(p => p.Id == pingId);
         if (ping == null) throw new KeyNotFoundException("Place not found.");
         
-        // Allow viewing deleted pings only for the owner
-        if (ping.IsDeleted && !isSelf)
-        {
-            throw new KeyNotFoundException("Place not found.");
-        }
-
-        if (!isSelf && !ping.IsDeleted)
+        // Closed (deleted) pings remain viewable to others — they show with a
+        // "Closed" tag and their reviews persist. Visibility rules still apply.
+        if (!isSelf)
         {
              bool canSeePing = false;
              if (ping.Visibility == Models.Pings.PingVisibility.Public) canSeePing = true;
              else if (ping.OwnerUserId == currentUserId) canSeePing = true;
              else if (ping.Visibility == Models.Pings.PingVisibility.Friends && ping.OwnerUserId == targetUserId && isFriend) canSeePing = true;
-             
+
              if (!canSeePing) throw new KeyNotFoundException("Place not found or private.");
         }
 
