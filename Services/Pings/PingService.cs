@@ -6,12 +6,14 @@ using Ping.Models.Pings;
 using Ping.Models.Business;
 using Ping.Utils;
 using Ping.Models.Reviews;
+using Ping.Services.Background;
 using Ping.Services.Follows;
 using Ping.Services.Google;
 using Ping.Services.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
+using System.Threading.Channels;
 
 namespace Ping.Services.Pings;
 
@@ -23,6 +25,7 @@ public class PingService(
     IFollowService followService,
     Services.Moderation.IModerationService moderationService,
     Services.AI.ISemanticService semanticService,
+    ChannelWriter<PingGenreJob> genreJobWriter,
     ILogger<PingService> logger) : IPingService
 {
     public async Task<PingDetailsDto> CreatePingAsync(UpsertPingDto dto, string userId)
@@ -203,6 +206,17 @@ public class PingService(
 
         logger.LogInformation("Ping created: {PingId} by {UserId}. Visibility: {Visibility}. Daily count: {Count}/{Limit}", 
             ping.Id, userId, dto.Visibility, createdToday, limit);
+
+        // If no genre was supplied by the client, enqueue a background classification job.
+        // TryWrite is non-blocking and never fails the create request.
+        if (!ping.PingGenreId.HasValue)
+        {
+            var job = new PingGenreJob(ping.Id, ping.GooglePlaceId, ping.Name);
+            if (genreJobWriter.TryWrite(job))
+                logger.LogInformation("[GenreClassifier] Enqueued classification job for ping {PingId}.", ping.Id);
+            else
+                logger.LogWarning("[GenreClassifier] Genre job channel full — ping {PingId} will remain unclassified.", ping.Id);
+        }
 
         return await ToPingDetailsDto(ping, userId);
     }

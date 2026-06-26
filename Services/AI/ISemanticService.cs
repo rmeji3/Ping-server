@@ -14,5 +14,11 @@ public interface ISemanticService
     /// Returns false if it's unrelated.
     /// </summary>
     Task<bool> VerifyPlaceNameMatchAsync(string officialName, string userProvidedName);
+
+    /// <summary>
+    /// Classifies a place and activity into exactly one genre from the provided list.
+    /// Returns the matched genre name, or null if classification fails.
+    /// </summary>
+    Task<string?> ClassifyGenreAsync(string placeName, string? activityName, IEnumerable<string> validGenres);
 }
 

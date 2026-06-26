@@ -297,6 +297,22 @@ builder.Services.AddHostedService<AnalyticsBackgroundJob>();
 builder.Services.AddHostedService<Ping.Services.Background.UnverifiedUserCleanupService>();
 builder.Services.AddHostedService<Ping.Services.Background.EventReminderBackgroundService>();
 
+// --- Ping Genre Classification background queue and service ---
+builder.Services.AddSingleton(provider => 
+{
+    return System.Threading.Channels.Channel.CreateUnbounded<Ping.Services.Background.PingGenreJob>(
+        new System.Threading.Channels.UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        });
+});
+builder.Services.AddSingleton(provider => 
+    provider.GetRequiredService<System.Threading.Channels.Channel<Ping.Services.Background.PingGenreJob>>().Reader);
+builder.Services.AddSingleton(provider => 
+    provider.GetRequiredService<System.Threading.Channels.Channel<Ping.Services.Background.PingGenreJob>>().Writer);
+builder.Services.AddHostedService<Ping.Services.Background.PingGenreClassificationService>();
+
 builder.Services.AddScoped<Ping.Services.Admin.IDbJanitorService, Ping.Services.Admin.DbJanitorService>();
 builder.Services.AddSingleton<Ping.Services.Admin.IAnnouncementService, Ping.Services.Admin.AnnouncementService>();
 // --- AWS S3 & Storage & Email ---
@@ -324,6 +340,7 @@ builder.Services.AddScoped<IStorageService, S3StorageService>();
 builder.Services.AddScoped<Ping.Services.Email.IEmailService, Ping.Services.Email.SesEmailService>(); // Add EmailService
 builder.Services.AddHttpClient<Ping.Services.Moderation.IModerationService, Ping.Services.Moderation.OpenAIModerationService>();
 builder.Services.AddScoped<Ping.Services.AI.ISemanticService, Ping.Services.AI.OpenAISemanticService>();
+builder.Services.AddScoped<Ping.Services.AI.IPingGenreClassifier, Ping.Services.AI.PingGenreClassifier>();
 builder.Services.AddScoped<Ping.Services.Apple.AppleAuthService>();
 builder.Services.AddScoped<Ping.Services.Google.GoogleAuthService>();
 builder.Services.AddScoped<RecommendationService>();

@@ -62,9 +62,9 @@ public class GooglePlacesController : ControllerBase
         }
 
         var client = _httpClientFactory.CreateClient();
-        var url = $"https://maps.googleapis.com/maps/api/place/autocomplete/json?input={Uri.EscapeDataString(input)}&key={apiKey}&language=en";
+        // Always enforce establishment-only — never trust the client param for `types`.
+        var url = $"https://maps.googleapis.com/maps/api/place/autocomplete/json?input={Uri.EscapeDataString(input)}&key={apiKey}&language=en&types=establishment";
 
-        if (!string.IsNullOrEmpty(types)) url += $"&types={types}";
         if (!string.IsNullOrEmpty(location)) url += $"&location={location}";
         if (!string.IsNullOrEmpty(radius)) url += $"&radius={radius}";
         if (!string.IsNullOrEmpty(components)) url += $"&components={components}";
@@ -74,7 +74,11 @@ public class GooglePlacesController : ControllerBase
 
         if (response.IsSuccessStatusCode)
         {
-            return Content(content, "application/json");
+            // Post-filter: strip any prediction that Google returned whose types
+            // indicate a geocode/administrative result (city, region, country, etc.)
+            // despite the types=establishment param — the legacy API isn't always strict.
+            var filtered = FilterEstablishmentsOnly(content);
+            return Content(filtered ?? content, "application/json");
         }
 
         _logger.LogWarning("Google legacy autocomplete failed, trying Places API v1 fallback. Status: {StatusCode}", response.StatusCode);
@@ -87,6 +91,75 @@ public class GooglePlacesController : ControllerBase
 
         _logger.LogError("Google Autocomplete Proxy Error: {StatusCode} - {Content}", response.StatusCode, content);
         return StatusCode((int)response.StatusCode, content);
+    }
+
+    /// <summary>
+    /// Post-filters a Google Places Autocomplete JSON response to remove any prediction
+    /// that is purely a geocode result (city, region, country, postal code, route, etc.)
+    /// rather than an actual establishment/point-of-interest.
+    /// </summary>
+    private static string? FilterEstablishmentsOnly(string json)
+    {
+        // Types that indicate a non-establishment geographic result.
+        // A prediction is kept only if its types[] contains at least one establishment-like value.
+        var geocodeOnlyTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "locality", "sublocality", "sublocality_level_1",
+            "administrative_area_level_1", "administrative_area_level_2",
+            "administrative_area_level_3", "country", "postal_code",
+            "route", "street_address", "intersection", "political",
+            "neighborhood", "colloquial_area", "natural_feature",
+            "continent", "geocode"
+        };
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("predictions", out var predictions) ||
+                predictions.ValueKind != JsonValueKind.Array)
+            {
+                return null; // Nothing to filter, pass through.
+            }
+
+            var kept = new List<object>();
+            foreach (var prediction in predictions.EnumerateArray())
+            {
+                bool isEstablishment = true;
+
+                if (prediction.TryGetProperty("types", out var typesEl) &&
+                    typesEl.ValueKind == JsonValueKind.Array)
+                {
+                    var typeList = typesEl.EnumerateArray()
+                        .Select(t => t.GetString() ?? string.Empty)
+                        .ToList();
+
+                    // If every type on this result is a geocode-only type, discard it.
+                    if (typeList.Count > 0 && typeList.All(t => geocodeOnlyTypes.Contains(t)))
+                    {
+                        isEstablishment = false;
+                    }
+                }
+
+                if (isEstablishment)
+                {
+                    kept.Add(JsonSerializer.Deserialize<object>(prediction.GetRawText())!);
+                }
+            }
+
+            var result = new
+            {
+                status = root.TryGetProperty("status", out var s) ? s.GetString() : "OK",
+                predictions = kept
+            };
+
+            return JsonSerializer.Serialize(result);
+        }
+        catch
+        {
+            return null; // On any parse error, fall through to the raw response.
+        }
     }
 
     [AllowAnonymous]
@@ -251,10 +324,13 @@ public class GooglePlacesController : ControllerBase
             return BadRequest("When rankby=distance, either 'keyword' or 'type' is required.");
         }
 
+        // Always enforce type=establishment — ignore the client param to prevent
+        // geographic-only results (cities, regions, countries) from leaking through.
         var queryParts = new List<string>
         {
             $"location={Uri.EscapeDataString(location)}",
             "language=en",
+            "type=establishment",
             $"key={Uri.EscapeDataString(apiKey)}"
         };
 
@@ -266,11 +342,6 @@ public class GooglePlacesController : ControllerBase
         if (!string.IsNullOrWhiteSpace(keyword))
         {
             queryParts.Add($"keyword={Uri.EscapeDataString(keyword)}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(type))
-        {
-            queryParts.Add($"type={Uri.EscapeDataString(type)}");
         }
 
         if (!string.IsNullOrWhiteSpace(rankby))
@@ -295,7 +366,76 @@ public class GooglePlacesController : ControllerBase
             return StatusCode((int)response.StatusCode, content);
         }
 
-        return Content(content, "application/json");
+        // Post-filter: Google ignores type=establishment when rankby=distance is used
+        // with a keyword that matches a city/region name (e.g. "Chicago" returns locality,political).
+        var filteredNearby = FilterNearbyEstablishmentsOnly(content);
+        return Content(filteredNearby ?? content, "application/json");
+    }
+
+    /// <summary>
+    /// Post-filters a Google Places NearbySearch JSON response to remove any result
+    /// whose types[] are all geocode/administrative (city, region, country, etc.)
+    /// rather than an actual establishment or point of interest.
+    /// </summary>
+    private static string? FilterNearbyEstablishmentsOnly(string json)
+    {
+        var geocodeOnlyTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "locality", "sublocality", "sublocality_level_1",
+            "administrative_area_level_1", "administrative_area_level_2",
+            "administrative_area_level_3", "country", "postal_code",
+            "route", "street_address", "intersection", "political",
+            "neighborhood", "colloquial_area", "natural_feature",
+            "continent", "geocode"
+        };
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("results", out var results) ||
+                results.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var kept = new List<object>();
+            foreach (var result in results.EnumerateArray())
+            {
+                bool isEstablishment = true;
+
+                if (result.TryGetProperty("types", out var typesEl) &&
+                    typesEl.ValueKind == JsonValueKind.Array)
+                {
+                    var typeList = typesEl.EnumerateArray()
+                        .Select(t => t.GetString() ?? string.Empty)
+                        .ToList();
+
+                    if (typeList.Count > 0 && typeList.All(t => geocodeOnlyTypes.Contains(t)))
+                    {
+                        isEstablishment = false;
+                    }
+                }
+
+                if (isEstablishment)
+                {
+                    kept.Add(JsonSerializer.Deserialize<object>(result.GetRawText())!);
+                }
+            }
+
+            var filtered = new
+            {
+                status = root.TryGetProperty("status", out var s) ? s.GetString() : "OK",
+                results = kept
+            };
+
+            return JsonSerializer.Serialize(filtered);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task<string?> AutocompleteWithPlacesV1Async(HttpClient client, string apiKey, string input, string? location, string? radius)
@@ -303,7 +443,8 @@ public class GooglePlacesController : ControllerBase
         var requestPayload = new PlacesAutocompleteRequest
         {
             Input = input,
-            LanguageCode = "en"
+            LanguageCode = "en",
+            IncludedPrimaryTypes = ["establishment"]
         };
 
         if (TryParseLocation(location, out var latitude, out var longitude))
@@ -483,6 +624,9 @@ public class GooglePlacesController : ControllerBase
 
         [JsonPropertyName("languageCode")]
         public string LanguageCode { get; init; } = "en";
+
+        [JsonPropertyName("includedPrimaryTypes")]
+        public List<string>? IncludedPrimaryTypes { get; init; }
 
         [JsonPropertyName("locationBias")]
         public LocationBias? LocationBias { get; set; }

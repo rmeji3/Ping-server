@@ -88,5 +88,46 @@ User Provided Name: {userProvidedName}");
             return officialName.Equals(userProvidedName, StringComparison.OrdinalIgnoreCase);
         }
     }
+    public async Task<string?> ClassifyGenreAsync(string placeName, string? activityName, IEnumerable<string> validGenres)
+    {
+        var genreList = validGenres.ToList();
+        if (genreList.Count == 0) return null;
+
+        var genreOptions = string.Join(", ", genreList);
+
+        var history = new ChatHistory();
+        history.AddSystemMessage($@"You are a genre classifier for a social map app.
+Given a place name and optionally an activity done there, return ONLY the single best-matching genre name from the list below.
+Prioritize the activity over the place name when choosing the genre (e.g. if the place is a gym/fitness center but the activity is 'Basketball', select 'Sports' rather than 'Wellness').
+Do not explain. Do not add punctuation. Return the exact genre name as written in the list.
+
+Valid genres: {genreOptions}
+
+If nothing fits well, return: Other");
+
+        history.AddUserMessage($"Place: \"{placeName}\"\nActivity: \"{activityName ?? "(none)"}\"");
+
+        try
+        {
+            var result = await chat.GetChatMessageContentAsync(history);
+            var response = result.Content?.Trim().Trim('"', '\'', '.') ?? string.Empty;
+
+            // Validate the response is one of the valid genres (case-insensitive).
+            var match = genreList.FirstOrDefault(g => g.Equals(response, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+            {
+                logger.LogInformation("Genre classification: \"{Place}\", Activity: \"{Activity}\" → \"{Genre}\"", placeName, activityName, match);
+                return match;
+            }
+
+            logger.LogWarning("Genre classification returned unrecognised value \"{Response}\" for place \"{Place}\", Activity \"{Activity}\"", response, placeName, activityName);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Genre classification failed for place \"{Place}\", Activity \"{Activity}\"", placeName, activityName);
+            return null;
+        }
+    }
 }
 

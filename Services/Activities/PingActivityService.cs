@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Ping.Services.Redis;
+using Ping.Services.Background;
+using System.Threading.Channels;
 
 namespace Ping.Services.Activities;
 
@@ -18,6 +20,7 @@ public class PingActivityService(
     ISemanticService semanticService,
     IRedisService redis,
     IConfiguration config,
+    ChannelWriter<PingGenreJob> genreJobWriter,
     ILogger<PingActivityService> logger) : IPingActivityService
 {
     public async Task<PingActivityDetailsDto> CreatePingActivityAsync(CreatePingActivityDto dto, string userId)
@@ -110,6 +113,20 @@ public class PingActivityService(
 
         db.PingActivities.Add(pa);
         await db.SaveChangesAsync();
+
+        // If the parent ping has no genre set, enqueue a classification job so it is classified using this activity immediately.
+        if (ping.PingGenreId == null)
+        {
+            var job = new PingGenreJob(ping.Id, ping.GooglePlaceId, ping.Name);
+            if (genreJobWriter.TryWrite(job))
+            {
+                logger.LogInformation("[GenreClassifier] Enqueued genre job from activity creation for ping {PingId}.", ping.Id);
+            }
+            else
+            {
+                logger.LogWarning("[GenreClassifier] Genre job channel full — activity-triggered classification for ping {PingId} dropped.", ping.Id);
+            }
+        }
 
         // 6. Map to DTO
         var result = new PingActivityDetailsDto(

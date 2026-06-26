@@ -235,5 +235,51 @@ public class GooglePingsService(HttpClient httpClient, IConfiguration config, IL
             return null;
         }
     }
+
+    public async Task<IReadOnlyList<string>> GetGooglePlaceTypesAsync(string placeId)
+    {
+        var apiKey = config["Google:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            logger.LogWarning("Google API Key is missing — cannot fetch place types.");
+            return [];
+        }
+
+        try
+        {
+            // Request only the `types` field to minimise billing cost.
+            var url = $"https://maps.googleapis.com/maps/api/place/details/json?place_id={Uri.EscapeDataString(placeId)}&fields=types&key={apiKey}&language=en";
+            var response = await httpClient.GetAsync(url);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                logger.LogError("Google Place Types fetch error: {StatusCode}, Body: {Error}", response.StatusCode, err);
+                return [];
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            if (!doc.RootElement.TryGetProperty("result", out var result))
+                return [];
+
+            if (!result.TryGetProperty("types", out var typesEl) || typesEl.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return [];
+
+            var types = typesEl.EnumerateArray()
+                .Select(t => t.GetString() ?? string.Empty)
+                .Where(t => !string.IsNullOrEmpty(t))
+                .ToList();
+
+            logger.LogInformation("Google Place types for {PlaceId}: [{Types}]", placeId, string.Join(", ", types));
+            return types;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error fetching Google Place types for {PlaceId}", placeId);
+            return [];
+        }
+    }
 }
 
