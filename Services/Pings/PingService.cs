@@ -166,6 +166,7 @@ public class PingService(
                 var newPoint = new Point(dto.Longitude, dto.Latitude) { SRID = 4326 };
                 var nearbyPings = await db.Pings
                     .Where(p => p.Visibility == PingVisibility.Public &&
+                                !p.IsDeleted &&
                                 p.Location.IsWithinDistance(newPoint, 0.0005)) // ~50m radius
                     .ToListAsync();
                 
