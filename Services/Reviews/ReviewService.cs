@@ -276,19 +276,12 @@ public class ReviewService(
 
         if (scope == "friends" && userId != null)
         {
+            // Friends feed: reviews authored by people you follow. (Ping privacy tiers
+            // were removed, so there's no visibility filter on the place itself.)
             var following = await followService.GetFollowingAsync(userId, new PaginationParams { PageNumber = 1, PageSize = 1000 });
             var friendIds = following.Items.Select(f => f.Id).ToHashSet();
-            
+
             query = query.Where(r => friendIds.Contains(r.UserId));
-            // For friends feed, we show Public pings OR Friends-only pings 
-            // (Note: This is a simplified check; strict friendship with Ping Owner is usually checked at specific access, 
-            // but for feed consistency with GetFriendsFeedAsync, we allow Public/Friends visibility here)
-            query = query.Where(r => r.PingActivity.Ping.Visibility == PingVisibility.Public || r.PingActivity.Ping.Visibility == PingVisibility.Friends);
-        }
-        else
-        {
-            // Global scope: Only Public pings
-            query = query.Where(r => r.PingActivity.Ping.Visibility == PingVisibility.Public);
         }
 
         if (userId != null)
@@ -511,23 +504,7 @@ public class ReviewService(
              if (isBlocked) throw new KeyNotFoundException("User not found.");
         }
 
-        // 2. Privacy Check (LikesPrivacy)
-        bool isSelf = targetUserId == viewerUserId;
-        if (!isSelf)
-        {
-            bool isFriend = false;
-            if (targetUser.LikesPrivacy == PrivacyConstraint.FriendsOnly)
-            {
-                var isFollowing = await followService.IsFollowingAsync(viewerUserId, targetUserId);
-                var isFollowedBy = await followService.IsFollowingAsync(targetUserId, viewerUserId);
-                isFriend = isFollowing && isFollowedBy;
-            }
-
-            bool canSeeLikes = targetUser.LikesPrivacy == PrivacyConstraint.Public ||
-                               (targetUser.LikesPrivacy == PrivacyConstraint.FriendsOnly && isFriend);
-            
-            if (!canSeeLikes) return new PaginatedResult<ExploreReviewDto>(new List<ExploreReviewDto>(), 0, pagination.PageNumber, pagination.PageSize);
-        }
+        // 2. Privacy tiers removed — likes are public to everyone.
 
         // 3. Fetch Likes
         var query = appDb.ReviewLikes
@@ -542,36 +519,7 @@ public class ReviewService(
             .AsNoTracking()
             .Where(rl => !rl.Review.PingActivity.Ping.IsDeleted);
 
-        // 4. Filter by Content Visibility (Ping Visibility)
-        // If viewing someone else's likes, you should ONLY see likes on Public/Visible pings.
-        // You generally shouldn't see that they liked a private ping unless you also have access, 
-        // but typically "Likes" tab is cleaner if restricted to Public pings or heavily filtered.
-        // Let's implement standard visibility check:
-        // Visible if: Ping Public OR Owner is Viewer OR (Ping Friends & Owner Friend of Viewer)
-        // For efficiency, let's filter to Public-Only for now if not self? 
-        // Or do in-memory filter if complex.
-        // Let's do standard filter query.
-
-        if (!isSelf)
-        {
-            // Simplified Visibility for aggregation lists: Public Only usually?
-            // "The 'Likes' list will only show reviews on **Public Pings** or Pings visible to the viewer."
-            
-            // To do this strictly in SQL is hard with friendship logic for every ping owner.
-            // Let's fetch and filter in memory or restrict to Public + OwnedByViewer.
-            // Assuming "Public" covers 90% of cases.
-            
-            // NOTE: We cannot easily check "Is Viewer Friend of Ping Owner" in LINQ efficiently for diverse owners.
-            // So we will restrict to: Public Pings OR Pings Owned by Viewer OR Pings Owned by Target (if Target is Friend).
-            
-            // Let's fetch a slightly larger batch and filter? Or just Public for safety/speed.
-            // Let's go with Public + OwnedByViewer.
-            
-            query = query.Where(rl => 
-                rl.Review.PingActivity.Ping.Visibility == PingVisibility.Public ||
-                rl.Review.PingActivity.Ping.OwnerUserId == viewerUserId
-            );
-        }
+        // 4. Privacy tiers removed — all pings are public, so no visibility filter.
 
         // Default Sort: CreatedAt Descending (Recency)
         bool isAscending = sortOrder?.Equals("Asc", StringComparison.OrdinalIgnoreCase) ?? false;
@@ -861,7 +809,6 @@ public class ReviewService(
             .Include(r => r.ReviewTags)
                 .ThenInclude(rt => rt.Tag)
             .Where(r => !r.PingActivity.Ping.IsDeleted) // Ensure ping is not soft-deleted
-            .Where(r => r.PingActivity.Ping.Visibility == PingVisibility.Public || r.PingActivity.Ping.Visibility == PingVisibility.Friends)
             .OrderByDescending(r => r.CreatedAt);
 
         var count = await query.CountAsync();

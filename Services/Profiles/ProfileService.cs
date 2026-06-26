@@ -356,17 +356,7 @@ public class ProfileService(
         var isFriend = isFollowing && isFollowedBy;
         var isSelf = targetUserId == currentUserId;
 
-        // If not self, check privacy settings
-        if (!isSelf)
-        {
-            bool canViewPings = user.PingsPrivacy == AppUserPrivacy.Public ||
-                                 (user.PingsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
-            if (!canViewPings)
-            {
-                // Return empty if privacy restricts access
-                return new PaginatedResult<PingDetailsDto>(new List<PingDetailsDto>(), 0, pagination.PageNumber, pagination.PageSize);
-            }
-        }
+        // Privacy tiers removed — profile pings are public to everyone.
 
         // Logic: Return {Ping, Date} to allow sorting by recency
         // Created Pings
@@ -398,12 +388,7 @@ public class ProfileService(
         // Owner is Target (Profile Owner) AND IsFriend: I see
         
         var visibleItems = combinedList
-            .Where(x => !x.IsDeleted || isSelf) // Show deleted pings only to self
-            .Where(x => 
-                x.Visibility == Models.Pings.PingVisibility.Public ||
-                x.OwnerUserId == currentUserId ||
-                (x.Visibility == Models.Pings.PingVisibility.Friends && x.OwnerUserId == targetUserId && isFriend)
-        );
+            .Where(x => !x.IsDeleted || isSelf); // Show deleted pings only to self; all else public
 
         // Group By PingId to get latest date
         var groupedItems = visibleItems
@@ -618,18 +603,9 @@ public class ProfileService(
             isFriend = isFollowing && isFollowedBy;
         }
 
-        // Determine permissions
-        bool canViewReviews = isSelf || user.ReviewsPrivacy == AppUserPrivacy.Public || 
-                              (user.ReviewsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
-        
-        bool canViewPings = isSelf || user.PingsPrivacy == AppUserPrivacy.Public || 
-                            (user.PingsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
-
-        // If both are private, and not self/friend as allowed, return empty
-        if (!canViewReviews && !canViewPings)
-        {
-             return new PaginatedResult<PlaceReviewSummaryDto>(new List<PlaceReviewSummaryDto>(), 0, pagination.PageNumber, pagination.PageSize);
-        }
+        // Privacy tiers removed — reviews and pings are public to everyone.
+        bool canViewReviews = true;
+        bool canViewPings = true;
 
         // Data Collection: Created Pings (Active only)
         var createdPingIds = canViewPings 
@@ -705,39 +681,7 @@ public class ProfileService(
             // Permission Check: Delete filter
             if (group.Ping.IsDeleted && !isSelf) continue;
 
-            // Ping Visibility Check (ensure viewer can see the Ping itself)
-            bool canSeePing = false;
-
-            if (isSelf) 
-            {
-                canSeePing = true; 
-            }
-            else
-            {
-                if (group.Ping.Visibility == Models.Pings.PingVisibility.Public)
-                {
-                    canSeePing = true;
-                }
-                else if (group.Ping.OwnerUserId == currentUserId)
-                {
-                    canSeePing = true; 
-                }
-                else if (group.Ping.Visibility == Models.Pings.PingVisibility.Friends)
-                {
-                    // Visible if Viewer is friend of Ping Owner.
-                    if (group.Ping.OwnerUserId == targetUserId)
-                    {
-                        if (isFriend) canSeePing = true;
-                    }
-                    else 
-                    {
-                        // Third-party friend check (optional but here for completeness)
-                        // If we skip it, we only show public/self-owned/target-owned pings.
-                    }
-                }
-            }
-
-            if (canSeePing)
+            // Privacy tiers removed — every ping is visible.
             {
                 var thumbnails = group.Reviews
                     .Where(r => !string.IsNullOrEmpty((string?)r.ThumbnailUrl))
@@ -783,38 +727,10 @@ public class ProfileService(
             if (isBlocked) throw new KeyNotFoundException("User not found.");
         }
 
-        bool isSelf = targetUserId == currentUserId;
-        bool isFriend = false;
-
-        // 1. Profile Privacy Check
-        if (!isSelf)
-        {
-            var isFollowing = await followService.IsFollowingAsync(currentUserId, targetUserId);
-            var isFollowedBy = await followService.IsFollowingAsync(targetUserId, currentUserId);
-            isFriend = isFollowing && isFollowedBy;
-
-            bool canViewReviews = user.ReviewsPrivacy == AppUserPrivacy.Public ||
-                                  (user.ReviewsPrivacy == AppUserPrivacy.FriendsOnly && isFriend);
-            
-            if (!canViewReviews) throw new KeyNotFoundException("Reviews not found or private.");
-        }
-
-        // 2. Ping Privacy Check
-        // We need the ping to check visibility
+        // Privacy tiers removed — reviews and places are public to everyone.
+        // Closed (deleted) pings remain viewable; they show with a "Closed" tag.
         var ping = await appDb.Pings.AsNoTracking().FirstOrDefaultAsync(p => p.Id == pingId);
         if (ping == null) throw new KeyNotFoundException("Place not found.");
-        
-        // Closed (deleted) pings remain viewable to others — they show with a
-        // "Closed" tag and their reviews persist. Visibility rules still apply.
-        if (!isSelf)
-        {
-             bool canSeePing = false;
-             if (ping.Visibility == Models.Pings.PingVisibility.Public) canSeePing = true;
-             else if (ping.OwnerUserId == currentUserId) canSeePing = true;
-             else if (ping.Visibility == Models.Pings.PingVisibility.Friends && ping.OwnerUserId == targetUserId && isFriend) canSeePing = true;
-
-             if (!canSeePing) throw new KeyNotFoundException("Place not found or private.");
-        }
 
         // Fetch Reviews
         var query = appDb.Reviews.AsNoTracking()
@@ -851,35 +767,9 @@ public class ProfileService(
         return new PaginatedResult<ReviewDto>(reviews, totalCount, pagination.PageNumber, pagination.PageSize);
     }
 
-    public async Task UpdateProfilePrivacyAsync(string userId, PrivacySettingsDto settings)
-    {
-        var user = await userManager.FindByIdAsync(userId);
-        if (user == null) throw new KeyNotFoundException("User not found.");
-
-        bool changed = false;
-
-        if (settings.ReviewsPrivacy.HasValue)
-        {
-            user.ReviewsPrivacy = settings.ReviewsPrivacy.Value;
-            changed = true;
-        }
-
-        if (settings.PingsPrivacy.HasValue)
-        {
-            user.PingsPrivacy = settings.PingsPrivacy.Value;
-            changed = true;
-        }
-
-        if (settings.LikesPrivacy.HasValue)
-        {
-            user.LikesPrivacy = settings.LikesPrivacy.Value;
-            changed = true;
-        }
-
-        if (changed)
-        {
-            await userManager.UpdateAsync(user);
-        }
-    }
+    // Privacy tiers were removed — everything is public. This is now a no-op kept
+    // only so older clients that still POST privacy settings don't error.
+    public Task UpdateProfilePrivacyAsync(string userId, PrivacySettingsDto settings)
+        => Task.CompletedTask;
 }
 

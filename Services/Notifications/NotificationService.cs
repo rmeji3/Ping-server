@@ -139,12 +139,16 @@ public class NotificationService : INotificationService
 
     public async Task RegisterDeviceAsync(string userId, string deviceToken, DevicePlatform platform, bool isProduction)
     {
-        var updated = await _context.UserDevices
-            .Where(d => d.UserId == userId && d.DeviceToken == deviceToken)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.Platform, platform));
+        // Upsert keyed on (userId, deviceToken). A tracked find-then-update keeps this
+        // provider-agnostic (device registration is infrequent, so the extra read is
+        // negligible). The unique-violation catch still handles a concurrent insert.
+        var existing = await _context.UserDevices
+            .FirstOrDefaultAsync(d => d.UserId == userId && d.DeviceToken == deviceToken);
 
-        if (updated > 0)
+        if (existing != null)
         {
+            existing.Platform = platform;
+            await _context.SaveChangesAsync();
             _logger.LogInformation("Updated push device for User {UserId} Platform {Platform}", userId, platform);
             return;
         }
@@ -161,10 +165,15 @@ public class NotificationService : INotificationService
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
+            // Lost a race: another request inserted this device. Reload and update it.
             _context.ChangeTracker.Clear();
-            await _context.UserDevices
-                .Where(d => d.UserId == userId && d.DeviceToken == deviceToken)
-                .ExecuteUpdateAsync(s => s.SetProperty(d => d.Platform, platform));
+            var concurrent = await _context.UserDevices
+                .FirstOrDefaultAsync(d => d.UserId == userId && d.DeviceToken == deviceToken);
+            if (concurrent != null)
+            {
+                concurrent.Platform = platform;
+                await _context.SaveChangesAsync();
+            }
             _logger.LogInformation("Concurrent device registration resolved for User {UserId}", userId);
         }
 

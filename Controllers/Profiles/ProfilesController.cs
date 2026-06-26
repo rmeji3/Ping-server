@@ -108,26 +108,9 @@ namespace Ping.Controllers.Profiles
             // It's a bit heavy but ensures consistency.
             // Optimized way: Add a lightweight "CanViewReviews" method.
             // For now, let's just fetch the profile and check IsFriends + Privacy.
+            // Privacy tiers removed — reviews are public to everyone.
             try
             {
-                var profile = await profileService.GetQuickProfileAsync(id, currentUserId);
-                
-                bool canView = profile.Id == currentUserId || 
-                            profile.ReviewsPrivacy == PrivacyConstraint.Public || 
-                            (profile.ReviewsPrivacy == PrivacyConstraint.FriendsOnly && profile.IsFriends);
-
-                if (!canView)
-                {
-                    // Return empty or Forbidden?
-                    // Let's return empty list to not leak existence, or forbidden if strict.
-                    // Usually empty is safer/cleaner for UI "No reviews".
-                    // But if it's explicitly private, UI should know.
-                    // The frontend checks permissions via "ReviewsPrivacy" enum.
-                    // So if we are here, frontend shouldn't have called it unless allowed.
-                    // Backend must enforce.
-                    return Forbid();
-                }
-
                 var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
                 var reviews = await reviewService.GetUserReviewsAsync(id, currentUserId, pagination);
                 return Ok(reviews);

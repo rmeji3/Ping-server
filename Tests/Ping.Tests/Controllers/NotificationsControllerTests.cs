@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Security.Claims;
 using Ping.Data.App;
+using Ping.Dtos.Notifications;
 using Ping.Models;
 using Ping.Models.Notifications;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,6 +11,11 @@ namespace Ping.Tests.Controllers;
 
 public class NotificationsControllerTests : BaseIntegrationTest
 {
+    // Minimal shape for deserializing the endpoint's PaginatedResult JSON. The real
+    // PaginatedResult<T> can't be read by System.Text.Json (its ctor param 'count'
+    // doesn't match the 'TotalCount' property), and we only need Items here.
+    private record NotificationPage(List<NotificationDto> Items);
+
     public NotificationsControllerTests(IntegrationTestFactory factory) : base(factory)
     {
     }
@@ -43,10 +49,11 @@ public class NotificationsControllerTests : BaseIntegrationTest
         };
         options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 
-        var notifications = await response.Content.ReadFromJsonAsync<List<Notification>>(options);
-        Assert.NotNull(notifications);
-        Assert.NotEmpty(notifications);
-        Assert.Equal("Test Notification", notifications[0].Title);
+        // The endpoint returns a paginated wrapper of NotificationDto, not a bare array.
+        var result = await response.Content.ReadFromJsonAsync<NotificationPage>(options);
+        Assert.NotNull(result);
+        Assert.NotEmpty(result!.Items);
+        Assert.Equal("Test Notification", result.Items[0].Title);
     }
 
     [Fact]

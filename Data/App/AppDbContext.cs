@@ -333,6 +333,13 @@ namespace Ping.Data.App
                 entity.Property(p => p.Name).HasMaxLength(100);
                 entity.Property(p => p.Address).HasMaxLength(256);
                 entity.Property(p => p.GooglePlaceId).HasMaxLength(256);
+
+                // At most one live ping per Google place. Partial/filtered so that
+                // Custom pings (null GooglePlaceId) and soft-deleted rows are exempt.
+                // This is what makes create idempotent under concurrent submits.
+                entity.HasIndex(p => p.GooglePlaceId)
+                    .IsUnique()
+                    .HasFilter("\"GooglePlaceId\" IS NOT NULL AND \"IsDeleted\" = false");
             });
 
             // Ping Activities

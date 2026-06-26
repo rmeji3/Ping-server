@@ -30,6 +30,28 @@ public class PingService(
 {
     public async Task<PingDetailsDto> CreatePingAsync(UpsertPingDto dto, string userId)
     {
+        // Privacy tiers were removed — every ping is public. Force it regardless of
+        // what the client sends so old/stale clients can't create hidden pings.
+        dto = dto with { Visibility = PingVisibility.Public };
+
+        // Idempotency: if this Google place is already a ping, return it instead of
+        // creating a duplicate (or erroring). Lets the client safely create-on-submit
+        // when reviewing a place. Scoped to public pings (the shared canonical place)
+        // or the caller's own ping, so we never leak someone else's private ping.
+        if (!string.IsNullOrWhiteSpace(dto.GooglePlaceId))
+        {
+            var existingPlace = await db.Pings
+                .FirstOrDefaultAsync(p => p.GooglePlaceId == dto.GooglePlaceId &&
+                                          !p.IsDeleted &&
+                                          (p.Visibility == PingVisibility.Public || p.OwnerUserId == userId));
+
+            if (existingPlace != null)
+            {
+                logger.LogInformation("Ping with GooglePlaceId '{PlaceId}' already exists ({Id}); returning existing.", dto.GooglePlaceId, existingPlace.Id);
+                return await ToPingDetailsDto(existingPlace, userId);
+            }
+        }
+
         // Redis-based daily rate limit per user
         var today = DateTime.UtcNow.Date.ToString("yyyy-MM-dd");
         var rateLimitKey = $"ratelimit:ping:create:{userId}:{today}";
@@ -86,17 +108,9 @@ public class PingService(
                             {
                                 dto = dto with { Latitude = googlePlace.Lat.Value, Longitude = googlePlace.Lng.Value };
                             }
-                            
-                            // DUPLICATE CHECK: Verify if this GooglePlaceId already exists in our DB
-                            var existingByPlaceId = await db.Pings
-                                .Where(p => p.GooglePlaceId == dto.GooglePlaceId && !p.IsDeleted)
-                                .FirstOrDefaultAsync();
 
-                            if (existingByPlaceId != null)
-                            {
-                                logger.LogInformation("Verified ping already exists with GooglePlaceId '{PlaceId}'. Returning error.", dto.GooglePlaceId);
-                                throw new InvalidOperationException($"Ping already exists: {existingByPlaceId.Name}");
-                            }
+                            // Duplicate GooglePlaceId is handled idempotently at the top of
+                            // this method (returns the existing ping), so no check needed here.
                         }
                         else
                         {
@@ -202,9 +216,30 @@ public class PingService(
         };
 
         db.Pings.Add(ping);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // Lost a race: another request created this same Google place between our
+            // idempotency check and this insert. The partial unique index on
+            // GooglePlaceId rejected the duplicate — return the winner's ping instead.
+            db.Entry(ping).State = EntityState.Detached;
+            if (!string.IsNullOrWhiteSpace(dto.GooglePlaceId))
+            {
+                var winner = await db.Pings.AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.GooglePlaceId == dto.GooglePlaceId && !p.IsDeleted);
+                if (winner != null)
+                {
+                    logger.LogInformation("Create race resolved for GooglePlaceId '{PlaceId}'; returning existing ping {PingId}.", dto.GooglePlaceId, winner.Id);
+                    return await ToPingDetailsDto(winner, userId);
+                }
+            }
+            throw;
+        }
 
-        logger.LogInformation("Ping created: {PingId} by {UserId}. Visibility: {Visibility}. Daily count: {Count}/{Limit}", 
+        logger.LogInformation("Ping created: {PingId} by {UserId}. Visibility: {Visibility}. Daily count: {Count}/{Limit}",
             ping.Id, userId, dto.Visibility, createdToday, limit);
 
         // If no genre was supplied by the client, enqueue a background classification job.
@@ -281,25 +316,7 @@ public class PingService(
 
         if (p is null) return null;
 
-        var isOwner = userId != null && p.OwnerUserId == userId;
-
-        if (!isOwner)
-        {
-            if (p.Visibility == PingVisibility.Private)
-                return null;
-
-            if (p.Visibility == PingVisibility.Friends && userId != null)
-            {
-                var friendIds = await followService.GetMutualIdsAsync(userId);
-                var isFriend = friendIds.Contains(p.OwnerUserId);
-                if (!isFriend) return null;
-            }
-            else if (p.Visibility == PingVisibility.Friends && userId == null)
-            {
-                return null;
-            }
-        }
-
+        // All pings are public — no visibility gating.
         return await ToPingDetailsDto(p, userId);
     }
     private static double DistanceKm(double lat1, double lng1, double lat2, double lng2)
@@ -316,20 +333,8 @@ public class PingService(
         var c = 2 * Math.Asin(Math.Sqrt(a));
         return 6371.0 * c;
     }
-    private static bool IsVisibleToUser(Models.Pings.Ping p, string? userId, HashSet<string> friendIds)
-    {
-        var isOwner = userId != null && p.OwnerUserId == userId;
-
-        if (isOwner) return true;
-
-        return p.Visibility switch
-        {
-            PingVisibility.Public  => true,
-            PingVisibility.Private => false,
-            PingVisibility.Friends => userId != null && friendIds.Contains(p.OwnerUserId),
-            _ => false
-        };
-    }
+    // Privacy tiers were removed — every ping is visible to everyone.
+    private static bool IsVisibleToUser(Models.Pings.Ping p, string? userId, HashSet<string> friendIds) => true;
 
 
     public async Task<PaginatedResult<PingDetailsDto>> SearchPingsAsync(PingSearchFilterDto filter, string? userId)
@@ -367,10 +372,7 @@ public class PingService(
             q = q.Where(p => p.Location.IsWithinDistance(searchPoint, radiusDegrees));
         }
 
-        if (filter.Visibility.HasValue)
-        {
-            q = q.Where(p => p.Visibility == filter.Visibility.Value);
-        }
+        // Visibility filter intentionally ignored — all pings are public.
 
         if (filter.Type.HasValue)
         {
@@ -438,21 +440,8 @@ public class PingService(
         foreach (var f in favorites)
         {
             var p = f.Ping;
-            var isOwner = p.OwnerUserId == userId;
-            bool isVisible = false;
 
-            if (isOwner || p.Visibility == PingVisibility.Public)
-            {
-                isVisible = true;
-            }
-            else if (p.Visibility == PingVisibility.Friends)
-            {
-                var friendIds = await followService.GetMutualIdsAsync(userId);
-                var isFriend = friendIds.Contains(p.OwnerUserId);
-                isVisible = isFriend;
-            }
-
-            if (isVisible)
+            // All pings are public — always visible.
             {
                 list.Add(await ToPingDetailsDto(p, userId));
             }
