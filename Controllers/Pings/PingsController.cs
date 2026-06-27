@@ -72,7 +72,7 @@ namespace Ping.Controllers.Pings
         public async Task<ActionResult<PingDetailsDto>> GetById(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await pingService.GetPingByIdAsync(id, userId);
+            var result = await pingService.GetPingByIdIncludingDeletedAsync(id, userId);
 
             if (result is null) return NotFound();
 

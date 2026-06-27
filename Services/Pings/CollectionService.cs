@@ -153,11 +153,10 @@ namespace Ping.Services.Pings
             var pings = new List<PingDetailsDto>();
             foreach (var cp in collection.CollectionPings.OrderByDescending(x => x.AddedUtc))
             {
-                var details = await pingService.GetPingByIdAsync(cp.PingId, currentUserId);
-                if (details != null)
-                {
-                    pings.Add(details);
-                }
+                // Include deleted pings — they stay in collections so the owner
+                // can see them even if the place was removed.
+                var details = await pingService.GetPingByIdIncludingDeletedAsync(cp.PingId, currentUserId);
+                if (details != null) pings.Add(details);
             }
 
             var isOwner = currentUserId != null && collection.UserId == currentUserId;
@@ -259,6 +258,13 @@ namespace Ping.Services.Pings
             var collection = await db.Collections.FindAsync(collectionId);
             if (collection == null) throw new KeyNotFoundException("Collection not found.");
             if (collection.UserId != userId) throw new UnauthorizedAccessException("Not your collection.");
+
+            if (collection.Name == "All")
+            {
+                // Removing from 'All' Favorites collection triggers a global unfavorite cascade
+                await pingService.UnfavoriteAsync(pingId, userId);
+                return;
+            }
 
             var cp = await db.CollectionPings.FirstOrDefaultAsync(x => x.CollectionId == collectionId && x.PingId == pingId);
             if (cp != null)

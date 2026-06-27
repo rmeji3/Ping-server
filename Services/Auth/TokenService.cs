@@ -52,8 +52,17 @@ namespace Ping.Features.Auth
                 .Include(rt => rt.User)
                 .FirstOrDefaultAsync(rt => rt.TokenHash == hash);
 
-            if (stored is null || !stored.IsActive)
+            if (stored is null || stored.IsExpired)
                 throw new UnauthorizedAccessException("Invalid or expired refresh token.");
+
+            if (stored.IsRevoked)
+            {
+                // Allow a grace period of 60 seconds for recently rotated refresh tokens 
+                // to handle network retries/drops gracefully.
+                var isWithinGracePeriod = stored.RevokedUtc.HasValue && stored.RevokedUtc.Value.AddSeconds(60) >= DateTime.UtcNow;
+                if (!isWithinGracePeriod)
+                    throw new UnauthorizedAccessException("Invalid or expired refresh token.");
+            }
 
             // Revoke the old token (token rotation)
             stored.RevokedUtc = DateTime.UtcNow;

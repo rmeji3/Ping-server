@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text.Json;
 using Ping.Dtos.Notifications;
 using Ping.Dtos.Common;
 

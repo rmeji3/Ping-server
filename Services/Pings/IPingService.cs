@@ -8,6 +8,7 @@ public interface IPingService
 {
     Task<PingDetailsDto> CreatePingAsync(UpsertPingDto dto, string userId);
     Task<PingDetailsDto?> GetPingByIdAsync(int id, string? userId);
+    Task<PingDetailsDto?> GetPingByIdIncludingDeletedAsync(int id, string? userId);
     Task<PaginatedResult<PingDetailsDto>> SearchPingsAsync(PingSearchFilterDto filter, string? userId);
     Task<PaginatedResult<PingDetailsDto>> GetFavoritedPingsAsync(string userId, PaginationParams pagination);
     Task<List<PingDetailsDto>> GetPingsByOwnerAsync(string userId, bool onlyClaimed = false);

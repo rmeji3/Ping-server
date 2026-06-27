@@ -320,6 +320,19 @@ public class PingService(
         // All pings are public — no visibility gating.
         return await ToPingDetailsDto(p, userId);
     }
+
+    public async Task<PingDetailsDto?> GetPingByIdIncludingDeletedAsync(int id, string? userId)
+    {
+        var p = await db.Pings
+            .AsNoTracking()
+            .Include(x => x.PingActivities)
+            .Include(x => x.PingGenre)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (p is null) return null;
+
+        return await ToPingDetailsDto(p, userId);
+    }
     private static double DistanceKm(double lat1, double lng1, double lat2, double lng2)
     {
         var dLat = (lat2 - lat1) * Math.PI / 180.0;
@@ -532,18 +545,21 @@ public class PingService(
                 ping.Favorites--;
             }
 
-            // Also remove from "All" collection
-            var allCollection = await db.Collections
-                .FirstOrDefaultAsync(c => c.UserId == userId && c.Name == "All");
-            
-            if (allCollection != null)
+            // Option A Cascade: Remove this ping from all collections owned by this user
+            var userCollections = await db.Collections
+                .Where(c => c.UserId == userId)
+                .Select(c => c.Id)
+                .ToListAsync();
+
+            if (userCollections.Any())
             {
-                var cp = await db.CollectionPings
-                    .FirstOrDefaultAsync(x => x.CollectionId == allCollection.Id && x.PingId == id);
-                
-                if (cp != null)
+                var cpsToRemove = await db.CollectionPings
+                    .Where(x => x.PingId == id && userCollections.Contains(x.CollectionId))
+                    .ToListAsync();
+
+                if (cpsToRemove.Any())
                 {
-                    db.CollectionPings.Remove(cp);
+                    db.CollectionPings.RemoveRange(cpsToRemove);
                 }
             }
 
