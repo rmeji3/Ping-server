@@ -12,6 +12,7 @@ using Ping.Utils;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Ping.Services.Events;
 
@@ -23,6 +24,7 @@ public class EventService(
     Services.Blocks.IBlockService blockService,
     Services.Follows.IFollowService followService,
     INotificationService notificationService,
+    IServiceScopeFactory scopeFactory,
     ILogger<EventService> logger) : IEventService
 {
     public async Task<EventDto> CreateEventAsync(CreateEventDto dto, string userId)
@@ -72,8 +74,8 @@ public class EventService(
             CreatedAt = DateTime.UtcNow,
             PingId = dto.PingId,
             EventGenreId = dto.EventGenreId,
-            ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl),
-            ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl ?? dto.ImageUrl),
+            ImageUrl = UrlUtils.SanitizeOptionalUrl(dto.ImageUrl),
+            ThumbnailUrl = UrlUtils.SanitizeOptionalUrl(dto.ThumbnailUrl ?? dto.ImageUrl),
             Price = dto.Price
         };
 
@@ -195,8 +197,8 @@ public class EventService(
         if (dto.EventGenreId.HasValue) ev.EventGenreId = dto.EventGenreId.Value;
         
         // Apply new optional fields
-        if (dto.ImageUrl != null) ev.ImageUrl = UrlUtils.SanitizeUrl(dto.ImageUrl);
-        if (dto.ThumbnailUrl != null) ev.ThumbnailUrl = UrlUtils.SanitizeUrl(dto.ThumbnailUrl ?? dto.ImageUrl);
+        if (dto.ImageUrl != null) ev.ImageUrl = UrlUtils.SanitizeOptionalUrl(dto.ImageUrl);
+        if (dto.ThumbnailUrl != null) ev.ThumbnailUrl = UrlUtils.SanitizeOptionalUrl(dto.ThumbnailUrl ?? dto.ImageUrl);
         if (dto.Price.HasValue) ev.Price = dto.Price.Value;
 
         if (dto.PingId.HasValue)
@@ -554,40 +556,69 @@ public class EventService(
         if (ev.CreatedById != userId) throw new UnauthorizedAccessException("Not owner");
 
         var eventTitle = ev.Title;
+        var evThumbnailUrl = ev.ThumbnailUrl;
+        var evImageUrl = ev.ImageUrl;
         var attendees = ev.Attendees
             .Where(a => a.Status == AttendeeStatus.Attending && a.UserId != userId)
             .Select(a => a.UserId)
             .ToList();
 
-        appDb.Events.Remove(ev);
+        // Soft delete immediately to hide it from all queries
+        ev.Status = "Deleted";
         await appDb.SaveChangesAsync();
 
-        // Notify attendees
-        var sender = await userManager.FindByIdAsync(userId);
-        foreach (var attendeeId in attendees)
+        // Fire-and-forget background task to send notifications and clean up the database
+        _ = Task.Run(async () =>
         {
             try
             {
-                await notificationService.SendNotificationAsync(new Notification
+                using var scope = scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var scopedNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                var scopedUserManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+
+                // Notify attendees
+                var sender = await scopedUserManager.FindByIdAsync(userId);
+                foreach (var attendeeId in attendees)
                 {
-                    UserId = attendeeId,
-                    SenderId = userId,
-                    SenderName = sender?.UserName ?? "Someone",
-                    SenderProfileImageUrl = sender?.ProfileThumbnailUrl ?? sender?.ProfileImageUrl,
-                    Type = NotificationType.EventCancelled,
-                    Title = "Event Cancelled",
-                    Message = $"The event '{eventTitle}' has been cancelled.",
-                    ReferenceId = id.ToString(),
-                    ImageThumbnailUrl = ev.ThumbnailUrl ?? ev.ImageUrl
-                });
+                    try
+                    {
+                        await scopedNotificationService.SendNotificationAsync(new Notification
+                        {
+                            UserId = attendeeId,
+                            SenderId = userId,
+                            SenderName = sender?.UserName ?? "Someone",
+                            SenderProfileImageUrl = sender?.ProfileThumbnailUrl ?? sender?.ProfileImageUrl,
+                            Type = NotificationType.EventCancelled,
+                            Title = "Event Cancelled",
+                            Message = $"The event '{eventTitle}' has been cancelled.",
+                            ReferenceId = id.ToString(),
+                            ImageThumbnailUrl = evThumbnailUrl ?? evImageUrl
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to send event cancellation notification to {UserId} in background", attendeeId);
+                    }
+                }
+
+                // Delete event fully from DB
+                var dbEvent = await db.Events
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(e => e.Id == id);
+                if (dbEvent != null)
+                {
+                    db.Events.Remove(dbEvent);
+                    await db.SaveChangesAsync();
+                }
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to send event cancellation notification to {UserId}", attendeeId);
+                logger.LogError(ex, "Background deletion failed for Event {EventId}", id);
             }
-        }
+        });
 
-        logger.LogInformation("Event deleted: {EventId} by {UserId}", id, userId);
+        logger.LogInformation("Event soft-deleted and queued for background deletion: {EventId} by {UserId}", id, userId);
         return true;
     }
 

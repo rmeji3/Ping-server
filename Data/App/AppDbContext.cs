@@ -319,6 +319,9 @@ namespace Ping.Data.App
 
             // EventCommentReaction -> EventComment
             builder.Entity<EventCommentReaction>()
+                .HasQueryFilter(ecr => ecr.Comment == null || ecr.Comment.Event == null || ecr.Comment.Event.Status != "Deleted");
+
+            builder.Entity<EventCommentReaction>()
                 .HasOne(r => r.Comment)
                 .WithMany(c => c.Reactions)
                 .HasForeignKey(r => r.CommentId)
@@ -393,6 +396,9 @@ namespace Ping.Data.App
             builder.Entity<Event>()
                 .Property(e => e.Status)
                 .HasMaxLength(50);
+
+            builder.Entity<Event>()
+                .HasQueryFilter(e => e.Status != "Deleted");
             
             builder.Entity<Event>()
                 .Property(e => e.Price)
@@ -401,6 +407,9 @@ namespace Ping.Data.App
             builder.Entity<EventComment>()
                 .Property(ec => ec.Content)
                 .HasMaxLength(500);
+
+            builder.Entity<EventComment>()
+                .HasQueryFilter(ec => ec.Event == null || ec.Event.Status != "Deleted");
 
             builder.Entity<Report>(entity =>
             {
@@ -411,6 +420,9 @@ namespace Ping.Data.App
 
             builder.Entity<EventAttendee>()
                 .HasKey(ea => new { ea.EventId, ea.UserId });
+
+            builder.Entity<EventAttendee>()
+                .HasQueryFilter(ea => ea.Event.Status != "Deleted");
 
             builder.Entity<EventAttendee>()
                 .HasOne(ea => ea.Event)

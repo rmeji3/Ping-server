@@ -30,6 +30,18 @@ public static class UrlUtils
         return url;
     }
 
+    public static string? SanitizeOptionalUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        
+        if (url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        
+        return url;
+    }
+
     public static string? SanitizeProfileUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return null; // Or return ProfilePlaceholderS3Url
