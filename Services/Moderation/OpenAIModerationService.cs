@@ -16,7 +16,7 @@ public class OpenAIModerationService(HttpClient http, IConfiguration config, ILo
         if (string.IsNullOrWhiteSpace(text))
             return new ModerationResult(false, null);
 
-        var apiKey = config["OPENAI_API_KEY"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        var apiKey = config["OpenAI:ApiKey"] ?? config["OPENAI_API_KEY"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrEmpty(apiKey))
         {
             logger.LogWarning("OPENAI_API_KEY is missing. Moderation failing open.");
@@ -78,7 +78,7 @@ public class OpenAIModerationService(HttpClient http, IConfiguration config, ILo
         if (string.IsNullOrWhiteSpace(base64Image))
             return new ModerationResult(false, null);
 
-        var apiKey = config["OPENAI_API_KEY"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        var apiKey = config["OpenAI:ApiKey"] ?? config["OPENAI_API_KEY"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrEmpty(apiKey))
         {
             logger.LogWarning("OPENAI_API_KEY is missing. Image moderation failing open.");

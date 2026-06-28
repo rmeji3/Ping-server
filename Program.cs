@@ -114,6 +114,11 @@ var googleClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
 if (!string.IsNullOrEmpty(googleClientId))
     builder.Configuration["Google:ClientId"] = googleClientId;
 
+// OpenAI API Key
+var openAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+if (!string.IsNullOrEmpty(openAiApiKey))
+    builder.Configuration["OpenAI:ApiKey"] = openAiApiKey;
+
 // Fallback if no Google API Key provided in Development (prevents crash)
 if (string.IsNullOrEmpty(builder.Configuration["Google:ApiKey"]) && builder.Environment.IsDevelopment())
 {
@@ -354,7 +359,7 @@ builder.Services.AddHealthChecks()
 // --- Semantic Kernel ---
 builder.Services.AddKernel(); // Always register Kernel
 
-var openAiKey = builder.Configuration["OPENAI_API_KEY"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+var openAiKey = builder.Configuration["OpenAI:ApiKey"] ?? builder.Configuration["OPENAI_API_KEY"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (string.IsNullOrEmpty(openAiKey))
 {
     // Fallback if no key provided (prevents crash, but AI features will fail if called)

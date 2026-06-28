@@ -1,6 +1,8 @@
+using System.Collections.Generic;
+
 namespace Ping.Services.Google;
 
-public record GooglePingInfo(string Name, string? Address, double? Lat, double? Lng);
+public record GooglePingInfo(string Name, string? Address, double? Lat, double? Lng, IReadOnlyList<string>? Types = null);
 
 public interface IPingNameService
 {

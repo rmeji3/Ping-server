@@ -61,7 +61,7 @@ public class RecommendationService(
                 Longitude = g.Lng,
                 Source = "Google",
                 LocalPingId = null,
-                Genre = suggestedGenre
+                Genre = MatchGoogleTypeToGenre(g.Types, suggestedGenre)
             }));
         }
 
@@ -207,6 +207,86 @@ public class RecommendationService(
             .ToList();
 
         return matches;
+    }
+
+    private static readonly (string googleType, string genreName)[] GoogleTypeMap =
+    [
+        ("night_club",        "Nightlife"),
+        ("bar",               "Nightlife"),
+        ("cafe",              "Cafe"),
+        ("bakery",            "Cafe"),
+        ("restaurant",        "Food"),
+        ("food",              "Food"),
+        ("meal_takeaway",     "Food"),
+        ("meal_delivery",     "Food"),
+        ("gym",               "Wellness"),
+        ("spa",               "Wellness"),
+        ("beauty_salon",      "Wellness"),
+        ("hair_care",         "Wellness"),
+        ("hospital",          "Wellness"),
+        ("doctor",            "Wellness"),
+        ("pharmacy",          "Wellness"),
+        ("dentist",           "Wellness"),
+        ("physiotherapist",   "Wellness"),
+        ("park",              "Outdoors"),
+        ("campground",        "Outdoors"),
+        ("rv_park",           "Outdoors"),
+        ("natural_feature",   "Outdoors"),
+        ("stadium",           "Sports"),
+        ("sports_complex",    "Sports"),
+        ("bowling_alley",     "Sports"),
+        ("golf_course",       "Sports"),
+        ("ski_resort",        "Sports"),
+        ("museum",            "Art"),
+        ("art_gallery",       "Art"),
+        ("movie_theater",     "Entertainment"),
+        ("amusement_park",    "Entertainment"),
+        ("casino",            "Entertainment"),
+        ("zoo",               "Entertainment"),
+        ("aquarium",          "Entertainment"),
+        ("performing_arts_theater", "Entertainment"),
+        ("shopping_mall",     "Shopping"),
+        ("supermarket",       "Shopping"),
+        ("grocery_or_supermarket", "Shopping"),
+        ("store",             "Shopping"),
+        ("convenience_store", "Shopping"),
+        ("clothing_store",    "Fashion"),
+        ("shoe_store",        "Fashion"),
+        ("jewelry_store",     "Fashion"),
+        ("car_dealer",        "Automotive"),
+        ("car_repair",        "Automotive"),
+        ("car_wash",          "Automotive"),
+        ("gas_station",       "Automotive"),
+        ("school",            "Education"),
+        ("secondary_school",  "Education"),
+        ("university",        "Education"),
+        ("library",           "Education"),
+        ("lodging",           "Travel"),
+        ("airport",           "Travel"),
+        ("train_station",     "Travel"),
+        ("bus_station",       "Travel"),
+        ("subway_station",    "Travel"),
+        ("tourist_attraction","Travel"),
+        ("parking",           "Parking"),
+        ("pet_store",         "Pets"),
+        ("veterinary_care",   "Pets"),
+        ("electronics_store", "Tech"),
+        ("music_store",       "Music")
+    ];
+
+    private string MatchGoogleTypeToGenre(System.Collections.Generic.IReadOnlyList<string>? types, string fallbackGenre)
+    {
+        if (types == null || types.Count == 0) return fallbackGenre;
+        
+        var typeSet = new System.Collections.Generic.HashSet<string>(types, System.StringComparer.OrdinalIgnoreCase);
+        foreach (var (googleType, genreName) in GoogleTypeMap)
+        {
+            if (typeSet.Contains(googleType))
+            {
+                return genreName;
+            }
+        }
+        return fallbackGenre;
     }
 }
 

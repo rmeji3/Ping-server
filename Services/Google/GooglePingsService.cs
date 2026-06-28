@@ -120,8 +120,8 @@ public class GooglePingsService(HttpClient httpClient, IConfiguration config, IL
 
             var request = new HttpRequestMessage(HttpMethod.Post, "https://places.googleapis.com/v1/places:searchText");
             request.Headers.Add("X-Goog-Api-Key", apiKey);
-            // Requesting name, address, and location
-            request.Headers.Add("X-Goog-FieldMask", "places.displayName,places.formattedAddress,places.location");
+            // Requesting name, address, location, and types
+            request.Headers.Add("X-Goog-FieldMask", "places.displayName,places.formattedAddress,places.location,places.types");
             request.Content = new StringContent(JsonSerializer.Serialize(requestBody), System.Text.Encoding.UTF8, "application/json");
 
             var response = await httpClient.SendAsync(request);
@@ -162,9 +162,22 @@ public class GooglePingsService(HttpClient httpClient, IConfiguration config, IL
                         if (locObj.TryGetProperty("longitude", out var lngProp)) pLng = lngProp.GetDouble();
                     }
 
+                    var types = new List<string>();
+                    if (place.TryGetProperty("types", out var typesProp))
+                    {
+                        foreach (var typeElement in typesProp.EnumerateArray())
+                        {
+                            var tStr = typeElement.GetString();
+                            if (!string.IsNullOrEmpty(tStr))
+                            {
+                                types.Add(tStr);
+                            }
+                        }
+                    }
+
                     if (!string.IsNullOrEmpty(name))
                     {
-                        results.Add(new GooglePingInfo(name, address, pLat, pLng));
+                        results.Add(new GooglePingInfo(name, address, pLat, pLng, types));
                     }
                 }
             }
