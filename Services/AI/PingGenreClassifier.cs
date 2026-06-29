@@ -39,9 +39,21 @@ public class PingGenreClassifier(
         ("pharmacy",          "Wellness"),
         ("dentist",           "Wellness"),
         ("physiotherapist",   "Wellness"),
-        // Outdoors
+        // Outdoors — parks of every kind plus hiking/nature. Note these are all
+        // exact type matches, so none of them collide with "parking" below.
         ("park",              "Outdoors"),
+        ("national_park",     "Outdoors"),
+        ("state_park",        "Outdoors"),
+        ("dog_park",          "Outdoors"),
+        ("hiking_area",       "Outdoors"),
+        ("garden",            "Outdoors"),
+        ("botanical_garden",  "Outdoors"),
+        ("wildlife_park",     "Outdoors"),
+        ("wildlife_refuge",   "Outdoors"),
+        ("picnic_ground",     "Outdoors"),
+        ("marina",            "Outdoors"),
         ("campground",        "Outdoors"),
+        ("camping_cabin",     "Outdoors"),
         ("rv_park",           "Outdoors"),
         ("natural_feature",   "Outdoors"),
         // Sports
