@@ -62,8 +62,9 @@ public class GooglePlacesController : ControllerBase
         }
 
         var client = _httpClientFactory.CreateClient();
-        // Always enforce establishment-only — never trust the client param for `types`.
-        var url = $"https://maps.googleapis.com/maps/api/place/autocomplete/json?input={Uri.EscapeDataString(input)}&key={apiKey}&language=en&types=establishment";
+        // Respect the client parameter for `types`, defaulting to establishment-only.
+        var targetTypes = string.IsNullOrWhiteSpace(types) ? "establishment" : types;
+        var url = $"https://maps.googleapis.com/maps/api/place/autocomplete/json?input={Uri.EscapeDataString(input)}&key={apiKey}&language=en&types={Uri.EscapeDataString(targetTypes)}";
 
         if (!string.IsNullOrEmpty(location)) url += $"&location={location}";
         if (!string.IsNullOrEmpty(radius)) url += $"&radius={radius}";
@@ -76,14 +77,18 @@ public class GooglePlacesController : ControllerBase
         {
             // Post-filter: strip any prediction that Google returned whose types
             // indicate a geocode/administrative result (city, region, country, etc.)
-            // despite the types=establishment param — the legacy API isn't always strict.
-            var filtered = FilterEstablishmentsOnly(content);
-            return Content(filtered ?? content, "application/json");
+            // despite the types=establishment param — only if types is establishment.
+            if (targetTypes == "establishment")
+            {
+                var filtered = FilterEstablishmentsOnly(content);
+                return Content(filtered ?? content, "application/json");
+            }
+            return Content(content, "application/json");
         }
 
         _logger.LogWarning("Google legacy autocomplete failed, trying Places API v1 fallback. Status: {StatusCode}", response.StatusCode);
 
-        var fallbackJson = await AutocompleteWithPlacesV1Async(client, apiKey, input, location, radius);
+        var fallbackJson = await AutocompleteWithPlacesV1Async(client, apiKey, input, location, radius, targetTypes);
         if (fallbackJson is not null)
         {
             return Content(fallbackJson, "application/json");
@@ -438,13 +443,13 @@ public class GooglePlacesController : ControllerBase
         }
     }
 
-    private async Task<string?> AutocompleteWithPlacesV1Async(HttpClient client, string apiKey, string input, string? location, string? radius)
+    private async Task<string?> AutocompleteWithPlacesV1Async(HttpClient client, string apiKey, string input, string? location, string? radius, string targetTypes)
     {
         var requestPayload = new PlacesAutocompleteRequest
         {
             Input = input,
             LanguageCode = "en",
-            IncludedPrimaryTypes = ["establishment"]
+            IncludedPrimaryTypes = [targetTypes]
         };
 
         if (TryParseLocation(location, out var latitude, out var longitude))

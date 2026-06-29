@@ -342,8 +342,8 @@ public class ReviewService(
             var minLon = lon - lonDelta;
             var maxLon = lon + lonDelta;
 
-            query = query.Where(r => r.PingActivity.Ping.Latitude >= minLat && r.PingActivity.Ping.Latitude <= maxLat &&
-                                     r.PingActivity.Ping.Longitude >= minLon && r.PingActivity.Ping.Longitude <= maxLon);
+            query = query.Where(r => r.PingActivity.Ping.Location.Y >= minLat && r.PingActivity.Ping.Location.Y <= maxLat &&
+                                     r.PingActivity.Ping.Location.X >= minLon && r.PingActivity.Ping.Location.X <= maxLon);
         }
 
         if (scope == "friends")
