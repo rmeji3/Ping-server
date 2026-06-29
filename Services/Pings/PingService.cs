@@ -115,13 +115,15 @@ public class PingService(
                         else
                         {
                             logger.LogWarning("AI Verification Failed: '{User}' does NOT match '{Official}'. Downgrading to Custom.", finalName, googlePlace.Name);
-                            dto = dto with { Type = PingType.Custom };
+                            // Name doesn't match the official place — drop the linkage so the
+                            // ping isn't treated as verified (the app keys off GooglePlaceId).
+                            dto = dto with { Type = PingType.Custom, GooglePlaceId = null };
                         }
                     }
                     else
                     {
                         logger.LogError("GooglePlaceId {Id} provided but not found. Downgrading to Custom.", dto.GooglePlaceId);
-                        dto = dto with { Type = PingType.Custom };
+                        dto = dto with { Type = PingType.Custom, GooglePlaceId = null };
                     }
                 }
                 else
@@ -290,6 +292,10 @@ public class PingService(
                      {
                           logger.LogWarning("Update Ping: Name '{User}' does NOT match '{Official}'. Force downgrading to Custom.", targetName, googlePlace.Name);
                           ping.Type = PingType.Custom;
+                          // The renamed place no longer represents the official Google place,
+                          // so drop the linkage. The app keys its "verified" badge off
+                          // GooglePlaceId, so leaving it set would keep the ping looking verified.
+                          ping.GooglePlaceId = null;
                      }
                  }
             }
@@ -661,7 +667,9 @@ public class PingService(
         var topReviewImage = activityIds.Any() ? await db.Reviews
             .Where(r => activityIds.Contains(r.PingActivityId))
             .OrderByDescending(r => r.Likes)
-            .Select(r => r.ThumbnailUrl)
+            // Hero is rendered full-width, so prefer the full-res original and
+            // only fall back to the 500px thumbnail when no original exists.
+            .Select(r => r.ImageUrl ?? r.ThumbnailUrl)
             .FirstOrDefaultAsync() : null;
 
         return new PingDetailsDto(

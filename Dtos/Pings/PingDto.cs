@@ -34,7 +34,15 @@ namespace Ping.Dtos.Pings
         string? GooglePlaceId = null,
         bool IsPingDeleted = false,
         string? ThumbnailUrl = null
-    );
+    )
+    {
+        /// <summary>
+        /// Single source of truth for whether a ping is verified. Derived from
+        /// <see cref="Type"/> so it always reflects the authoritative flag — clients
+        /// should rely on this rather than inferring verification from GooglePlaceId.
+        /// </summary>
+        public bool IsVerified => Type == PingType.Verified;
+    }
 
     public class UpdatePingDto
     {
