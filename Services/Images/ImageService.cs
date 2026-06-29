@@ -1,5 +1,7 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.Processing;
 using Ping.Services.Storage;
 using Microsoft.Extensions.Logging;
@@ -10,6 +12,12 @@ public class ImageService(IStorageService storageService, HttpClient httpClient,
 {
     private const int MaxThumbnailSize = 500;
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+
+    // We must re-encode the original to bake in EXIF orientation, which is
+    // lossy for JPEG/WebP. ImageSharp's default JPEG quality is only 75, which
+    // visibly softens full-size photos (e.g. the ping detail hero). Re-encode
+    // at a high quality so the stored original stays close to what was uploaded.
+    private const int OriginalQuality = 92;
 
     public async Task<(string OriginalUrl, string ThumbnailUrl)> ProcessAndUploadImageAsync(IFormFile file, string folder, string userId)
     {
@@ -72,9 +80,17 @@ public class ImageService(IStorageService storageService, HttpClient httpClient,
             image.Mutate(x => x.AutoOrient());
 
             // Upload the orientation-corrected original in its original format.
+            // Pick a high-quality encoder for the lossy formats so re-encoding
+            // doesn't degrade the photo; lossless/other formats keep their default.
+            IImageEncoder originalEncoder = format.Name switch
+            {
+                "JPEG" => new JpegEncoder { Quality = OriginalQuality },
+                "WEBP" => new WebpEncoder { Quality = OriginalQuality },
+                _ => image.Configuration.ImageFormatsManager.GetEncoder(format),
+            };
             using (var origOut = new MemoryStream())
             {
-                await image.SaveAsync(origOut, format);
+                await image.SaveAsync(origOut, originalEncoder);
                 origOut.Position = 0;
                 var origFile = new FormFile(origOut, 0, origOut.Length, "file", $"original{ext}")
                 {
