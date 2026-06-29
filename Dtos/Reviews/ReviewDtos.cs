@@ -17,7 +17,13 @@ public record ReviewDto(
     bool IsOwner,
     List<string> Tags,
     bool IsPingDeleted,
-    List<string>? AdditionalImageUrls = null
+    List<string>? AdditionalImageUrls = null,
+    // Optional place context. Populated by endpoints that key off a single
+    // place (e.g. a user's reviews for one ping) so clients can show the place
+    // name/address on share cards. Trailing + defaulted so the other call sites
+    // that don't carry place context keep compiling unchanged.
+    string? PingName = null,
+    string? PingAddress = null
 );
 
 public record CreateReviewDto(

@@ -760,7 +760,9 @@ public class ProfileService(
                 r.UserId == currentUserId, // IsOwner
                 r.ReviewTags.Select(rt => rt.Tag.Name).ToList(),
                 ping.IsDeleted,
-                r.AdditionalImageUrls
+                r.AdditionalImageUrls,
+                ping.Name,
+                ping.Address ?? string.Empty
             ))
             .ToListAsync();
 

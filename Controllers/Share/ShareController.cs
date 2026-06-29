@@ -167,13 +167,23 @@ public class ShareController(IReviewService reviewService, IPingService pingServ
     (function() {{
       var deepLink = {J(deepLink)};
       var store = /android/i.test(navigator.userAgent) ? {J(playStoreUrl)} : {J(appStoreUrl)};
-      // Try to open the app; if nothing handles the scheme, fall back to the store.
-      var now = Date.now();
-      var timer = setTimeout(function() {{
-        if (Date.now() - now < 1600) window.location = store;
-      }}, 1200);
+      // Try to open the app via its custom scheme; if nothing handles it, fall
+      // back to the store. (Installed apps reached by a real universal link never
+      // load this page — they open natively. This is only the fallback path.)
+      //
+      // When the app does open, the browser tab is backgrounded, so we cancel the
+      // store redirect on any signal that we've left the page. Checking
+      // document.hidden at fire time is the reliable test; the listeners just let
+      // us bail earlier.
+      var cancelled = false;
+      function cancel() {{ cancelled = true; }}
+      document.addEventListener('visibilitychange', function() {{ if (document.hidden) cancel(); }});
+      window.addEventListener('pagehide', cancel);
+      window.addEventListener('blur', cancel);
+      setTimeout(function() {{
+        if (!cancelled && !document.hidden) window.location = store;
+      }}, 1500);
       window.location = deepLink;
-      window.addEventListener('pagehide', function() {{ clearTimeout(timer); }});
     }})();
   </script>
 </body>
