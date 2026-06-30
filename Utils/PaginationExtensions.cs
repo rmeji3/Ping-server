@@ -27,5 +27,10 @@ public static class PaginationExtensions
 
         return new PaginatedResult<T>(items, count, p.PageNumber, p.PageSize);
     }
+
+    public static PaginatedResult<T> ToPaginatedResult<T>(this IEnumerable<T> source, PaginationParams p, int totalCount)
+    {
+        return new PaginatedResult<T>(source, totalCount, p.PageNumber, p.PageSize);
+    }
 }
 

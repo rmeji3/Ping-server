@@ -596,7 +596,8 @@ public class ReviewService(
             .Include(rl => rl.Review)
                 .ThenInclude(r => r.ReviewTags)
                     .ThenInclude(rt => rt.Tag)
-            .AsNoTracking();
+            .AsNoTracking()
+            .Where(rl => !rl.Review.PingActivity.Ping.IsDeleted);
 
         // Default Sort: CreatedAt Descending
         bool isAscending = sortOrder?.Equals("Asc", StringComparison.OrdinalIgnoreCase) ?? false;
@@ -651,12 +652,12 @@ public class ReviewService(
 
         logger.LogInformation("Liked reviews for {UserId} retrieved: {Count} reviews", userId, result.Count);
 
-        return result.ToPaginatedResult(pagination);
+        return result.ToPaginatedResult(pagination, count);
     }
     public async Task<PaginatedResult<ExploreReviewDto>> GetMyReviewsAsync(string userId, PaginationParams pagination)
     {
         var myReviews = await appDb.Reviews
-            .Where(r => r.UserId == userId)
+            .Where(r => r.UserId == userId && !r.PingActivity.Ping.IsDeleted)
             .Include(r => r.PingActivity)
                 .ThenInclude(pa => pa.Ping)
                     .ThenInclude(p => p.PingGenre)
@@ -722,7 +723,7 @@ public class ReviewService(
     public async Task<PaginatedResult<ExploreReviewDto>> GetUserReviewsAsync(string targetUserId, string currentUserId, PaginationParams pagination)
     {
         var userReviews = await appDb.Reviews
-            .Where(r => r.UserId == targetUserId)
+            .Where(r => r.UserId == targetUserId && !r.PingActivity.Ping.IsDeleted)
             .Include(r => r.PingActivity)
                 .ThenInclude(pa => pa.Ping)
                     .ThenInclude(p => p.PingGenre)
@@ -734,7 +735,7 @@ public class ReviewService(
             .Take(pagination.PageSize)
             .ToListAsync();
 
-        var count = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId);
+        var count = await appDb.Reviews.CountAsync(r => r.UserId == targetUserId && !r.PingActivity.Ping.IsDeleted);
 
         var reviewIds = userReviews.Select(r => r.Id).ToList();
         var likedReviewIds = new HashSet<int>();
