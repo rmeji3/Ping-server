@@ -92,6 +92,10 @@ echo "--- Expo ---"
 EXPO_TOKEN=$(read_secret "Expo Access Token")
 
 echo ""
+echo "--- CORS ---"
+CORS_ORIGINS=$(read_value "CORS Allowed Origins" "https://admin.ping-app.net")
+
+echo ""
 echo "=== Storing parameters in SSM ($REGION) ==="
 
 # Connection Strings
@@ -141,6 +145,9 @@ put_string "AWS__BucketName"  "$AWS_BUCKET"
 
 # Expo
 put_secret "Expo__AccessToken" "$EXPO_TOKEN"
+
+# CORS
+put_string "CorsAllowedOrigins" "$CORS_ORIGINS"
 
 echo ""
 echo "=== Done! All AWS SSM updates complete ==="

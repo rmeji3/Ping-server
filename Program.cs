@@ -119,6 +119,12 @@ var openAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (!string.IsNullOrEmpty(openAiApiKey))
     builder.Configuration["OpenAI:ApiKey"] = openAiApiKey;
 
+// CORS Allowed Origins
+var corsAllowedOrigins = Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS") ?? Environment.GetEnvironmentVariable("CorsAllowedOrigins");
+if (!string.IsNullOrEmpty(corsAllowedOrigins))
+    builder.Configuration["CorsAllowedOrigins"] = corsAllowedOrigins;
+
+
 // Fallback if no Google API Key provided in Development (prevents crash)
 if (string.IsNullOrEmpty(builder.Configuration["Google:ApiKey"]) && builder.Environment.IsDevelopment())
 {
@@ -405,7 +411,13 @@ builder.Services.AddApiVersioning(options =>
         options.SubstituteApiVersionInUrl = true;
     });
 
-var allowedOrigins = builder.Configuration["CorsAllowedOrigins"]?.Split(',') ?? new[] { "http://localhost:3000" };
+var allowedOrigins = builder.Configuration["CorsAllowedOrigins"]?
+    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+    .Select(o => o.Trim().TrimEnd('/'))
+    .ToArray() ?? new[] { "http://localhost:3000" };
+
+Serilog.Log.Information("CORS: Whitelisted Origins: {Origins}", string.Join(", ", allowedOrigins));
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAdminApp", policy =>

@@ -54,6 +54,7 @@ AWS__SecretKey=$(p AWS__SecretKey)
 AWS__Region=$(p AWS__Region)
 AWS__BucketName=$(p AWS__BucketName)
 Expo__AccessToken=$(p Expo__AccessToken)
+CorsAllowedOrigins=$(p CorsAllowedOrigins)
 EOF
 
 echo "=== Restarting services with Docker Compose ==="
