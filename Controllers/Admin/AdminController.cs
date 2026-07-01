@@ -22,6 +22,9 @@ using Ping.Dtos.Stickers;
 using Ping.Services.Verification;
 using Ping.Dtos.Common;
 using Ping.Models.AppUsers;
+using Ping.Services.Notifications;
+using Ping.Models.Notifications;
+using Microsoft.Extensions.Logging;
 
 namespace Ping.Controllers
 {
@@ -45,7 +48,9 @@ namespace Ping.Controllers
         Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager,
         Ping.Services.Admin.IDbJanitorService janitorService,
         AuthDbContext authDbContext,
-        Ping.Services.Admin.IAnnouncementService announcementService
+        Ping.Services.Admin.IAnnouncementService announcementService,
+        INotificationService notificationService,
+        ILogger<AdminController> logger
         ) : ControllerBase
     {
         // ==========================================
@@ -542,6 +547,67 @@ namespace Ping.Controllers
         public async Task<IActionResult> SetAnnouncement([FromBody] AnnouncementRequest request)
         {
             await announcementService.SetAnnouncementAsync(request.Message);
+
+            if (!string.IsNullOrWhiteSpace(request.Message))
+            {
+                // Dispatch as a non-blocking background task to prevent HTTP timeouts and memory spikes
+                _ = Task.Run(async () =>
+                {
+                    int pageSize = 500;
+                    int page = 0;
+                    bool hasMore = true;
+
+                    while (hasMore)
+                    {
+                        try
+                        {
+                            // Query user IDs in batches of 500
+                            var batchUserIds = await userManager.Users
+                                .OrderBy(u => u.Id)
+                                .Skip(page * pageSize)
+                                .Take(pageSize)
+                                .Select(u => u.Id)
+                                .ToListAsync();
+
+                            if (batchUserIds.Count == 0)
+                            {
+                                hasMore = false;
+                                break;
+                            }
+
+                            foreach (var userId in batchUserIds)
+                            {
+                                try
+                                {
+                                    await notificationService.SendNotificationAsync(new Notification
+                                    {
+                                        UserId = userId,
+                                        Type = NotificationType.System,
+                                        Title = "New Announcement",
+                                        Message = request.Message,
+                                        ReferenceId = null,
+                                        ImageThumbnailUrl = null
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    logger.LogError(ex, "Failed to send announcement notification to user {UserId}", userId);
+                                }
+                            }
+
+                            page++;
+                            // Throttle slightly between batches to protect DB and external APIs from spikes
+                            await Task.Delay(100);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Failed to process announcement notification batch {Page}", page);
+                            hasMore = false; // Halt execution if a critical DB error occurs
+                        }
+                    }
+                });
+            }
+
             return Ok(new { message = "Announcement updated successfully." });
         }
     }
