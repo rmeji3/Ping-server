@@ -8,6 +8,10 @@ set -e  # Exit immediately on any error
 REGION="us-east-1"
 REPO="084128132616.dkr.ecr.us-east-1.amazonaws.com/ping-server"
 
+# Navigate to the repository root (parent of the scripts directory)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
+
 echo "=== Authenticating with ECR ==="
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPO
 
